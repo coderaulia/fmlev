@@ -1,0 +1,21 @@
+[package]
+name = "fmlev-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+fmlev-mem = { path = "../fmlev-mem" }
+fmlev-il2cpp = { path = "../fmlev-il2cpp" }
+fmlev-core = { path = "../fmlev-core" }
+fmlev-overlay = { path = "../fmlev-overlay" }
+tokio.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "fmlev-overlay"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+fmlev-mem = { path = "../fmlev-mem" }
+fmlev-core = { path = "../fmlev-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true

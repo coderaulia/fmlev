@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fmlev-mem",
+    "crates/fmlev-il2cpp",
+    "crates/fmlev-core",
+    "crates/fmlev-overlay",
+    "crates/fmlev-server",
+    "crates/fmlev-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Antigravity & Open Source Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/fmlev/fmlev"
+
+[workspace.dependencies]
+# Serialization & Config
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async & Networking
+tokio = { version = "1.43", features = ["full"] }
+axum = { version = "0.8", features = ["ws"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+
+# System & Linux APIs
+libc = "0.2"
+nix = { version = "0.29", features = ["uio", "process"] }
+
+# CLI & Logging
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2.0"
+anyhow = "1.0"

@@ -1,0 +1,1111 @@
+{
+  "version": "26.0.0",
+  "singletons": {
+    "World": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e103a8",
+      "pointer_chain": [
+        "0x58",
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "GlobalGameModule": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e103a8",
+      "pointer_chain": [
+        "0x58",
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "PanelManager": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2ddb430",
+      "pointer_chain": [
+        "0x58",
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "AutoPlay": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e45130",
+      "pointer_chain": [
+        "0x58",
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "Bindings": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e4d840",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "DebugMenuContainer": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2de9458",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "GamePlugin": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e0dff0",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "GameReceiver": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e0e0c8",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "GameSubsystems": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e0e400",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "BindingSubsystem": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e4d370",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "NavigationReference": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2dcf948",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "NavigationManager": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2dcf7b0",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "FMNavigationManager": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2e00b48",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "PanelHistoryManagerModule": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2ef1ba0",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "PanelHistoryReference": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2ddb288",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "NavigationHandler": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2dcf6e8",
+      "pointer_chain": [
+        "0xb8"
+      ],
+      "aob_signature": null
+    },
+    "NationReference": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2dcdd48",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    },
+    "CompReference": {
+      "base_module": "GameAssembly.dll",
+      "rva": "0x2dd35f8",
+      "pointer_chain": [
+        "0xb8",
+        "0x0"
+      ],
+      "aob_signature": null
+    }
+  },
+  "classes": {
+    "DatabaseRecordReference": {
+      "class_name": "FM.UI.DatabaseRecordReference",
+      "fields": {
+        "m_id": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_idHash": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_index": {
+          "offset": "0x20",
+          "type": "i32"
+        },
+        "table_type": {
+          "offset": "0x24",
+          "type": "i32"
+        }
+      }
+    },
+    "PersonReference": {
+      "class_name": "FM.UI.PersonReference",
+      "fields": {
+        "m_id": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_idHash": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_index": {
+          "offset": "0x20",
+          "type": "i32"
+        },
+        "table_type": {
+          "offset": "0x24",
+          "type": "i32"
+        }
+      }
+    },
+    "ClubReference": {
+      "class_name": "FM.UI.ClubReference",
+      "fields": {
+        "m_id": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_idHash": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_index": {
+          "offset": "0x20",
+          "type": "i32"
+        },
+        "table_type": {
+          "offset": "0x24",
+          "type": "i32"
+        },
+        "balance": {
+          "offset": "0x30",
+          "type": "i64"
+        },
+        "transfer_budget": {
+          "offset": "0x38",
+          "type": "i64"
+        },
+        "wage_budget": {
+          "offset": "0x40",
+          "type": "i32"
+        },
+        "training_facilities": {
+          "offset": "0x44",
+          "type": "u8"
+        },
+        "youth_facilities": {
+          "offset": "0x45",
+          "type": "u8"
+        },
+        "youth_recruitment": {
+          "offset": "0x46",
+          "type": "u8"
+        },
+        "junior_coaching": {
+          "offset": "0x47",
+          "type": "u8"
+        },
+        "data_analysis": {
+          "offset": "0x48",
+          "type": "u8"
+        },
+        "corporate_facilities": {
+          "offset": "0x49",
+          "type": "u8"
+        },
+        "sugar_daddy_type": {
+          "offset": "0x4a",
+          "type": "u8"
+        },
+        "board_patience": {
+          "offset": "0x4b",
+          "type": "u8"
+        },
+        "fan_confidence": {
+          "offset": "0x4c",
+          "type": "u8"
+        },
+        "board_confidence": {
+          "offset": "0x4d",
+          "type": "u8"
+        },
+        "transfer_retention_pct": {
+          "offset": "0x4e",
+          "type": "u8"
+        },
+        "max_wage_allowance": {
+          "offset": "0x50",
+          "type": "i32"
+        },
+        "stadium_capacity": {
+          "offset": "0x54",
+          "type": "u32"
+        },
+        "stadium_expansion_cap": {
+          "offset": "0x58",
+          "type": "u32"
+        }
+      }
+    },
+    "NationReference": {
+      "class_name": "FM.UI.NationReference",
+      "fields": {
+        "m_id": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_idHash": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_index": {
+          "offset": "0x20",
+          "type": "i32"
+        },
+        "table_type": {
+          "offset": "0x24",
+          "type": "i32"
+        },
+        "reputation": {
+          "offset": "0x28",
+          "type": "u16"
+        },
+        "youth_rating": {
+          "offset": "0x2a",
+          "type": "u8"
+        },
+        "economic_factor": {
+          "offset": "0x2b",
+          "type": "u8"
+        },
+        "state_of_development": {
+          "offset": "0x2c",
+          "type": "u8"
+        },
+        "fa_financial_power": {
+          "offset": "0x2d",
+          "type": "u8"
+        },
+        "game_importance": {
+          "offset": "0x2e",
+          "type": "u8"
+        },
+        "tax_rate": {
+          "offset": "0x2f",
+          "type": "u8"
+        },
+        "corruption_index": {
+          "offset": "0x30",
+          "type": "u8"
+        }
+      }
+    },
+    "CompReference": {
+      "class_name": "FM.UI.CompReference",
+      "fields": {
+        "m_id": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_idHash": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_index": {
+          "offset": "0x20",
+          "type": "i32"
+        },
+        "table_type": {
+          "offset": "0x24",
+          "type": "i32"
+        },
+        "reputation": {
+          "offset": "0x28",
+          "type": "u16"
+        },
+        "max_substitutes": {
+          "offset": "0x2a",
+          "type": "u8"
+        },
+        "max_bench_size": {
+          "offset": "0x2b",
+          "type": "u8"
+        },
+        "substitution_windows": {
+          "offset": "0x2c",
+          "type": "u8"
+        },
+        "var_active": {
+          "offset": "0x2d",
+          "type": "u8"
+        },
+        "max_squad_size": {
+          "offset": "0x2e",
+          "type": "u8"
+        },
+        "max_foreign_players": {
+          "offset": "0x2f",
+          "type": "u8"
+        },
+        "min_homegrown_club": {
+          "offset": "0x30",
+          "type": "u8"
+        },
+        "min_homegrown_nation": {
+          "offset": "0x31",
+          "type": "u8"
+        },
+        "winner_prize_money": {
+          "offset": "0x38",
+          "type": "i64"
+        },
+        "tv_rights_pool": {
+          "offset": "0x40",
+          "type": "i64"
+        },
+        "yellow_cards_for_ban": {
+          "offset": "0x48",
+          "type": "u8"
+        }
+      }
+    },
+    "PlayerAttributes": {
+      "class_name": "PlayerAttributes",
+      "fields": {
+        "current_ability": {
+          "offset": "0x18",
+          "type": "u8"
+        },
+        "potential_ability": {
+          "offset": "0x19",
+          "type": "u8"
+        },
+        "finishing": {
+          "offset": "0x20",
+          "type": "u8"
+        },
+        "dribbling": {
+          "offset": "0x21",
+          "type": "u8"
+        },
+        "passing": {
+          "offset": "0x22",
+          "type": "u8"
+        },
+        "tackling": {
+          "offset": "0x23",
+          "type": "u8"
+        },
+        "pace": {
+          "offset": "0x30",
+          "type": "u8"
+        },
+        "acceleration": {
+          "offset": "0x31",
+          "type": "u8"
+        },
+        "stamina": {
+          "offset": "0x32",
+          "type": "u8"
+        }
+      }
+    },
+    "InGameEditorRequirement": {
+      "class_name": "FM.UI.InGameEditorRequirement",
+      "fields": {
+        "m_configIGEEnabled": {
+          "offset": "0x18",
+          "type": "bool"
+        },
+        "m_gameIGEEnabled": {
+          "offset": "0x19",
+          "type": "bool"
+        },
+        "m_settingIGEEnabled": {
+          "offset": "0x1a",
+          "type": "bool"
+        }
+      }
+    },
+    "ChannelData": {
+      "class_name": "FM.GamePlugin.ChannelData",
+      "fields": {
+        "property": {
+          "offset": "0x0",
+          "type": "u32"
+        },
+        "key": {
+          "offset": "0x8",
+          "type": "u64"
+        }
+      }
+    },
+    "ChannelAction": {
+      "class_name": "FM.GamePlugin.ChannelAction",
+      "fields": {
+        "key": {
+          "offset": "0x0",
+          "type": "u64"
+        },
+        "additionalKey": {
+          "offset": "0x8",
+          "type": "u64"
+        },
+        "mode": {
+          "offset": "0x10",
+          "type": "i32"
+        }
+      }
+    },
+    "Bindings": {
+      "class_name": "SI.Bindable.Bindings",
+      "fields": {
+        "m_config": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_nodePool": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_callbackPartitions": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_root": {
+          "offset": "0x40",
+          "type": "ptr"
+        },
+        "m_nodes": {
+          "offset": "0x48",
+          "type": "ptr"
+        },
+        "m_aliases": {
+          "offset": "0x50",
+          "type": "ptr"
+        },
+        "m_dirtyNodes": {
+          "offset": "0x58",
+          "type": "ptr"
+        },
+        "m_dirtyNodesSet": {
+          "offset": "0x60",
+          "type": "ptr"
+        },
+        "m_data": {
+          "offset": "0x78",
+          "type": "ptr"
+        },
+        "m_contextMapping": {
+          "offset": "0x88",
+          "type": "ptr"
+        },
+        "m_handlers": {
+          "offset": "0xb0",
+          "type": "ptr"
+        },
+        "m_inverseContextMapping": {
+          "offset": "0x90",
+          "type": "ptr"
+        },
+        "m_pendingOpen": {
+          "offset": "0x98",
+          "type": "ptr"
+        },
+        "m_groups": {
+          "offset": "0xa0",
+          "type": "ptr"
+        }
+      }
+    },
+    "PanelManager": {
+      "class_name": "SI.Bindable.PanelManager",
+      "fields": {
+        "m_inspectorLayerDescriptions": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_mainUIDocument": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_numClosingPanels": {
+          "offset": "0x4c",
+          "type": "i32"
+        },
+        "m_registry": {
+          "offset": "0x90",
+          "type": "ptr"
+        },
+        "has_fullscreen_panel_open": {
+          "offset": "0xc8",
+          "type": "bool"
+        },
+        "panels": {
+          "offset": "0xd0",
+          "type": "ptr"
+        },
+        "layers": {
+          "offset": "0xe0",
+          "type": "ptr"
+        },
+        "state": {
+          "offset": "0xe8",
+          "type": "i32"
+        },
+        "ContextsSet": {
+          "offset": "0xf0",
+          "type": "ptr"
+        }
+      }
+    },
+    "GlobalGameModule": {
+      "class_name": "FM.UI.GlobalGameModule",
+      "fields": {
+        "m_quitGameCallback": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_menuOptionCallback": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_interopToPluginCallback": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_interopFromPluginCallback": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_uiLeakDebugMenu": {
+          "offset": "0x98",
+          "type": "ptr"
+        },
+        "m_analysisDebugMenu": {
+          "offset": "0xa0",
+          "type": "ptr"
+        },
+        "m_saveGamePanel": {
+          "offset": "0xc0",
+          "type": "ptr"
+        },
+        "m_progressPanel": {
+          "offset": "0xc8",
+          "type": "ptr"
+        },
+        "m_delayedEvents": {
+          "offset": "0xd8",
+          "type": "ptr"
+        }
+      }
+    },
+    "GamePlugin": {
+      "class_name": "FM.GamePlugin.GamePlugin",
+      "fields": {
+        "m_gamePlugin": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_receiver": {
+          "offset": "0x30",
+          "type": "ptr"
+        }
+      }
+    },
+    "GameReceiver": {
+      "class_name": "FM.GamePlugin.GameReceiver",
+      "fields": {
+        "m_resusableTypedList": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_onChannelDataChange": {
+          "offset": "0x18",
+          "type": "ptr"
+        }
+      }
+    },
+    "Panel": {
+      "class_name": "SI.Bindable.Panel",
+      "fields": {
+        "m_bindingRoot": {
+          "offset": "0x4a8",
+          "type": "ptr"
+        },
+        "m_pendingAnchor": {
+          "offset": "0x500",
+          "type": "ptr"
+        },
+        "m_pendingKey": {
+          "offset": "0x508",
+          "type": "u64"
+        },
+        "m_instanceName": {
+          "offset": "0x518",
+          "type": "ptr"
+        },
+        "PanelID": {
+          "offset": "0x540",
+          "type": "ptr"
+        },
+        "Identifier": {
+          "offset": "0x548",
+          "type": "u32"
+        },
+        "CurrentState": {
+          "offset": "0x54c",
+          "type": "i32"
+        },
+        "Initialised": {
+          "offset": "0x550",
+          "type": "bool"
+        }
+      }
+    },
+    "BindingRoot": {
+      "class_name": "SI.Bindable.BindingRoot",
+      "fields": {
+        "Key": {
+          "offset": "0x4a8",
+          "type": "u64"
+        },
+        "Parameters": {
+          "offset": "0x4b0",
+          "type": "ptr"
+        },
+        "ReferenceProperties": {
+          "offset": "0x4b8",
+          "type": "ptr"
+        },
+        "ValueProperties": {
+          "offset": "0x4c0",
+          "type": "ptr"
+        }
+      }
+    },
+    "PanelHistoryManagerModule": {
+      "class_name": "FM.UI.PanelHistoryManagerModule",
+      "fields": {
+        "PanelHistoryManager": {
+          "offset": "0x40",
+          "type": "ptr"
+        }
+      }
+    },
+    "PanelHistoryManager": {
+      "class_name": "FM.UI.PanelHistoryManager",
+      "fields": {
+        "m_history": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_current": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_coroutineHandle": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "CellDataManager": {
+          "offset": "0x48",
+          "type": "ptr"
+        }
+      }
+    },
+    "PanelHistoryNode": {
+      "class_name": "FM.UI.PanelHistoryNode",
+      "fields": {
+        "m_panelID": {
+          "offset": "0x0",
+          "type": "ptr"
+        },
+        "m_id": {
+          "offset": "0x8",
+          "type": "u32"
+        },
+        "m_name": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_arguments": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "m_title": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_requestsContainer": {
+          "offset": "0x28",
+          "type": "u64"
+        },
+        "m_identifier": {
+          "offset": "0x30",
+          "type": "u32"
+        },
+        "m_panelIDReference": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_layer": {
+          "offset": "0x40",
+          "type": "i32"
+        }
+      }
+    },
+    "PanelHistoryArgument": {
+      "class_name": "FM.UI.PanelHistoryNode.Argument",
+      "fields": {
+        "Name": {
+          "offset": "0x0",
+          "type": "ptr"
+        },
+        "Value": {
+          "offset": "0x8",
+          "type": "ptr"
+        },
+        "TypeIdentifier": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "RelativeAlias": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "Parent": {
+          "offset": "0x20",
+          "type": "u16"
+        },
+        "AbsoluteAlias": {
+          "offset": "0x28",
+          "type": "u64"
+        }
+      }
+    },
+    "ScreenTrackingManager": {
+      "class_name": "SI.UI.ScreenTrackingManager",
+      "fields": {
+        "m_baseLayerPanelID": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_sequence": {
+          "offset": "0x18",
+          "type": "i32"
+        },
+        "m_panelSequence": {
+          "offset": "0x1c",
+          "type": "i32"
+        },
+        "m_panelReadyStartTime": {
+          "offset": "0x20",
+          "type": "i64"
+        },
+        "m_panelIDsSequence": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_timerSequence": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_navigationTypeSequence": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_panelSequenceList": {
+          "offset": "0x40",
+          "type": "ptr"
+        },
+        "NavigationType": {
+          "offset": "0x48",
+          "type": "i32"
+        },
+        "m_returnedToPreviousLayer": {
+          "offset": "0x4c",
+          "type": "bool"
+        },
+        "m_previousPanelIDName": {
+          "offset": "0x50",
+          "type": "ptr"
+        }
+      }
+    },
+    "GameSubsystems": {
+      "class_name": "SI.Core.GameSubsystems",
+      "fields": {
+        "s_subsystems": {
+          "offset": "0x0",
+          "type": "ptr"
+        },
+        "s_typeToSubsystem": {
+          "offset": "0x8",
+          "type": "ptr"
+        },
+        "s_behaviourContainer": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "s_removalBuffer": {
+          "offset": "0x18",
+          "type": "ptr"
+        }
+      }
+    },
+    "InteropDataHandler": {
+      "class_name": "FM.UI.InteropDataHandler",
+      "fields": {
+        "m_bindingTree": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_interop": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "m_channelDataChanged": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_bindingTreeOnOnChanged": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_channels": {
+          "offset": "0x30",
+          "type": "ptr"
+        }
+      }
+    },
+    "GameInteropSubsystem": {
+      "class_name": "FM.GamePlugin.GameInteropSubsystem",
+      "fields": {
+        "m_handlers": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_conditionalHandlers": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "m_batchedRequests": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_batchedRequestInterrupts": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_plugin": {
+          "offset": "0x30",
+          "type": "ptr"
+        }
+      }
+    },
+    "SiteMapDebugMenuPanel": {
+      "class_name": "FM.UI.SiteMapDebugMenuPanel",
+      "fields": {
+        "m_allPanels": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_filteredPanels": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_panelList": {
+          "offset": "0x40",
+          "type": "ptr"
+        },
+        "m_panelManager": {
+          "offset": "0x48",
+          "type": "ptr"
+        },
+        "m_searchField": {
+          "offset": "0x50",
+          "type": "ptr"
+        },
+        "m_introScene": {
+          "offset": "0x58",
+          "type": "ptr"
+        }
+      }
+    },
+    "BindingNode": {
+      "class_name": "SI.Bindable.Bindings.Node",
+      "fields": {
+        "m_bindings": {
+          "offset": "0x10",
+          "type": "ptr"
+        },
+        "m_name": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "m_parent": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "m_firstChild": {
+          "offset": "0x28",
+          "type": "ptr"
+        },
+        "m_nextSibling": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_prevSibling": {
+          "offset": "0x38",
+          "type": "ptr"
+        },
+        "m_key": {
+          "offset": "0x60",
+          "type": "u64"
+        },
+        "m_alias": {
+          "offset": "0x68",
+          "type": "u64"
+        },
+        "m_dataKey": {
+          "offset": "0x70",
+          "type": "u64"
+        },
+        "m_propID": {
+          "offset": "0x78",
+          "type": "u32"
+        },
+        "m_flags": {
+          "offset": "0x7c",
+          "type": "u32"
+        }
+      }
+    },
+    "BindingData": {
+      "class_name": "SI.Bindable.Bindings.Data",
+      "fields": {
+        "key": {
+          "offset": "0x10",
+          "type": "u64"
+        },
+        "interest": {
+          "offset": "0x18",
+          "type": "ptr"
+        },
+        "handler": {
+          "offset": "0x20",
+          "type": "ptr"
+        },
+        "opener": {
+          "offset": "0x28",
+          "type": "u64"
+        },
+        "m_value": {
+          "offset": "0x30",
+          "type": "ptr"
+        },
+        "m_requestTimestamp": {
+          "offset": "0x38",
+          "type": "i64"
+        },
+        "m_version": {
+          "offset": "0x40",
+          "type": "u8"
+        }
+      }
+    },
+    "ContextMappingKey": {
+      "class_name": "SI.Bindable.Bindings.ContextMappingKey",
+      "fields": {
+        "value": {
+          "offset": "0x0",
+          "type": "ptr"
+        },
+        "prop": {
+          "offset": "0x8",
+          "type": "ptr"
+        },
+        "contextHash": {
+          "offset": "0x10",
+          "type": "u64"
+        },
+        "hashCode": {
+          "offset": "0x18",
+          "type": "i32"
+        }
+      }
+    },
+    "ContextMapping": {
+      "class_name": "SI.Bindable.Bindings.ContextMapping",
+      "fields": {
+        "key": {
+          "offset": "0x0",
+          "type": "u64"
+        },
+        "versionHash": {
+          "offset": "0x8",
+          "type": "u64"
+        }
+      }
+    },
+    "TypedValue": {
+      "class_name": "SI.Core.TypedValue",
+      "fields": {
+        "m_flags": {
+          "offset": "0x10",
+          "type": "i32"
+        },
+        "m_value": {
+          "offset": "0x18",
+          "type": "ptr"
+        }
+      }
+    }
+  }
+}

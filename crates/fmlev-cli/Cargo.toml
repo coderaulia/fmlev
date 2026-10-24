@@ -1,0 +1,18 @@
+[package]
+name = "fmlev-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+fmlev-mem = { path = "../fmlev-mem" }
+fmlev-il2cpp = { path = "../fmlev-il2cpp" }
+fmlev-core = { path = "../fmlev-core" }
+fmlev-server = { path = "../fmlev-server" }
+fmlev-overlay = { path = "../fmlev-overlay" }
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

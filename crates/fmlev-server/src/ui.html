@@ -1,0 +1,4291 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner (backend engine) -->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fmlev 26 - Football Manager 26 Live Editor & Overlay</title>
+  <style>
+    :root {
+      --bg-dark: #0a0d17;
+      --bg-header: rgba(14, 18, 32, 0.96);
+      --bg-card: #121829;
+      --bg-card-hover: #182035;
+      --bg-card-alt: #0e1424;
+      --bg-input: #0a0e1a;
+      --border-color: #1e2842;
+      --border-light: #2d3b5e;
+      --border-active: #06b6d4;
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+
+      /* Football Manager Attribute Colors */
+      --fm-elite: #10b981;
+      --fm-elite-bg: rgba(16, 185, 129, 0.16);
+      --fm-elite-border: rgba(16, 185, 129, 0.4);
+
+      --fm-good: #f59e0b;
+      --fm-good-bg: rgba(245, 158, 11, 0.16);
+      --fm-good-border: rgba(245, 158, 11, 0.4);
+
+      --fm-avg: #94a3b8;
+      --fm-avg-bg: rgba(148, 163, 184, 0.1);
+      --fm-avg-border: rgba(148, 163, 184, 0.25);
+
+      --fm-low: #ef4444;
+      --fm-low-bg: rgba(239, 68, 68, 0.14);
+      --fm-low-border: rgba(239, 68, 68, 0.35);
+
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-purple: #8b5cf6;
+      --accent-gold: #fbbf24;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      font-size: 13px;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: #263352; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #384b75; }
+
+    /* Top Bar */
+    header {
+      background: var(--bg-header);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 8px 16px;
+    }
+
+    .topbar-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 15px;
+      color: #fff;
+      box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
+    }
+
+    .brand-name {
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: -0.4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-sub {
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      text-transform: uppercase;
+    }
+
+    /* Auto-Sync Status Indicator */
+    .sync-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sync-indicator.synced {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+
+    .sync-indicator.unsynced {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
+
+    /* Search Bar with Autocomplete Dropdown */
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      max-width: 420px;
+      min-width: 240px;
+    }
+
+    .search-input-box {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 6px 14px 6px 34px;
+      color: var(--text-main);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-input-box:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: var(--text-dim);
+      display: none;
+      font-size: 14px;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 6px;
+      background: #111728;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.65);
+      z-index: 200;
+      max-height: 380px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .search-section-title {
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .search-item {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .search-item:hover, .search-item.highlighted {
+      background: rgba(6, 182, 212, 0.12);
+    }
+
+    .search-item-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .search-item-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1e2842;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .search-item-name {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-main);
+    }
+
+    .search-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .search-item-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* Controls right */
+    .top-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      background: #1a2236;
+      color: var(--text-main);
+    }
+
+    .btn:hover {
+      background: #232d47;
+      border-color: #384b75;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #7c3aed, #0891b2);
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.5);
+    }
+
+    .btn-emerald {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-emerald:hover {
+      background: linear-gradient(135deg, #059669, #047857);
+    }
+
+    .btn-pinned {
+      background: rgba(139, 92, 246, 0.25);
+      border-color: #8b5cf6;
+      color: #c4b5fd;
+    }
+
+    /* Tabs Bar */
+    .tabs-nav {
+      background: #0d1222;
+      border-bottom: 1px solid var(--border-color);
+      padding: 2px 16px;
+    }
+
+    .tabs-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1440px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 16px;
+    }
+
+    .tab-view {
+      display: none;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .tab-view.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card styling */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      position: relative;
+      margin-bottom: 14px;
+    }
+
+    /* Player Profile Header Card */
+    .player-header-card {
+      background: linear-gradient(135deg, rgba(30, 27, 75, 0.4), rgba(14, 20, 36, 0.95));
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: var(--radius-lg);
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .player-identity {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .player-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      border: 3px solid var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.35);
+    }
+
+    .player-name-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .player-name-display {
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    .player-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .badge-pos {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-club {
+      background: rgba(6, 182, 212, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(6, 182, 212, 0.35);
+    }
+
+    .badge-nat {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .badge-morale {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .badge-fit {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-injured {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    /* Player Fitness Rings */
+    .fitness-metrics {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .metric-group {
+      text-align: center;
+    }
+
+    .metric-bar-bg {
+      width: 70px;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .metric-bar-fill {
+      height: 100%;
+      background: var(--accent-emerald);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .metric-bar-fill.sharpness {
+      background: var(--accent-cyan);
+    }
+
+    /* CA / PA Card */
+    .ca-pa-container {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(10, 14, 26, 0.7);
+      padding: 10px 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .ca-pa-block {
+      text-align: center;
+    }
+
+    .ca-pa-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .ca-pa-val-input {
+      font-size: 18px;
+      font-weight: 900;
+      width: 52px;
+      text-align: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: #fff;
+      outline: none;
+    }
+
+    .ca-pa-val-input:hover, .ca-pa-val-input:focus {
+      background: var(--bg-input);
+      border-color: var(--accent-cyan);
+    }
+
+    .ca-color { color: var(--accent-emerald); }
+    .pa-color { color: var(--accent-gold); }
+
+    .star-rating {
+      color: var(--accent-gold);
+      font-size: 14px;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+
+    /* Presets Bar */
+    .presets-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 12px 0 16px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #141b2f;
+      border: 1px solid var(--border-light);
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* 3-Column Attribute Grid */
+    .attributes-columns {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .attr-column-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .attr-column-header {
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-tech { background: rgba(6, 182, 212, 0.08); color: var(--accent-cyan); }
+    .header-mental { background: rgba(245, 158, 11, 0.08); color: var(--accent-good); }
+    .header-phys { background: rgba(16, 185, 129, 0.08); color: var(--accent-emerald); }
+    .header-hidden { background: rgba(139, 92, 246, 0.08); color: #c4b5fd; }
+
+    .attr-list {
+      padding: 4px 0;
+    }
+
+    .attr-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      transition: background 0.15s;
+    }
+
+    .attr-row:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .attr-name {
+      font-weight: 500;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .attr-controls {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .attr-stepper {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: #182238;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+      transition: all 0.1s;
+    }
+
+    .attr-stepper:hover {
+      background: var(--accent-cyan);
+      color: #fff;
+    }
+
+    .attr-val-box {
+      width: 28px;
+      height: 24px;
+      border-radius: 4px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 12px;
+      line-height: 24px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    /* Color Tiers for FM Attributes */
+    .tier-elite {
+      background: var(--fm-elite-bg);
+      border-color: var(--fm-elite-border);
+      color: #6ee7b7;
+      font-weight: 900;
+    }
+
+    .tier-good {
+      background: var(--fm-good-bg);
+      border-color: var(--fm-good-border);
+      color: #fde68a;
+    }
+
+    .tier-avg {
+      background: var(--fm-avg-bg);
+      border-color: var(--fm-avg-border);
+      color: #cbd5e1;
+    }
+
+    .tier-low {
+      background: var(--fm-low-bg);
+      border-color: var(--fm-low-border);
+      color: #fca5a5;
+    }
+
+    /* Action Bar (Apply & Auto-Apply) */
+    .action-control-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: #101628;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      margin-top: 14px;
+    }
+
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .2s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-cyan);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+
+    /* Contract Tab Layout */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    /* Club & Squad God Mode Tab */
+    .god-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .god-card {
+      background: #10162a;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+
+    .god-card:hover {
+      border-color: var(--border-light);
+    }
+
+    .god-card-title {
+      font-weight: 800;
+      font-size: 14px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .god-card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+
+    /* Facilities range sliders */
+    .facility-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .facility-name {
+      width: 160px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .facility-slider {
+      flex: 1;
+      accent-color: var(--accent-emerald);
+      cursor: pointer;
+    }
+
+    .facility-val {
+      width: 32px;
+      text-align: center;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Stepper Controls */
+    .stepper-input-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stepper-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      background: #182238;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .stepper-btn:hover {
+      background: var(--accent-cyan);
+      color: #fff;
+      border-color: var(--accent-cyan);
+    }
+
+    /* Youth Rating Gauge & Tiers */
+    .youth-gauge-container {
+      background: rgba(10, 14, 26, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+    }
+
+    .gauge-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .gauge-bar-track {
+      width: 100%;
+      height: 14px;
+      background: #182238;
+      border-radius: 7px;
+      position: relative;
+      overflow: hidden;
+      margin: 10px 0;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .gauge-bar-fill {
+      height: 100%;
+      border-radius: 7px;
+      background: linear-gradient(90deg, #ef4444 0%, #f59e0b 30%, #10b981 60%, #06b6d4 85%, #8b5cf6 100%);
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+    }
+
+    .gauge-markers {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .rating-tier-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .tier-wonderkid {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(6, 182, 212, 0.25));
+      border: 1px solid #8b5cf6;
+      color: #c4b5fd;
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Affiliated Clubs Manager */
+    .affiliate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .affiliate-card {
+      background: #0e1424;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+
+    .affiliate-card:hover {
+      border-color: var(--border-light);
+      transform: translateY(-1px);
+    }
+
+    .affiliate-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .affiliate-card-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .affiliate-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .affiliate-badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-dim);
+      border: 1px solid transparent;
+    }
+
+    .affiliate-badge.active {
+      background: rgba(6, 182, 212, 0.15);
+      color: #38bdf8;
+      border-color: rgba(6, 182, 212, 0.35);
+    }
+
+    .affiliate-badge.fee {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+
+    .affiliate-badge.haven {
+      background: rgba(139, 92, 246, 0.18);
+      color: #c4b5fd;
+      border-color: rgba(139, 92, 246, 0.35);
+    }
+
+    .btn-remove-affiliate {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-remove-affiliate:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+      color: #fff;
+    }
+
+    /* Toast */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 380px;
+    }
+
+    .toast {
+      background: rgba(18, 24, 42, 0.96);
+      border: 1px solid var(--border-light);
+      border-left: 4px solid var(--accent-cyan);
+      backdrop-filter: blur(10px);
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      animation: slideIn 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toast.success { border-left-color: var(--accent-emerald); }
+    .toast.warning { border-left-color: var(--accent-gold); }
+    .toast.error { border-left-color: var(--fm-low); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Compact In-Game Overlay Mode */
+    body.mode-compact-overlay {
+      max-width: 440px;
+      margin: 0 auto;
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      background: #090c16;
+    }
+
+    body.mode-compact-overlay .topbar-container {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    body.mode-compact-overlay .search-wrapper {
+      max-width: 100%;
+    }
+
+    body.mode-compact-overlay .attributes-columns {
+      grid-template-columns: 1fr;
+    }
+
+    body.mode-compact-overlay .player-header-card {
+      padding: 14px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
+
+    body.mode-compact-overlay .player-name-display {
+      font-size: 18px;
+    }
+
+    body.mode-compact-overlay .fitness-metrics {
+      justify-content: space-between;
+    }
+
+    body.mode-compact-overlay .ca-pa-container {
+      justify-content: space-around;
+    }
+
+    body.mode-compact-overlay .pitch-layout {
+      grid-template-columns: 1fr;
+    }
+
+    /* Tactical Pitch & Position Editor */
+    .pitch-layout {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .pitch-container {
+      background: #09131d;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .football-pitch {
+      width: 290px;
+      height: 440px;
+      background: linear-gradient(180deg, #064e3b 0%, #047857 25%, #064e3b 50%, #047857 75%, #064e3b 100%);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-radius: 8px;
+      position: relative;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    /* Pitch Markings */
+    .pitch-line-half {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+    }
+    .pitch-circle-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 70px;
+      height: 70px;
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .pitch-box-top {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 120px;
+      height: 48px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-top: none;
+      pointer-events: none;
+    }
+    .pitch-box-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 120px;
+      height: 48px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-bottom: none;
+      pointer-events: none;
+    }
+
+    .pitch-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .pitch-node {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+      border: 2px solid transparent;
+      line-height: 1;
+    }
+    .pitch-node:hover {
+      transform: scale(1.15);
+      z-index: 10;
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.8);
+    }
+
+    .pitch-node .node-role {
+      font-size: 10px;
+      letter-spacing: -0.3px;
+    }
+    .pitch-node .node-val {
+      font-size: 11px;
+      margin-top: 1px;
+    }
+
+    /* Position Color Tiers */
+    .pos-natural {
+      background: #10b981;
+      color: #022c22;
+      border-color: #a7f3d0;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.8);
+    }
+    .pos-accomplished {
+      background: #059669;
+      color: #ecfdf5;
+      border-color: #6ee7b7;
+    }
+    .pos-competent {
+      background: #f59e0b;
+      color: #451a03;
+      border-color: #fde68a;
+    }
+    .pos-unconvincing {
+      background: #ea580c;
+      color: #fff;
+      border-color: #fed7aa;
+    }
+    .pos-ineffectual {
+      background: rgba(15, 23, 42, 0.75);
+      color: #94a3b8;
+      border-color: rgba(255, 255, 255, 0.15);
+      opacity: 0.75;
+    }
+
+    /* Foot Ability Card */
+    .foot-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .foot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .foot-label-group {
+      min-width: 120px;
+    }
+    .foot-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .foot-desc {
+      font-size: 11px;
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+    .foot-slider {
+      flex: 1;
+      accent-color: var(--accent-emerald);
+      cursor: pointer;
+    }
+    .foot-rating-badge {
+      font-size: 14px;
+      font-weight: 800;
+      width: 32px;
+      text-align: right;
+    }
+
+    /* Positions Table Grid */
+    .pos-table-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .pos-item-card {
+      background: #111827;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.15s;
+    }
+    .pos-item-card:hover {
+      border-color: var(--accent-cyan);
+    }
+    .pos-item-left {
+      display: flex;
+      flex-direction: column;
+    }
+    .pos-item-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .pos-item-desc {
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .pos-item-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Context & Auto-Sync Bar -->
+  <header>
+    <div class="topbar-container">
+      <!-- Brand & Mode Title -->
+      <div class="brand-section">
+        <div class="brand-logo">FM</div>
+        <div>
+          <div class="brand-name">
+            fmlev 26
+            <span class="badge-sub">Live Editor</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Sync Indicator -->
+      <div id="sync-pill" class="sync-indicator unsynced" onclick="toggleAutoAttach()" title="Click to refresh connection to FM26">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text">🔴 Waiting for FM26...</span>
+      </div>
+
+      <!-- Instant Search Bar -->
+      <div class="search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input
+          id="global-search"
+          type="text"
+          class="search-input-box"
+          placeholder="Search players, clubs, nations, competitions (e.g. Haaland, Arsenal, England, Premier League)..."
+          autocomplete="off"
+          oninput="handleSearchInput(this.value)"
+          onkeydown="handleSearchKey(event)"
+        >
+        <span id="search-clear-btn" class="search-clear" onclick="clearSearch()">✕</span>
+
+        <!-- Dropdown Popup -->
+        <div id="search-results-dropdown" class="search-dropdown"></div>
+      </div>
+
+      <!-- Right Controls: Auto-Follow, Pin, Overlay Toggle -->
+      <div class="top-controls">
+        <!-- Follow / Pin Toggle Button -->
+        <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following game screen">
+          📌 Pin Player
+        </button>
+
+        <!-- Overlay Mode Switcher -->
+        <button id="overlay-mode-btn" class="btn btn-primary" onclick="toggleOverlayMode()" title="Toggle compact overlay HUD for in-game use">
+          📱 Compact Overlay
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="tabs-nav">
+    <div class="tabs-container">
+      <button class="tab-btn active" onclick="switchTab('tab-player')">
+        ⚽ Player Profile & Attributes
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-positions')">
+        📍 Positions & Feet
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-contract')">
+        📝 Contract & Transfer
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-club')">
+        🏟️ Club Details & Facilities
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-nation')">
+        🌍 Nation Details
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-competition')">
+        🏆 Competition Details
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-status')">
+        ⚙️ Game Sync & Status
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content Views -->
+  <main>
+
+    <!-- VIEW 1: PLAYER PROFILE & ATTRIBUTES EDITOR (DEFAULT) -->
+    <section id="tab-player" class="tab-view active">
+
+      <!-- Player Header Card -->
+      <div class="player-header-card">
+        <div class="player-identity">
+          <div id="player-avatar" class="player-avatar">⚽</div>
+          <div>
+            <div class="player-name-row">
+              <span id="player-name" class="player-name-display">Loading Player...</span>
+              <button class="btn" style="padding: 2px 6px; font-size: 11px;" onclick="promptEditName()" title="Edit Player Name">✏️</button>
+            </div>
+            <div class="player-meta-row">
+              <span id="player-nat" class="pill-badge badge-nat">🇳🇴 Norway</span>
+              <span id="player-age" class="pill-badge badge-nat">24 yrs</span>
+              <span id="player-pos" class="pill-badge badge-pos">ST (C)</span>
+              <span id="player-club" class="pill-badge badge-club">Manchester City</span>
+              <span id="player-morale" class="pill-badge badge-morale">🔥 Superb</span>
+              <span id="player-injury" class="pill-badge badge-fit">💚 Match Fit</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fitness & Condition Rings -->
+        <div class="fitness-metrics">
+          <div class="metric-group">
+            <div style="font-size: 10px; font-weight: 700; color: var(--text-dim);">CONDITION</div>
+            <div id="disp-condition-pct" style="font-size: 16px; font-weight: 800; color: var(--accent-emerald);">100%</div>
+            <div class="metric-bar-bg">
+              <div id="fill-condition" class="metric-bar-fill" style="width: 100%;"></div>
+            </div>
+          </div>
+          <div class="metric-group">
+            <div style="font-size: 10px; font-weight: 700; color: var(--text-dim);">SHARPNESS</div>
+            <div id="disp-sharpness-pct" style="font-size: 16px; font-weight: 800; color: var(--accent-cyan);">100%</div>
+            <div class="metric-bar-bg">
+              <div id="fill-sharpness" class="metric-bar-fill sharpness" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- Current & Potential Ability Block -->
+          <div class="ca-pa-container">
+            <div class="ca-pa-block">
+              <div class="ca-pa-label">CA (Ability)</div>
+              <input id="input-ca" type="number" min="1" max="200" class="ca-pa-val-input ca-color" value="188" onchange="handleCAChange(this.value)">
+              <div id="star-rating-ca" class="star-rating">★★★★★</div>
+            </div>
+            <div style="width: 1px; height: 36px; background: var(--border-color);"></div>
+            <div class="ca-pa-block">
+              <div class="ca-pa-label">PA (Potential)</div>
+              <input id="input-pa" type="number" min="1" max="200" class="ca-pa-val-input pa-color" value="195" onchange="handlePAChange(this.value)">
+              <div id="star-rating-pa" class="star-rating">★★★★★</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1-Click Player Presets Bar -->
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">1-Click Presets:</span>
+        <button class="preset-btn" onclick="applyPlayerPreset('heal')">💚 Heal & 100% Fitness</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('morale')">🔥 Max Morale</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('wonderkid')">💎 Wonderkid (195 PA)</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('goat')">🐐 All 20s (GOAT)</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">⚡ +2 All Attributes</button>
+      </div>
+
+      <!-- Authentic FM 3-Column Attribute Table -->
+      <div class="attributes-columns">
+        <!-- Technical Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-tech">
+            <span>⚽ Technical</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-technical" class="attr-list"></div>
+        </div>
+
+        <!-- Mental Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-mental">
+            <span>🧠 Mental</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-mental" class="attr-list"></div>
+        </div>
+
+        <!-- Physical Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-phys">
+            <span>⚡ Physical</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-physical" class="attr-list"></div>
+        </div>
+      </div>
+
+      <!-- Collapsible Hidden & Goalkeeping Attributes Section -->
+      <div class="card" style="padding: 12px 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="toggleHiddenAttributes()">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; color: #c4b5fd;">
+            <span>🛡️ Hidden & Goalkeeping Attributes</span>
+            <span style="font-size: 10px; color: var(--text-dim);">(Consistency, Big Matches, Pressure, GK Reflexes...)</span>
+          </div>
+          <span id="hidden-toggle-arrow">▼</span>
+        </div>
+        <div id="hidden-attributes-panel" style="display: none; margin-top: 14px;">
+          <div class="attributes-columns">
+            <div class="attr-column-card">
+              <div class="attr-column-header header-hidden">
+                <span>🎭 Hidden Personality</span>
+              </div>
+              <div id="list-hidden" class="attr-list"></div>
+            </div>
+            <div class="attr-column-card" style="grid-column: span 2;">
+              <div class="attr-column-header header-hidden">
+                <span>🧤 Goalkeeping Attributes</span>
+              </div>
+              <div id="list-goalkeeping" class="attr-list" style="display: grid; grid-template-columns: 1fr 1fr;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action & Auto-Apply Control Bar -->
+      <div class="action-control-bar">
+        <div class="toggle-wrapper">
+          <label class="switch">
+            <input id="auto-apply-toggle" type="checkbox" checked onchange="toggleAutoApply(this.checked)">
+            <span class="slider"></span>
+          </label>
+          <span>⚡ Instant Auto-Apply (saves immediately to live game on change)</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span id="last-saved-time" style="font-size: 11px; color: var(--text-dim);">All changes synced</span>
+          <button class="btn btn-emerald" style="padding: 8px 18px;" onclick="applyPlayerChanges()">
+            💾 Apply Changes to FM26
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: PLAYER POSITIONS & FOOT ABILITY EDITOR -->
+    <section id="tab-positions" class="tab-view">
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 id="pos-player-name" style="font-size: 18px; font-weight: 800;">Player Positions & Roles</h2>
+              <span id="pos-summary-badge" class="pill-badge badge-pos">ST (C)</span>
+              <span id="pos-foot-summary" class="pill-badge badge-nat">Right Only</span>
+            </div>
+            <div id="pos-club-name" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Manchester City</div>
+          </div>
+          <div class="presets-bar" style="margin: 0;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Presets:</span>
+            <button class="preset-btn" onclick="applyPositionPreset('all_positions_20')">🌟 Total Football (All 20s)</button>
+            <button class="preset-btn" onclick="applyPositionPreset('both_feet_20')">👟 Both Feet (20 L/R)</button>
+            <button class="preset-btn" onclick="applyPositionPreset('pure_striker')">🎯 Pure Striker</button>
+            <button class="preset-btn" onclick="applyPositionPreset('universal_winger')">⚡ Universal Winger</button>
+            <button class="preset-btn" onclick="applyPositionPreset('midfield_maestro')">🧠 Midfield Maestro</button>
+            <button class="preset-btn" onclick="applyPositionPreset('complete_defender')">🛡️ Complete Defender</button>
+            <button class="preset-btn" onclick="applyPositionPreset('goalkeeper')">🧤 Goalkeeper</button>
+          </div>
+        </div>
+
+        <!-- 2-Column Tactical Editor Layout -->
+        <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+          
+          <!-- Column 1: Interactive Tactical Football Pitch -->
+          <div class="football-pitch-container">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px;">
+              Tactical Pitch Matrix
+            </div>
+
+            <div class="football-pitch">
+              <!-- Pitch Markings -->
+              <div class="pitch-box-top"></div>
+              <div class="pitch-circle-center"></div>
+              <div class="pitch-line-half"></div>
+              <div class="pitch-box-bottom"></div>
+
+              <!-- Row 1: Striker -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-natural" id="pitch-node-st" onclick="cyclePosition('st')" title="Striker (Centre)">
+                  <span class="node-role">ST</span>
+                  <span class="node-val" id="pitch-val-st">20</span>
+                </div>
+              </div>
+
+              <!-- Row 2: Attacking Midfield -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-aml" onclick="cyclePosition('aml')" title="Attacking Midfielder (Left)">
+                  <span class="node-role">AML</span>
+                  <span class="node-val" id="pitch-val-aml">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-amc" onclick="cyclePosition('amc')" title="Attacking Midfielder (Centre)">
+                  <span class="node-role">AMC</span>
+                  <span class="node-val" id="pitch-val-amc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-amr" onclick="cyclePosition('amr')" title="Attacking Midfielder (Right)">
+                  <span class="node-role">AMR</span>
+                  <span class="node-val" id="pitch-val-amr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 3: Central & Wide Midfield -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-ml" onclick="cyclePosition('ml')" title="Midfielder (Left)">
+                  <span class="node-role">ML</span>
+                  <span class="node-val" id="pitch-val-ml">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-mc" onclick="cyclePosition('mc')" title="Midfielder (Centre)">
+                  <span class="node-role">MC</span>
+                  <span class="node-val" id="pitch-val-mc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-mr" onclick="cyclePosition('mr')" title="Midfielder (Right)">
+                  <span class="node-role">MR</span>
+                  <span class="node-val" id="pitch-val-mr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 4: Defensive Midfield & Wingbacks -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-wbl" onclick="cyclePosition('wbl')" title="Wing Back (Left)">
+                  <span class="node-role">WBL</span>
+                  <span class="node-val" id="pitch-val-wbl">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dm" onclick="cyclePosition('dm')" title="Defensive Midfielder (Centre)">
+                  <span class="node-role">DM</span>
+                  <span class="node-val" id="pitch-val-dm">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-wbr" onclick="cyclePosition('wbr')" title="Wing Back (Right)">
+                  <span class="node-role">WBR</span>
+                  <span class="node-val" id="pitch-val-wbr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 5: Defence -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dl" onclick="cyclePosition('dl')" title="Defender (Left)">
+                  <span class="node-role">DL</span>
+                  <span class="node-val" id="pitch-val-dl">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dc" onclick="cyclePosition('dc')" title="Defender (Centre)">
+                  <span class="node-role">DC</span>
+                  <span class="node-val" id="pitch-val-dc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dr" onclick="cyclePosition('dr')" title="Defender (Right)">
+                  <span class="node-role">DR</span>
+                  <span class="node-val" id="pitch-val-dr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 6: Goalkeeper -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-gk" onclick="cyclePosition('gk')" title="Goalkeeper">
+                  <span class="node-role">GK</span>
+                  <span class="node-val" id="pitch-val-gk">1</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pitch Legend -->
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+              <span><b style="color: #10b981;">● 20</b> Natural</span>
+              <span><b style="color: #059669;">● 15-19</b> Accomplished</span>
+              <span><b style="color: #f59e0b;">● 10-14</b> Competent</span>
+              <span><b style="color: #ea580c;">● 6-9</b> Unconvincing</span>
+              <span><b style="color: #64748b;">● 1-5</b> Ineffectual</span>
+            </div>
+            <div style="font-size: 10px; color: var(--text-dim); text-align: center; margin-top: 4px;">
+              💡 Click any position circle to cycle tier (20 ➔ 15 ➔ 10 ➔ 1)
+            </div>
+          </div>
+
+          <!-- Column 2: Foot Abilities & Position Rating Steppers -->
+          <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 16px;">
+            
+            <!-- Foot Ability Sliders -->
+            <div class="foot-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);">Foot Ability Ratings</h3>
+                <span style="font-size: 11px; color: var(--text-dim);">1 (Very Weak) — 20 (Very Strong)</span>
+              </div>
+
+              <!-- Left Foot -->
+              <div class="foot-row">
+                <div class="foot-label-group">
+                  <div class="foot-name">Left Foot</div>
+                  <div id="foot-desc-left" class="foot-desc">Very Strong</div>
+                </div>
+                <input id="slider-foot-left" type="range" min="1" max="20" class="foot-slider" oninput="handleFootSlider('left', this.value)">
+                <div id="foot-val-left" class="foot-rating-badge" style="color: var(--accent-emerald);">20</div>
+              </div>
+
+              <!-- Right Foot -->
+              <div class="foot-row">
+                <div class="foot-label-group">
+                  <div class="foot-name">Right Foot</div>
+                  <div id="foot-desc-right" class="foot-desc">Very Strong</div>
+                </div>
+                <input id="slider-foot-right" type="range" min="1" max="20" class="foot-slider" oninput="handleFootSlider('right', this.value)">
+                <div id="foot-val-right" class="foot-rating-badge" style="color: var(--accent-emerald);">20</div>
+              </div>
+            </div>
+
+            <!-- Position Ratings Matrix (14 Positions) -->
+            <div class="card" style="margin: 0; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);">
+                  All 14 Tactical Positions
+                </h3>
+                <span style="font-size: 11px; color: var(--text-dim);">Click value or use - / + steppers</span>
+              </div>
+              <div class="pos-table-grid" id="pos-grid-container">
+                <!-- Dynamically populated by JS renderPositionsTab() -->
+              </div>
+            </div>
+
+            <!-- Quick Action & Save Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px 16px;">
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <span>⚡ Auto-Apply updates FM26 instantly on click/slide</span>
+              </div>
+              <button class="btn btn-emerald" style="padding: 8px 20px;" onclick="savePositionsToGame()">
+                💾 Save Positions to FM26
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: CONTRACT, TRANSFER & PERSONAL -->
+    <section id="tab-contract" class="tab-view">
+      <div class="card">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+          <div>
+            <h2 id="contract-player-name" style="font-size: 18px; font-weight: 800;">Contract & Dynamics</h2>
+            <div id="contract-club-name" style="font-size: 12px; color: var(--text-muted);">Manchester City</div>
+          </div>
+          <div class="presets-bar" style="margin: 0;">
+            <button class="preset-btn" onclick="applyPlayerPreset('extend_contract')">✍️ +5 Years Extension</button>
+            <button class="preset-btn" onclick="applyPlayerPreset('free_release')">🔓 $0 Release Clause</button>
+            <button class="preset-btn" onclick="applyPlayerPreset('morale')">❤️ Delighted & Loyal</button>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <!-- Weekly Wage -->
+          <div class="form-group">
+            <label class="form-label">
+              <span>Weekly Wage (per week)</span>
+              <span id="currency-symbol-label">USD ($)</span>
+            </label>
+            <div style="display: flex; gap: 8px;">
+              <input id="contract-wage" type="number" class="form-control" value="400000" onchange="autoSaveContract()">
+              <button class="btn" onclick="adjustWage(50000)">+50k</button>
+              <button class="btn" onclick="adjustWage(-50000)">-50k</button>
+            </div>
+          </div>
+
+          <!-- Expiry Year -->
+          <div class="form-group">
+            <label class="form-label">Contract Expiry Year</label>
+            <select id="contract-expiry" class="form-control" onchange="autoSaveContract()">
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+              <option value="2029">2029</option>
+              <option value="2030">2030</option>
+              <option value="2031">2031</option>
+              <option value="2032">2032</option>
+              <option value="2033">2033</option>
+              <option value="2034">2034</option>
+              <option value="2035">2035</option>
+            </select>
+          </div>
+
+          <!-- Minimum Fee Release Clause -->
+          <div class="form-group">
+            <label class="form-label">
+              <span>Release Clause</span>
+              <span style="font-size: 10px; color: var(--accent-cyan); cursor: pointer;" onclick="document.getElementById('contract-release').value = 0; autoSaveContract();">Set to $0 (Free)</span>
+            </label>
+            <input id="contract-release" type="number" class="form-control" value="200000000" onchange="autoSaveContract()">
+          </div>
+
+          <!-- Squad Status -->
+          <div class="form-group">
+            <label class="form-label">Squad Status</label>
+            <select id="contract-status" class="form-control" onchange="autoSaveContract()">
+              <option value="Star Player">Star Player</option>
+              <option value="Important Player">Important Player</option>
+              <option value="Regular Starter">Regular Starter</option>
+              <option value="Squad Player">Squad Player</option>
+              <option value="Impact Sub">Impact Sub</option>
+              <option value="Breakthrough Prospect">Breakthrough Prospect</option>
+              <option value="Youth Prospect">Youth Prospect</option>
+            </select>
+          </div>
+
+          <!-- Player Happiness / Morale -->
+          <div class="form-group">
+            <label class="form-label">Player Happiness</label>
+            <select id="contract-happiness" class="form-control" onchange="autoSaveContract()">
+              <option value="Delighted">Delighted (Ecstatic)</option>
+              <option value="Happy">Happy</option>
+              <option value="Content">Content</option>
+              <option value="Slightly Concerned">Slightly Concerned</option>
+              <option value="Unhappy">Unhappy</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px; display: flex; justify-content: flex-end;">
+          <button class="btn btn-emerald" style="padding: 8px 20px;" onclick="saveContractToGame()">
+            💾 Save Contract to FM26
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: ADVANCED CLUB DETAILS, FACILITIES, BOARD & AFFILIATES -->
+    <section id="tab-club" class="tab-view">
+      <!-- Club Header -->
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(16, 185, 129, 0.35);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 id="club-title" style="font-size: 22px; font-weight: 800;">Manchester City</h2>
+            <span id="club-league-badge" class="pill-badge badge-club">Premier League</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+            <span style="font-size: 11px; color: var(--text-muted);">Reputation:</span>
+            <span id="club-rep-num" style="font-weight: 800; color: var(--accent-gold);">9,450 / 10,000</span>
+            <span id="club-rep-stars" class="star-rating">★★★★★</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="preset-btn" onclick="applyClubPreset('max_facilities')">⭐ Max All Facilities (20/20)</button>
+          <button class="preset-btn" onclick="applyClubPreset('add_50m')">💰 +$50M Transfer Budget</button>
+          <button class="preset-btn" onclick="applyClubPreset('sugar_daddy')">💎 Sugar Daddy Takeover</button>
+          <button class="preset-btn" onclick="applyClubPreset('wipe_debt')">🏦 Wipe All Debt</button>
+        </div>
+      </div>
+
+      <!-- Financial Budgets & Facilities Matrix Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+        <!-- Left: Financial Budgets & Stadium -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>💰 Financial Budgets & Stadium</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Overall Balance ($)</label>
+            <input id="club-balance" type="number" class="form-control" value="220000000" onchange="autoSaveClub()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Transfer Budget ($)</label>
+            <input id="club-transfer-budget" type="number" class="form-control" value="115000000" onchange="autoSaveClub()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Wage Budget ($ / week)</label>
+            <input id="club-wage-budget" type="number" class="form-control" value="4200000" onchange="autoSaveClub()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Wage Allowance ($ / week)</label>
+            <input id="club-max-wage" type="number" class="form-control" value="600000" onchange="autoSaveClub()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Stadium Name</label>
+            <input id="club-stadium-name" type="text" class="form-control" value="Etihad Stadium" onchange="autoSaveClub()">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label class="form-label">Stadium Capacity</label>
+              <input id="club-stadium-cap" type="number" class="form-control" value="53400" onchange="autoSaveClub()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Expansion Cap</label>
+              <input id="club-stadium-exp" type="number" class="form-control" value="62000" onchange="autoSaveClub()">
+            </div>
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveClubToGame()">
+            💾 Save Financial Budgets & Stadium
+          </button>
+        </div>
+
+        <!-- Right: Facilities Matrix (1 - 20) with Stepper Controls -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🏗️ Facilities Matrix (1 - 20)</span>
+            <button class="preset-btn" style="padding: 2px 8px; font-size: 10px;" onclick="applyClubPreset('max_facilities')">⭐ Max All (20/20)</button>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Training Facilities</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-training', -1)">−</button>
+            <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-training', 1)">+</button>
+            <span id="fac-training-disp" class="facility-val tier-elite">20</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Facilities</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-youth', -1)">−</button>
+            <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-youth', 1)">+</button>
+            <span id="fac-youth-disp" class="facility-val tier-elite">20</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Recruitment</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', -1)">−</button>
+            <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', 1)">+</button>
+            <span id="fac-recruitment-disp" class="facility-val tier-elite">19</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Junior Coaching</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-coaching', -1)">−</button>
+            <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-coaching', 1)">+</button>
+            <span id="fac-coaching-disp" class="facility-val tier-elite">19</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Data Analysis</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
+            <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
+            <span id="fac-data-analysis-disp" class="facility-val tier-elite">18</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Corporate Facilities</span>
+            <button class="stepper-btn" onclick="stepClubFac('fac-corporate', -1)">−</button>
+            <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepClubFac('fac-corporate', 1)">+</button>
+            <span id="fac-corporate-disp" class="facility-val tier-elite">19</span>
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveClubToGame()">
+            💾 Save Facilities to Game
+          </button>
+        </div>
+      </div>
+
+      <!-- Board & Ownership and Affiliated Clubs Manager Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+        <!-- Board & Ownership -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>👔 Board & Ownership</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">
+              <span>Sugar Daddy Status</span>
+              <span id="sugar-daddy-badge" class="pill-badge badge-pos">None</span>
+            </label>
+            <select id="club-sugar-daddy" class="form-control" onchange="handleSugarDaddySelect(this.value)">
+              <option value="None">None (Standard Club Economy)</option>
+              <option value="FrontEnd">FrontEnd (Substantial Early Injections)</option>
+              <option value="Underwriter">Underwriter (Covers Deficits & Wipes Debt)</option>
+              <option value="Foreground">Foreground (Limitless Wealth / State-Backed)</option>
+            </select>
+            <div id="sugar-daddy-desc" style="font-size: 11px; color: var(--text-dim); margin-top: 5px;">
+              Regular commercial backing without benefactor support.
+            </div>
+          </div>
+
+          <div class="facility-row" style="margin-top: 14px;">
+            <span class="facility-name">Board Patience (1-20)</span>
+            <button class="stepper-btn" onclick="stepPatience(-1)">−</button>
+            <input id="club-board-patience" type="range" min="1" max="20" value="15" class="facility-slider" oninput="updateDisp('disp-patience', this.value)" onchange="autoSaveClub()">
+            <button class="stepper-btn" onclick="stepPatience(1)">+</button>
+            <span id="disp-patience" class="facility-val tier-elite">15</span>
+          </div>
+
+          <div style="margin: 14px 0 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+              <span>FAN CONFIDENCE</span>
+              <span id="disp-fan-conf">85%</span>
+            </div>
+            <input id="club-fan-confidence" type="range" min="1" max="100" value="85" style="width: 100%; accent-color: var(--accent-emerald);" oninput="document.getElementById('disp-fan-conf').innerText = this.value + '%'" onchange="autoSaveClub()">
+          </div>
+
+          <div style="margin: 14px 0 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+              <span>BOARD CONFIDENCE</span>
+              <span id="disp-board-conf">88%</span>
+            </div>
+            <input id="club-board-confidence" type="range" min="1" max="100" value="88" style="width: 100%; accent-color: var(--accent-cyan);" oninput="document.getElementById('disp-board-conf').innerText = this.value + '%'" onchange="autoSaveClub()">
+          </div>
+
+          <div style="margin: 14px 0 10px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+              <span>TRANSFER REVENUE RETENTION</span>
+              <span id="disp-retention">100%</span>
+            </div>
+            <input id="club-transfer-retention" type="range" min="0" max="100" value="100" style="width: 100%; accent-color: var(--accent-gold);" oninput="document.getElementById('disp-retention').innerText = this.value + '%'" onchange="autoSaveClub()">
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="saveClubToGame()">
+            💾 Save Board & Ownership Settings
+          </button>
+        </div>
+
+        <!-- Affiliated Clubs Manager -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🤝 Affiliated Clubs Manager</span>
+            <span id="affiliates-count-badge" class="pill-badge badge-pos">0 Active</span>
+          </div>
+
+          <!-- Active Affiliates Container -->
+          <div id="affiliates-list" class="affiliate-grid" style="max-height: 240px; overflow-y: auto;">
+            <!-- Populated dynamically via JS -->
+            <div style="color: var(--text-muted); font-size: 12px; padding: 10px; text-align: center;">No affiliates loaded</div>
+          </div>
+
+          <!-- Add New Affiliate Row -->
+          <div style="background: rgba(10, 14, 26, 0.7); border: 1px dashed var(--border-light); border-radius: var(--radius-sm); padding: 12px; margin-top: 12px;">
+            <div style="font-size: 11px; font-weight: 800; color: var(--accent-cyan); text-transform: uppercase; margin-bottom: 8px;">
+              ➕ Link New Affiliate Club
+            </div>
+            <div style="display: grid; grid-template-columns: 80px 1fr 110px; gap: 8px; margin-bottom: 8px;">
+              <input id="new-aff-id" type="number" class="form-control" placeholder="Club ID" value="2003" title="Target Affiliate Club ID">
+              <input id="new-aff-name" type="text" class="form-control" placeholder="Affiliate Club Name (e.g. Lommel SK)">
+              <input id="new-aff-fee" type="number" class="form-control" placeholder="Fee ($)" value="150000" title="Annual Fee">
+            </div>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 11px; color: var(--text-muted);">
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input id="new-aff-option" type="checkbox" checked> First Option
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input id="new-aff-loans" type="checkbox" checked> Send Loans
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input id="new-aff-scout" type="checkbox" checked> Shared Scouting
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input id="new-aff-haven" type="checkbox"> Work Permit Haven
+              </label>
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%;" onclick="submitNewAffiliate()">
+              ➕ Add Affiliate Link
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Whole-Squad God Mode Cards -->
+      <div style="margin-top: 20px;">
+        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span>⚡ Whole-Squad God Mode (1-Click Actions)</span>
+        </h3>
+
+        <div class="god-grid">
+          <div class="god-card" style="border-top: 3px solid var(--accent-emerald);">
+            <div>
+              <div class="god-card-title">🏥 100% Squad Fitness</div>
+              <div class="god-card-desc">Restores match sharpness and condition to 100% for every player in your club squad. Wipes match fatigue.</div>
+            </div>
+            <button class="btn btn-emerald" onclick="applyClubPreset('heal_squad')">Restores 100% Squad Fitness</button>
+          </div>
+
+          <div class="god-card" style="border-top: 3px solid var(--accent-gold);">
+            <div>
+              <div class="god-card-title">🔥 Max Squad Morale</div>
+              <div class="god-card-desc">Maximizes team morale to Superb (100) and delight across every squad member. Fixes team dynamics instantly.</div>
+            </div>
+            <button class="btn btn-primary" onclick="applyClubPreset('morale_squad')">Max Squad Morale (Superb)</button>
+          </div>
+
+          <div class="god-card" style="border-top: 3px solid var(--accent-cyan);">
+            <div>
+              <div class="god-card-title">🛡️ Clear All Injuries & Bans</div>
+              <div class="god-card-desc">Instantly removes all active injuries, red/yellow card suspensions, and international restrictions across the squad.</div>
+            </div>
+            <button class="btn" onclick="applyClubPreset('clear_bans')">Clear Injuries & Bans</button>
+          </div>
+
+          <div class="god-card" style="border-top: 3px solid var(--accent-purple);">
+            <div>
+              <div class="god-card-title">🔓 Unlock Built-In IGE</div>
+              <div class="god-card-desc">Patches game memory to enable Football Manager 26's official built-in In-Game Editor pencil toolbar.</div>
+            </div>
+            <button class="btn" onclick="applyClubPreset('unlock_ige')">Unlock Built-In IGE</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 5: NATION DETAILS & YOUTH RATING GAUGE -->
+    <section id="tab-nation" class="tab-view">
+      <!-- Nation Header -->
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(6, 182, 212, 0.35);">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div id="nation-flag-avatar" class="player-avatar" style="border-color: var(--accent-cyan);">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 id="nation-name" style="font-size: 22px; font-weight: 800;">England</h2>
+              <span id="nation-code" class="pill-badge badge-nat">ENG</span>
+              <span id="nation-continent" class="pill-badge badge-pos">Europe</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+              <span style="font-size: 11px; color: var(--text-muted);">International Reputation:</span>
+              <span id="nation-rep-num" style="font-weight: 800; color: var(--accent-gold);">8,800 / 10,000</span>
+              <span id="nation-rep-stars" class="star-rating">★★★★☆</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="preset-btn" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(6, 182, 212, 0.3)); border-color: var(--accent-cyan);" onclick="applyNationPreset('golden_generation')">
+            ⭐ Trigger Golden Generation (Rating 200)
+          </button>
+          <button class="btn btn-emerald" onclick="saveNationToGame()">
+            💾 Save Nation to Game
+          </button>
+        </div>
+      </div>
+
+      <!-- Visual Youth Rating Gauge & Slider (1 - 200) -->
+      <div class="youth-gauge-container">
+        <div class="gauge-header">
+          <div>
+            <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-cyan);">🧬 National Youth Rating Gauge (1 - 200)</span>
+            <span style="font-size: 11px; color: var(--text-dim); margin-left: 8px;">Controls raw newgen wonderkid spawn potential</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="nation-youth-val" style="font-size: 20px; font-weight: 900; color: #fff;">145</span>
+            <span style="font-size: 13px; color: var(--text-dim);">/ 200</span>
+            <span id="nation-youth-tier" class="rating-tier-badge tier-elite">Tier 2: Elite Football Power</span>
+          </div>
+        </div>
+
+        <div class="gauge-bar-track">
+          <div id="nation-youth-gauge-fill" class="gauge-bar-fill" style="width: 72.5%;"></div>
+        </div>
+
+        <div class="gauge-markers">
+          <span>1: Obscure</span>
+          <span>60: Grassroots</span>
+          <span>110: Developing</span>
+          <span>145: Established</span>
+          <span>175: Elite Power</span>
+          <span>200: Wonderkid Hotbed</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 14px;">
+          <button class="stepper-btn" onclick="stepNationStat('youth_rating', -1)">−</button>
+          <input id="nation-youth-slider" type="range" min="1" max="200" value="145" class="facility-slider" style="accent-color: var(--accent-cyan);" oninput="handleYouthRatingInput(this.value)">
+          <button class="stepper-btn" onclick="stepNationStat('youth_rating', 1)">+</button>
+        </div>
+      </div>
+
+      <!-- Macro & Governance Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+        <!-- Card 1: Economic & Governance Macro -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>🌐 Macro & Economic Factors</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">International Reputation (1 - 10,000)</label>
+            <div class="stepper-input-group">
+              <input id="nation-reputation" type="number" min="1" max="10000" class="form-control" value="8800" onchange="handleNationRepChange(this.value)">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">State of Development</label>
+            <select id="nation-development" class="form-control">
+              <option value="0">0: Third World / Emerging Nation</option>
+              <option value="1">1: Developing Economy</option>
+              <option value="2" selected>2: Developed Nation</option>
+            </select>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Economic Factor (1-20)</span>
+            <button class="stepper-btn" onclick="stepNationStat('economic_factor', -1)">−</button>
+            <input id="nation-economic" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateDisp('disp-nation-econ', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('economic_factor', 1)">+</button>
+            <span id="disp-nation-econ" class="facility-val tier-elite">19</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">FA Financial Power (1-20)</span>
+            <button class="stepper-btn" onclick="stepNationStat('fa_financial_power', -1)">−</button>
+            <input id="nation-fa-power" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateDisp('disp-nation-fa', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('fa_financial_power', 1)">+</button>
+            <span id="disp-nation-fa" class="facility-val tier-elite">18</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Tax Rate (0 - 100%)</span>
+            <button class="stepper-btn" onclick="stepNationStat('tax_rate', -5)">−</button>
+            <input id="nation-tax-rate" type="range" min="0" max="100" value="45" class="facility-slider" style="accent-color: var(--accent-gold);" oninput="updateDispPercent('disp-nation-tax', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('tax_rate', 5)">+</button>
+            <span id="disp-nation-tax" class="facility-val tier-good" style="width: 42px;">45%</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Corruption Index (0-20)</span>
+            <button class="stepper-btn" onclick="stepNationStat('corruption_index', -1)">−</button>
+            <input id="nation-corruption" type="range" min="0" max="20" value="2" class="facility-slider" style="accent-color: var(--fm-low);" oninput="updateDisp('disp-nation-corruption', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('corruption_index', 1)">+</button>
+            <span id="disp-nation-corruption" class="facility-val tier-elite">2</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Game Importance (1-20)</span>
+            <button class="stepper-btn" onclick="stepNationStat('game_importance', -1)">−</button>
+            <input id="nation-game-importance" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateDisp('disp-nation-importance', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('game_importance', 1)">+</button>
+            <span id="disp-nation-importance" class="facility-val tier-elite">20</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Youth Facilities, Coaching & Recruitment Averages -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>🌱 National Youth System Averages (1 - 20)</span>
+          </div>
+
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">
+            These nationwide baseline metrics govern the training quality, coaching standards, and grassroots scouting networks for youth academy newgens generated across every club in the nation.
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Facilities Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_facilities_avg', -1)">−</button>
+            <input id="nation-fac-avg" type="range" min="1" max="20" value="17" class="facility-slider" oninput="updateDisp('disp-nation-fac-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_facilities_avg', 1)">+</button>
+            <span id="disp-nation-fac-avg" class="facility-val tier-elite">17</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Coaching Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_coaching_avg', -1)">−</button>
+            <input id="nation-coaching-avg" type="range" min="1" max="20" value="16" class="facility-slider" oninput="updateDisp('disp-nation-coaching-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_coaching_avg', 1)">+</button>
+            <span id="disp-nation-coaching-avg" class="facility-val tier-elite">16</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Recruitment Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_recruitment_avg', -1)">−</button>
+            <input id="nation-recruitment-avg" type="range" min="1" max="20" value="17" class="facility-slider" oninput="updateDisp('disp-nation-rec-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_recruitment_avg', 1)">+</button>
+            <span id="disp-nation-rec-avg" class="facility-val tier-elite">17</span>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-sm); padding: 12px; margin-top: 24px;">
+            <div style="font-weight: 700; font-size: 12px; color: #34d399; margin-bottom: 4px;">💡 Golden Generation Preset</div>
+            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+              Triggering the Golden Generation quick action immediately elevates Youth Rating to 200 and unlocks level 20 nationwide youth facilities, coaching, and FA wealth.
+            </div>
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 20px;" onclick="saveNationToGame()">
+            💾 Save Nation Details to Game
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 6: COMPETITION DETAILS, RULES & PRIZE MONEY -->
+    <section id="tab-competition" class="tab-view">
+      <!-- Competition Header -->
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(168, 85, 247, 0.35);">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div class="player-avatar" style="border-color: var(--accent-purple); font-size: 26px;">🏆</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 id="comp-name" style="font-size: 22px; font-weight: 800;">Premier League</h2>
+              <span id="comp-short-name" class="pill-badge badge-pos">EPL</span>
+              <span id="comp-nation" class="pill-badge badge-nat">England</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+              <span style="font-size: 11px; color: var(--text-muted);">Competition Reputation:</span>
+              <span id="comp-rep-num" style="font-weight: 800; color: var(--accent-gold);">9,200 / 10,000</span>
+              <span id="comp-rep-stars" class="star-rating">★★★★★</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="preset-btn" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(6, 182, 212, 0.3)); border-color: var(--accent-emerald);" onclick="applyCompetitionPreset('relax_rules')">
+            ⚡ Relax Rules (Unlimited Foreign & 12 Bench Subs)
+          </button>
+          <button class="btn btn-emerald" onclick="saveCompetitionToGame()">
+            💾 Save Competition Rules
+          </button>
+        </div>
+      </div>
+
+      <!-- Competition Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+        <!-- Left: Match Rules & VAR Active -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>⏱️ Match Rules & Substitutions</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Substitutes Allowed (In-Game)</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-max-subs', -1, 1, 11)">−</button>
+              <input id="comp-max-subs" type="number" min="1" max="11" class="form-control" value="5">
+              <button class="stepper-btn" onclick="stepCompField('comp-max-subs', 1, 1, 11)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Bench Size (Substitutes Named)</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-bench-size', -1, 1, 20)">−</button>
+              <input id="comp-bench-size" type="number" min="1" max="20" class="form-control" value="9">
+              <button class="stepper-btn" onclick="stepCompField('comp-bench-size', 1, 1, 20)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Substitution Stoppage Windows</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-sub-windows', -1, 1, 10)">−</button>
+              <input id="comp-sub-windows" type="number" min="1" max="10" class="form-control" value="3">
+              <button class="stepper-btn" onclick="stepCompField('comp-sub-windows', 1, 1, 10)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Yellow Cards for Ban</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-yellow-ban', -1, 1, 20)">−</button>
+              <input id="comp-yellow-ban" type="number" min="1" max="20" class="form-control" value="5">
+              <button class="stepper-btn" onclick="stepCompField('comp-yellow-ban', 1, 1, 20)">+</button>
+            </div>
+          </div>
+
+          <!-- VAR Active Toggle -->
+          <div style="background: rgba(10, 14, 26, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; margin-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 700; font-size: 12px; color: var(--text-main);">Video Assistant Referee (VAR)</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Enable or disable goal/penalty VAR reviews</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span id="comp-var-status" class="pill-badge badge-fit">🟢 VAR Active</span>
+              <label class="switch">
+                <input id="comp-var-active" type="checkbox" checked onchange="handleVarToggle(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Squad Rules & Prize Money Pool -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>📋 Squad Registration & Commercial Pool</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Squad Size</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-squad-size', -1, 11, 99)">−</button>
+              <input id="comp-squad-size" type="number" min="11" max="99" class="form-control" value="25">
+              <button class="stepper-btn" onclick="stepCompField('comp-squad-size', 1, 11, 99)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Foreign / Non-EU Players</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-foreign-limit', -1, 0, 99)">−</button>
+              <input id="comp-foreign-limit" type="number" min="0" max="99" class="form-control" value="17">
+              <button class="stepper-btn" onclick="stepCompField('comp-foreign-limit', 1, 0, 99)">+</button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label class="form-label">Min Homegrown (Club)</label>
+              <input id="comp-hg-club" type="number" min="0" max="25" class="form-control" value="4">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Min Homegrown (Nation)</label>
+              <input id="comp-hg-nation" type="number" min="0" max="25" class="form-control" value="8">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label">Winner Prize Money ($)</label>
+            <input id="comp-prize-money" type="number" class="form-control" value="44000000">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">TV Rights Pool ($)</label>
+            <input id="comp-tv-rights" type="number" class="form-control" value="2400000000">
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveCompetitionToGame()">
+            💾 Save Competition Rules
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: SYNC & STATUS -->
+    <section id="tab-status" class="tab-view">
+      <div class="card">
+        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 14px;">Game Connection & Linux Diagnostics</h3>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label class="form-label">Connection State</label>
+            <div id="diag-conn-state" style="font-weight: 700; color: var(--accent-emerald);">Checking...</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">FM26 Process PID</label>
+            <div id="diag-pid" style="font-family: monospace; font-weight: 700;">-</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Proton / Wine Runtime</label>
+            <div id="diag-proton" style="font-weight: 700;">Linux Native / Steam Proton</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Active Screen Detection</label>
+            <div id="diag-screen" style="font-weight: 700; color: var(--accent-cyan);">Auto-Following Screen</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" onclick="toggleAutoAttach()">
+            🔄 Re-scan & Attach to FM26
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notification Hub -->
+  <div id="toast-container"></div>
+
+  <script>
+    // Global Application State
+    let state = {
+      connected: false,
+      pid: null,
+      isPinned: false,
+      autoApply: true,
+      activePlayer: null,
+      activeClub: null,
+      activeNation: null,
+      activeCompetition: null,
+      syncMode: "auto_follow",
+      screenState: "player",
+      isOverlayMode: false,
+      saveTimeout: null,
+    };
+
+    const techAttrs = [
+      ["corners", "Corners"],
+      ["crossing", "Crossing"],
+      ["dribbling", "Dribbling"],
+      ["finishing", "Finishing"],
+      ["first_touch", "First Touch"],
+      ["free_kicks", "Free Kicks"],
+      ["heading", "Heading"],
+      ["long_shots", "Long Shots"],
+      ["passing", "Passing"],
+      ["penalty_taking", "Penalty Taking"],
+      ["tackling", "Tackling"],
+      ["technique", "Technique"]
+    ];
+
+    const mentalAttrs = [
+      ["aggression", "Aggression"],
+      ["anticipation", "Anticipation"],
+      ["bravery", "Bravery"],
+      ["composure", "Composure"],
+      ["concentration", "Concentration"],
+      ["decisions", "Decisions"],
+      ["determination", "Determination"],
+      ["flair", "Flair"],
+      ["leadership", "Leadership"],
+      ["off_the_ball", "Off The Ball"],
+      ["positioning", "Positioning"],
+      ["teamwork", "Teamwork"],
+      ["vision", "Vision"],
+      ["work_rate", "Work Rate"]
+    ];
+
+    const physAttrs = [
+      ["acceleration", "Acceleration"],
+      ["agility", "Agility"],
+      ["balance", "Balance"],
+      ["jumping_reach", "Jumping Reach"],
+      ["natural_fitness", "Natural Fitness"],
+      ["pace", "Pace"],
+      ["stamina", "Stamina"],
+      ["strength", "Strength"]
+    ];
+
+    const hiddenAttrs = [
+      ["consistency", "Consistency"],
+      ["important_matches", "Important Matches"],
+      ["injury_proneness", "Injury Proneness"],
+      ["professionalism", "Professionalism"],
+      ["ambition", "Ambition"],
+      ["loyalty", "Loyalty"],
+      ["pressure", "Pressure"],
+      ["temperament", "Temperament"]
+    ];
+
+    const gkAttrs = [
+      ["aerial_reach", "Aerial Reach"],
+      ["command_of_area", "Command Of Area"],
+      ["communication", "Communication"],
+      ["eccentricity", "Eccentricity"],
+      ["handling", "Handling"],
+      ["kicking", "Kicking"],
+      ["one_on_ones", "One On Ones"],
+      ["reflexes", "Reflexes"],
+      ["rushing_out", "Rushing Out"],
+      ["throwing", "Throwing"]
+    ];
+
+    const positionDefinitions = [
+      ["st", "ST", "Striker (Centre)"],
+      ["aml", "AML", "Attacking Midfielder (Left)"],
+      ["amc", "AMC", "Attacking Midfielder (Centre)"],
+      ["amr", "AMR", "Attacking Midfielder (Right)"],
+      ["ml", "ML", "Midfielder (Left)"],
+      ["mc", "MC", "Midfielder (Centre)"],
+      ["mr", "MR", "Midfielder (Right)"],
+      ["wbl", "WBL", "Wing Back (Left)"],
+      ["dm", "DM", "Defensive Midfielder (Centre)"],
+      ["wbr", "WBR", "Wing Back (Right)"],
+      ["dl", "DL", "Defender (Left)"],
+      ["dc", "DC", "Defender (Centre)"],
+      ["dr", "DR", "Defender (Right)"],
+      ["gk", "GK", "Goalkeeper"],
+    ];
+
+    // Initialization
+    window.addEventListener("DOMContentLoaded", () => {
+      // Check query params for compact overlay mode
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") === "overlay" || params.get("mode") === "compact") {
+        setOverlayMode(true);
+      }
+
+      buildAttributeLists();
+      fetchContext();
+
+      // Poll every 1 second when unpinned and not editing
+      setInterval(() => {
+        if (!state.isPinned && !isInputFocused()) {
+          fetchContext();
+        }
+      }, 1000);
+    });
+
+    function isInputFocused() {
+      const active = document.activeElement;
+      return active && (active.tagName === "INPUT" || active.tagName === "SELECT" || active.tagName === "TEXTAREA");
+    }
+
+    // Toggle Overlay Mode
+    function toggleOverlayMode() {
+      setOverlayMode(!state.isOverlayMode);
+    }
+
+    function setOverlayMode(enable) {
+      state.isOverlayMode = enable;
+      if (enable) {
+        document.body.classList.add("mode-compact-overlay");
+        document.getElementById("overlay-mode-btn").innerText = "🖥️ Full Editor";
+        showToast("Switched to Compact In-Game Overlay HUD", "info");
+      } else {
+        document.body.classList.remove("mode-compact-overlay");
+        document.getElementById("overlay-mode-btn").innerText = "📱 Compact Overlay";
+        showToast("Switched to Full Live Editor", "info");
+      }
+    }
+
+    // Tab Navigation
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-view").forEach(el => el.classList.remove("active"));
+      document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add("active");
+
+      const buttons = Array.from(document.querySelectorAll(".tab-btn"));
+      const btn = buttons.find(b => b.getAttribute("onclick")?.includes(tabId));
+      if (btn) btn.classList.add("active");
+    }
+
+    // Render Attribute Tables
+    function buildAttributeLists() {
+      renderAttrGroup("list-technical", techAttrs);
+      renderAttrGroup("list-mental", mentalAttrs);
+      renderAttrGroup("list-physical", physAttrs);
+      renderAttrGroup("list-hidden", hiddenAttrs);
+      renderAttrGroup("list-goalkeeping", gkAttrs);
+    }
+
+    function renderAttrGroup(containerId, list) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      container.innerHTML = list.map(([key, name]) => `
+        <div class="attr-row" data-key="${key}">
+          <span class="attr-name">${name}</span>
+          <div class="attr-controls">
+            <button class="attr-stepper" onclick="stepAttr('${key}', -1)">−</button>
+            <div id="attr-val-${key}" class="attr-val-box tier-avg" onclick="promptEditAttr('${key}', '${name}')">15</div>
+            <button class="attr-stepper" onclick="stepAttr('${key}', 1)">+</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function getTierClass(val) {
+      if (val >= 16) return "tier-elite";
+      if (val >= 11) return "tier-good";
+      if (val >= 6) return "tier-avg";
+      return "tier-low";
+    }
+
+    function stepAttr(key, delta) {
+      if (!state.activePlayer || !state.activePlayer.attributes) return;
+      const current = state.activePlayer.attributes[key] || 10;
+      const next = Math.max(1, Math.min(20, current + delta));
+      state.activePlayer.attributes[key] = next;
+
+      updateAttrDisplay(key, next);
+
+      // Recalculate CA recommendation
+      updateRecommendedCA();
+
+      if (state.autoApply) {
+        debouncedSavePlayer();
+      }
+    }
+
+    function promptEditAttr(key, name) {
+      const current = state.activePlayer?.attributes?.[key] || 15;
+      const input = prompt(`Enter ${name} (1 - 20):`, current);
+      if (input !== null) {
+        const val = parseInt(input);
+        if (!isNaN(val)) {
+          const clamped = Math.max(1, Math.min(20, val));
+          state.activePlayer.attributes[key] = clamped;
+          updateAttrDisplay(key, clamped);
+          updateRecommendedCA();
+          if (state.autoApply) debouncedSavePlayer();
+        }
+      }
+    }
+
+    function updateAttrDisplay(key, val) {
+      const el = document.getElementById("attr-val-" + key);
+      if (!el) return;
+      el.innerText = val;
+      el.className = `attr-val-box ${getTierClass(val)}`;
+    }
+
+    // Toggle Hidden Attributes section
+    function toggleHiddenAttributes() {
+      const p = document.getElementById("hidden-attributes-panel");
+      const arrow = document.getElementById("hidden-toggle-arrow");
+      if (p.style.display === "none") {
+        p.style.display = "block";
+        arrow.innerText = "▲";
+      } else {
+        p.style.display = "none";
+        arrow.innerText = "▼";
+      }
+    }
+
+    // Fetch Context from Backend
+    async function fetchContext() {
+      try {
+        const res = await fetch("/api/context");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        state.connected = data.connected;
+        state.pid = data.pid;
+        state.isPinned = data.is_pinned;
+        state.syncMode = data.sync_mode;
+        state.screenState = data.screen_state;
+
+        updateSyncUI();
+
+        if (data.active_player || data.player) {
+          const player = data.active_player || data.player;
+          // Only update UI if not currently editing an input
+          if (!isInputFocused()) {
+            displayPlayer(player);
+          }
+        }
+
+        if (data.active_club || data.club) {
+          const club = data.active_club || data.club;
+          if (!isInputFocused()) {
+            displayClub(club);
+          }
+        }
+
+        if (data.active_nation || data.nation) {
+          const nation = data.active_nation || data.nation;
+          if (!isInputFocused()) {
+            displayNation(nation);
+          }
+        }
+
+        if (data.active_competition || data.competition) {
+          const comp = data.active_competition || data.competition;
+          if (!isInputFocused()) {
+            displayCompetition(comp);
+          }
+        }
+      } catch (e) {
+        console.warn("Context fetch error:", e);
+      }
+    }
+
+    function updateSyncUI() {
+      const pill = document.getElementById("sync-pill");
+      const text = document.getElementById("sync-status-text");
+      const pinBtn = document.getElementById("pin-btn");
+      const diagConn = document.getElementById("diag-conn-state");
+      const diagPid = document.getElementById("diag-pid");
+
+      if (state.connected) {
+        pill.className = "sync-indicator synced";
+        text.innerText = state.isPinned
+          ? "🟢 Synced • 📌 Pinned"
+          : "🟢 Synced with FM26 • Auto-Following Game Screen";
+        if (diagConn) diagConn.innerText = `Connected (PID: ${state.pid})`;
+      } else {
+        pill.className = "sync-indicator unsynced";
+        text.innerText = "🔴 Game Not Detected • Waiting for FM26...";
+        if (diagConn) diagConn.innerText = "Disconnected (Waiting for FM26 process)";
+      }
+
+      if (diagPid) diagPid.innerText = state.pid || "None";
+
+      if (state.isPinned) {
+        pinBtn.classList.add("btn-pinned");
+        pinBtn.innerText = "📌 Pinned (Click to Unpin)";
+      } else {
+        pinBtn.classList.remove("btn-pinned");
+        pinBtn.innerText = "📌 Pin Player";
+      }
+    }
+
+    // Render Player Data
+    function displayPlayer(player) {
+      state.activePlayer = JSON.parse(JSON.stringify(player));
+
+      document.getElementById("player-name").innerText = player.name || "Unknown Player";
+      document.getElementById("contract-player-name").innerText = `${player.name} — Contract`;
+      document.getElementById("player-age").innerText = `${player.age || 24} yrs`;
+      document.getElementById("player-nat").innerText = `${getCountryFlag(player.nationality)} ${player.nationality || "Unknown"}`;
+      document.getElementById("player-pos").innerText = player.position || "MC";
+      document.getElementById("player-club").innerText = player.club_name || "Free Agent";
+      document.getElementById("contract-club-name").innerText = player.club_name || "Free Agent";
+
+      // Morale & Fitness
+      const morale = player.morale_label || (player.morale >= 90 ? "Superb" : "Good");
+      document.getElementById("player-morale").innerText = `🔥 ${morale}`;
+
+      const isInjured = player.is_injured;
+      const injEl = document.getElementById("player-injury");
+      if (isInjured) {
+        injEl.className = "pill-badge badge-injured";
+        injEl.innerText = "🩹 Injured";
+      } else {
+        injEl.className = "pill-badge badge-fit";
+        injEl.innerText = "💚 Match Fit";
+      }
+
+      // Condition & Sharpness
+      const condPct = Math.round((player.condition || 10000) / 100);
+      const sharpPct = Math.round((player.sharpness || 10000) / 100);
+      document.getElementById("disp-condition-pct").innerText = `${condPct}%`;
+      document.getElementById("disp-sharpness-pct").innerText = `${sharpPct}%`;
+      document.getElementById("fill-condition").style.width = `${condPct}%`;
+      document.getElementById("fill-sharpness").style.width = `${sharpPct}%`;
+
+      // CA / PA
+      const ca = player.current_ability || 150;
+      const pa = player.potential_ability || 170;
+      document.getElementById("input-ca").value = ca;
+      document.getElementById("input-pa").value = pa;
+      document.getElementById("star-rating-ca").innerText = getStarString(ca);
+      document.getElementById("star-rating-pa").innerText = getStarString(pa);
+
+      // Attributes
+      if (player.attributes) {
+        for (const [key, val] of Object.entries(player.attributes)) {
+          updateAttrDisplay(key, val);
+        }
+      }
+
+      // Contract tab inputs
+      if (player.contract) {
+        document.getElementById("contract-wage").value = player.contract.wage_per_week || 50000;
+        document.getElementById("contract-expiry").value = player.contract.expiry_year || 2028;
+        document.getElementById("contract-release").value = player.contract.release_clause || 0;
+        document.getElementById("contract-status").value = player.contract.squad_status || "Regular Starter";
+        document.getElementById("contract-happiness").value = player.contract.happiness || "Content";
+      }
+
+      // Positions & Foot ability tab
+      renderPositionsTab();
+    }
+
+    // Render Club Data
+    function displayClub(club) {
+      state.activeClub = JSON.parse(JSON.stringify(club));
+
+      const titleEl = document.getElementById("club-title");
+      if (titleEl) titleEl.innerText = club.club_name || "Club";
+      const lEl = document.getElementById("club-league-badge");
+      if (lEl) lEl.innerText = club.league_name || "League";
+      const repEl = document.getElementById("club-rep-num");
+      if (repEl) repEl.innerText = `${(club.reputation || 8000).toLocaleString()} / 10,000`;
+      const starsEl = document.getElementById("club-rep-stars");
+      if (starsEl) starsEl.innerText = getReputationStars(club.reputation || 8000);
+
+      // Finances & Stadium
+      const bal = document.getElementById("club-balance");
+      if (bal) bal.value = club.balance ?? 100000000;
+      const tb = document.getElementById("club-transfer-budget");
+      if (tb) tb.value = club.transfer_budget ?? 50000000;
+      const wb = document.getElementById("club-wage-budget");
+      if (wb) wb.value = club.wage_budget ?? 2500000;
+      const mw = document.getElementById("club-max-wage");
+      if (mw) mw.value = club.max_wage_allowance ?? 600000;
+      const sn = document.getElementById("club-stadium-name");
+      if (sn) sn.value = club.stadium_name || "Club Stadium";
+      const sc = document.getElementById("club-stadium-cap");
+      if (sc) sc.value = club.stadium_capacity ?? 45000;
+      const se = document.getElementById("club-stadium-exp");
+      if (se) se.value = club.stadium_expansion_cap ?? 60000;
+
+      // 6 Facilities Matrix
+      setFacVal("fac-training", "fac-training-disp", club.training_facilities ?? 18);
+      setFacVal("fac-youth", "fac-youth-disp", club.youth_facilities ?? 18);
+      setFacVal("fac-recruitment", "fac-recruitment-disp", club.youth_recruitment ?? 18);
+      setFacVal("fac-coaching", "fac-coaching-disp", club.junior_coaching ?? 18);
+      setFacVal("fac-data-analysis", "fac-data-analysis-disp", club.data_analysis_facilities ?? 18);
+      setFacVal("fac-corporate", "fac-corporate-disp", club.corporate_facilities ?? 18);
+
+      // Board & Ownership
+      const sdSel = document.getElementById("club-sugar-daddy");
+      if (sdSel) {
+        sdSel.value = club.sugar_daddy_type || "None";
+        updateSugarDaddyBadge(club.sugar_daddy_type || "None");
+      }
+
+      const bp = document.getElementById("club-board-patience");
+      if (bp) {
+        bp.value = club.board_patience ?? 15;
+        updateDisp("disp-patience", club.board_patience ?? 15);
+      }
+
+      const fc = document.getElementById("club-fan-confidence");
+      if (fc) {
+        fc.value = club.fan_confidence ?? 85;
+        const disp = document.getElementById("disp-fan-conf");
+        if (disp) disp.innerText = (club.fan_confidence ?? 85) + "%";
+      }
+
+      const bc = document.getElementById("club-board-confidence");
+      if (bc) {
+        bc.value = club.board_confidence ?? 88;
+        const disp = document.getElementById("disp-board-conf");
+        if (disp) disp.innerText = (club.board_confidence ?? 88) + "%";
+      }
+
+      const tr = document.getElementById("club-transfer-retention");
+      if (tr) {
+        tr.value = club.transfer_retention_pct ?? 100;
+        const disp = document.getElementById("disp-retention");
+        if (disp) disp.innerText = (club.transfer_retention_pct ?? 100) + "%";
+      }
+
+      // Affiliated clubs
+      renderAffiliatesList(club.affiliates || []);
+    }
+
+    function setFacVal(sliderId, dispId, val) {
+      const s = document.getElementById(sliderId);
+      const d = document.getElementById(dispId);
+      if (s) s.value = val;
+      if (d) {
+        d.innerText = val;
+        d.className = `facility-val ${getTierClass(val)}`;
+      }
+    }
+
+    function updateFacVal(dispId, val) {
+      const d = document.getElementById(dispId);
+      if (d) {
+        d.innerText = val;
+        d.className = `facility-val ${getTierClass(val)}`;
+      }
+    }
+
+    function getStarString(ability) {
+      const stars = Math.min(5, Math.max(1, Math.round(ability / 40)));
+      return "★".repeat(stars) + "☆".repeat(5 - stars);
+    }
+
+    function getReputationStars(rep) {
+      const stars = Math.min(5, Math.max(1, Math.round(rep / 2000)));
+      return "★".repeat(stars) + "☆".repeat(5 - stars);
+    }
+
+    function getCountryFlag(nat) {
+      if (!nat) return "🌐";
+      const map = {
+        "Norway": "🇳🇴",
+        "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+        "Spain": "🇪🇸",
+        "France": "🇫🇷",
+        "Brazil": "🇧🇷",
+        "Germany": "🇩🇪",
+        "Argentina": "🇦🇷",
+        "Portugal": "🇵🇹",
+        "Netherlands": "🇳🇱",
+        "Italy": "🇮🇹",
+        "Belgium": "🇧🇪",
+        "Croatia": "🇭🇷",
+        "Denmark": "🇩🇰",
+        "Sweden": "🇸🇪",
+        "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+        "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+        "United States": "🇺🇸",
+        "USA": "🇺🇸",
+        "Japan": "🇯🇵",
+      };
+      return map[nat] || "🌐";
+    }
+
+    function updateRecommendedCA() {
+      if (!state.activePlayer || !state.activePlayer.attributes) return;
+      const attrs = state.activePlayer.attributes;
+      const sum = (attrs.finishing || 10) + (attrs.dribbling || 10) + (attrs.passing || 10)
+        + (attrs.pace || 10) + (attrs.acceleration || 10) + (attrs.stamina || 10)
+        + (attrs.anticipation || 10) + (attrs.composure || 10) + (attrs.decisions || 10)
+        + (attrs.determination || 10) + (attrs.first_touch || 10) + (attrs.technique || 10);
+      const rec = Math.min(200, Math.max(1, Math.round((sum / 12) * 10)));
+      document.getElementById("input-ca").value = rec;
+      state.activePlayer.current_ability = rec;
+      document.getElementById("star-rating-ca").innerText = getStarString(rec);
+    }
+
+    function handleCAChange(val) {
+      const v = Math.max(1, Math.min(200, parseInt(val) || 100));
+      if (state.activePlayer) state.activePlayer.current_ability = v;
+      document.getElementById("star-rating-ca").innerText = getStarString(v);
+      if (state.autoApply) debouncedSavePlayer();
+    }
+
+    function handlePAChange(val) {
+      const v = Math.max(1, Math.min(200, parseInt(val) || 150));
+      if (state.activePlayer) state.activePlayer.potential_ability = v;
+      document.getElementById("star-rating-pa").innerText = getStarString(v);
+      if (state.autoApply) debouncedSavePlayer();
+    }
+
+    function promptEditName() {
+      if (!state.activePlayer) return;
+      const newName = prompt("Edit Player Name:", state.activePlayer.name);
+      if (newName && newName.trim()) {
+        state.activePlayer.name = newName.trim();
+        document.getElementById("player-name").innerText = newName.trim();
+        if (state.autoApply) debouncedSavePlayer();
+      }
+    }
+
+    // Toggle Pin / Unpin
+    async function togglePinPlayer() {
+      const willPin = !state.isPinned;
+      try {
+        const res = await fetch("/api/context/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_id: willPin && state.activePlayer ? state.activePlayer.id : null,
+            unpin: !willPin
+          })
+        });
+        const data = await res.json();
+        state.isPinned = data.is_pinned;
+        updateSyncUI();
+        showToast(state.isPinned ? "📌 Player pinned (game screen auto-follow paused)" : "👁️ Auto-following FM26 game screen", "info");
+      } catch (e) {
+        showToast("Error updating pin state", "error");
+      }
+    }
+
+    // Auto Attach
+    async function toggleAutoAttach() {
+      showToast("Scanning for active Football Manager 26 process...", "info");
+      try {
+        const res = await fetch("/api/attach", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.status === "attached") {
+          showToast(`Attached to FM26 (PID: ${data.pid})!`, "success");
+          fetchContext();
+        } else {
+          showToast(data.message || "Game not detected. Start FM26 on Linux/Proton.", "warning");
+        }
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    }
+
+    // Auto-Apply Toggle
+    function toggleAutoApply(val) {
+      state.autoApply = val;
+      showToast(val ? "⚡ Instant Auto-Apply Enabled" : "Manual Save Mode Enabled", "info");
+    }
+
+    function debouncedSavePlayer() {
+      clearTimeout(state.saveTimeout);
+      document.getElementById("last-saved-time").innerText = "Saving changes...";
+      state.saveTimeout = setTimeout(() => {
+        applyPlayerChanges();
+      }, 300);
+    }
+
+    // Apply Player Changes to Backend & Memory
+    async function applyPlayerChanges() {
+      if (!state.activePlayer) return;
+      try {
+        const res = await fetch("/api/player/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.activePlayer)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("last-saved-time").innerText = "Saved just now";
+          showToast(`Saved ${state.activePlayer.name} to FM26!`, "success");
+        } else {
+          showToast(data.message || "Failed to save player", "error");
+        }
+      } catch (e) {
+        showToast("Save error: " + e.message, "error");
+      }
+    }
+
+    // Apply Player Preset
+    async function applyPlayerPreset(preset) {
+      showToast(`Applying preset '${preset}'...`, "info");
+      try {
+        const res = await fetch("/api/player/preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset: preset,
+            player_id: state.activePlayer ? state.activePlayer.id : null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.player || data.active_player) {
+            displayPlayer(data.player || data.active_player);
+          }
+          showToast(data.message || "Preset applied successfully!", "success");
+        } else {
+          showToast(data.message || "Preset failed", "error");
+        }
+      } catch (e) {
+        showToast("Preset error: " + e.message, "error");
+      }
+    }
+
+    // Contract Management
+    function adjustWage(delta) {
+      const el = document.getElementById("contract-wage");
+      const cur = parseInt(el.value) || 0;
+      el.value = Math.max(1000, cur + delta);
+      autoSaveContract();
+    }
+
+    function autoSaveContract() {
+      if (state.autoApply) {
+        clearTimeout(state.saveTimeout);
+        state.saveTimeout = setTimeout(() => {
+          saveContractToGame();
+        }, 300);
+      }
+    }
+
+    async function saveContractToGame() {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.contract) state.activePlayer.contract = {};
+
+      state.activePlayer.contract.wage_per_week = parseInt(document.getElementById("contract-wage").value) || 50000;
+      state.activePlayer.contract.expiry_year = parseInt(document.getElementById("contract-expiry").value) || 2028;
+      state.activePlayer.contract.release_clause = parseInt(document.getElementById("contract-release").value) || 0;
+      state.activePlayer.contract.squad_status = document.getElementById("contract-status").value;
+      state.activePlayer.contract.happiness = document.getElementById("contract-happiness").value;
+
+      await applyPlayerChanges();
+    }
+
+    // Position & Foot Management
+    function getPositionTierClass(val) {
+      if (val >= 20) return "pos-natural";
+      if (val >= 15) return "pos-accomplished";
+      if (val >= 10) return "pos-competent";
+      if (val >= 6) return "pos-unconvincing";
+      return "pos-ineffectual";
+    }
+
+    function getPositionTierLabel(val) {
+      if (val >= 20) return "Natural";
+      if (val >= 15) return "Accomplished";
+      if (val >= 10) return "Competent";
+      if (val >= 6) return "Unconvincing";
+      return "Ineffectual";
+    }
+
+    function getTierColor(val) {
+      if (val >= 20) return "#10b981";
+      if (val >= 15) return "#34d399";
+      if (val >= 10) return "#f59e0b";
+      if (val >= 6) return "#ea580c";
+      return "#94a3b8";
+    }
+
+    function getFootTierDesc(val) {
+      if (val >= 20) return "Very Strong";
+      if (val >= 16) return "Strong";
+      if (val >= 12) return "Fairly Strong";
+      if (val >= 9) return "Reasonable";
+      if (val >= 6) return "Weak";
+      return "Very Weak";
+    }
+
+    function getFootSummaryString(left, right) {
+      if (left >= 18 && right >= 18) return "Either Foot";
+      if (left >= 15 && right >= 15) return "Both Feet (Strong)";
+      if (left >= 15 && right < 10) return "Left Only";
+      if (right >= 15 && left < 10) return "Right Only";
+      if (left >= right) return `Left Foot (${getFootTierDesc(left)})`;
+      return `Right Foot (${getFootTierDesc(right)})`;
+    }
+
+    function computePositionString(pos) {
+      if (!pos) return "MC";
+      if (pos.gk >= 15) return "GK";
+      const tags = [];
+      const dSides = formatSides(pos.dr >= 15, pos.dl >= 15, pos.dc >= 15);
+      if (dSides) tags.push(`D (${dSides})`);
+      const wbSides = formatSides(pos.wbr >= 15, pos.wbl >= 15, false);
+      if (wbSides) tags.push(`WB (${wbSides})`);
+      if (pos.dm >= 15) tags.push("DM");
+      const mSides = formatSides(pos.mr >= 15, pos.ml >= 15, pos.mc >= 15);
+      if (mSides) tags.push(`M (${mSides})`);
+      const amSides = formatSides(pos.amr >= 15, pos.aml >= 15, pos.amc >= 15);
+      if (amSides) tags.push(`AM (${amSides})`);
+      if (pos.st >= 15) tags.push("ST (C)");
+      return tags.length > 0 ? tags.join(", ") : "MC";
+    }
+
+    function formatSides(r, l, c) {
+      let s = "";
+      if (r) s += "R";
+      if (l) s += "L";
+      if (c) s += "C";
+      return s;
+    }
+
+    function renderPositionsTab() {
+      if (!state.activePlayer) return;
+      const player = state.activePlayer;
+      if (!player.positions) {
+        player.positions = {
+          gk: 1, dl: 1, dc: 1, dr: 1,
+          wbl: 1, wbr: 1, dm: 1,
+          ml: 1, mc: 20, mr: 1,
+          aml: 1, amc: 1, amr: 1, st: 1,
+          left_foot: 10, right_foot: 20
+        };
+      }
+      const pos = player.positions;
+
+      // Header labels
+      const posPlayerName = document.getElementById("pos-player-name");
+      const posClubName = document.getElementById("pos-club-name");
+      const posSummaryBadge = document.getElementById("pos-summary-badge");
+      const posFootSummary = document.getElementById("pos-foot-summary");
+
+      if (posPlayerName) posPlayerName.innerText = `${player.name || "Unknown Player"} — Positions & Roles`;
+      if (posClubName) posClubName.innerText = player.club_name || "Free Agent";
+      
+      const posStr = computePositionString(pos);
+      player.position = posStr;
+      if (posSummaryBadge) posSummaryBadge.innerText = posStr;
+      const playerPosPill = document.getElementById("player-pos");
+      if (playerPosPill) playerPosPill.innerText = posStr;
+
+      const footStr = getFootSummaryString(pos.left_foot || 10, pos.right_foot || 20);
+      if (posFootSummary) posFootSummary.innerText = footStr;
+
+      // Update Pitch Nodes
+      for (const [key, role] of positionDefinitions) {
+        const val = pos[key] || 1;
+        const nodeEl = document.getElementById("pitch-node-" + key);
+        const valEl = document.getElementById("pitch-val-" + key);
+        if (nodeEl) {
+          nodeEl.className = `pitch-node ${getPositionTierClass(val)}`;
+        }
+        if (valEl) {
+          valEl.innerText = val;
+        }
+      }
+
+      // Update Foot Sliders
+      const leftVal = pos.left_foot || 10;
+      const rightVal = pos.right_foot || 20;
+      const sLeft = document.getElementById("slider-foot-left");
+      const sRight = document.getElementById("slider-foot-right");
+      const vLeft = document.getElementById("foot-val-left");
+      const vRight = document.getElementById("foot-val-right");
+      const dLeft = document.getElementById("foot-desc-left");
+      const dRight = document.getElementById("foot-desc-right");
+
+      if (sLeft) sLeft.value = leftVal;
+      if (sRight) sRight.value = rightVal;
+      if (vLeft) {
+        vLeft.innerText = leftVal;
+        vLeft.style.color = getTierColor(leftVal);
+      }
+      if (vRight) {
+        vRight.innerText = rightVal;
+        vRight.style.color = getTierColor(rightVal);
+      }
+      if (dLeft) dLeft.innerText = getFootTierDesc(leftVal);
+      if (dRight) dRight.innerText = getFootTierDesc(rightVal);
+
+      // Render 14-position table matrix
+      const grid = document.getElementById("pos-grid-container");
+      if (grid) {
+        grid.innerHTML = positionDefinitions.map(([key, role, fullName]) => {
+          const val = pos[key] || 1;
+          const tierClass = getPositionTierClass(val);
+          const tierLabel = getPositionTierLabel(val);
+          return `
+            <div class="pos-item-card">
+              <div class="pos-item-left">
+                <span class="pos-item-name">${role} <span style="font-size: 10px; font-weight: 500; color: var(--text-muted);">(${key.toUpperCase()})</span></span>
+                <span class="pos-item-desc" style="color: ${getTierColor(val)};">${tierLabel}</span>
+              </div>
+              <div class="pos-item-controls">
+                <button class="btn btn-secondary" style="padding: 2px 7px; font-size: 12px; font-weight: 800;" onclick="stepPosition('${key}', -1)" title="Decrease rating">-</button>
+                <div class="attr-val-box ${tierClass}" style="cursor: pointer; min-width: 28px; height: 26px; font-size: 12px; line-height: 24px; text-align: center;" onclick="cyclePosition('${key}')" title="Click to cycle tier (20, 15, 10, 1)">
+                  ${val}
+                </div>
+                <button class="btn btn-secondary" style="padding: 2px 7px; font-size: 12px; font-weight: 800;" onclick="stepPosition('${key}', 1)" title="Increase rating">+</button>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    function cyclePosition(key) {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.positions) {
+        state.activePlayer.positions = {
+          gk: 1, dl: 1, dc: 1, dr: 1,
+          wbl: 1, wbr: 1, dm: 1,
+          ml: 1, mc: 20, mr: 1,
+          aml: 1, amc: 1, amr: 1, st: 1,
+          left_foot: 10, right_foot: 20
+        };
+      }
+      const cur = state.activePlayer.positions[key] || 1;
+      let next;
+      if (cur >= 20) next = 15;
+      else if (cur >= 15) next = 10;
+      else if (cur >= 10) next = 1;
+      else next = 20;
+
+      state.activePlayer.positions[key] = next;
+      renderPositionsTab();
+      if (state.autoApply) debouncedSavePlayer();
+    }
+
+    function stepPosition(key, delta) {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.positions) {
+        state.activePlayer.positions = {
+          gk: 1, dl: 1, dc: 1, dr: 1,
+          wbl: 1, wbr: 1, dm: 1,
+          ml: 1, mc: 20, mr: 1,
+          aml: 1, amc: 1, amr: 1, st: 1,
+          left_foot: 10, right_foot: 20
+        };
+      }
+      const cur = state.activePlayer.positions[key] || 1;
+      const next = Math.max(1, Math.min(20, cur + delta));
+      state.activePlayer.positions[key] = next;
+      renderPositionsTab();
+      if (state.autoApply) debouncedSavePlayer();
+    }
+
+    function handleFootSlider(foot, val) {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.positions) {
+        state.activePlayer.positions = {
+          gk: 1, dl: 1, dc: 1, dr: 1,
+          wbl: 1, wbr: 1, dm: 1,
+          ml: 1, mc: 20, mr: 1,
+          aml: 1, amc: 1, amr: 1, st: 1,
+          left_foot: 10, right_foot: 20
+        };
+      }
+      const num = Math.max(1, Math.min(20, parseInt(val) || 1));
+      if (foot === "left") {
+        state.activePlayer.positions.left_foot = num;
+      } else {
+        state.activePlayer.positions.right_foot = num;
+      }
+      renderPositionsTab();
+      if (state.autoApply) debouncedSavePlayer();
+    }
+
+    async function applyPositionPreset(preset) {
+      if (!state.activePlayer) return;
+      showToast(`Applying position preset '${preset}'...`, "info");
+      try {
+        const res = await fetch("/api/player/preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset: preset,
+            player_id: state.activePlayer.id
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.player || data.active_player) {
+            displayPlayer(data.player || data.active_player);
+          }
+          showToast(data.message || "Position preset applied!", "success");
+        } else {
+          showToast(data.message || "Failed to apply preset", "error");
+        }
+      } catch (e) {
+        showToast("Preset error: " + e.message, "error");
+      }
+    }
+
+    async function savePositionsToGame() {
+      if (!state.activePlayer) return;
+      await applyPlayerChanges();
+      showToast(`Saved ${state.activePlayer.name}'s positions & foot ratings!`, "success");
+    }
+
+    // Club & Squad Management
+    function autoSaveClub() {
+      if (state.autoApply) {
+        clearTimeout(state.saveTimeout);
+        state.saveTimeout = setTimeout(() => {
+          saveClubToGame();
+        }, 300);
+      }
+    }
+
+    async function saveClubToGame() {
+      if (!state.activeClub) return;
+
+      state.activeClub.balance = parseInt(document.getElementById("club-balance").value) || 0;
+      state.activeClub.transfer_budget = parseInt(document.getElementById("club-transfer-budget").value) || 0;
+      state.activeClub.wage_budget = parseInt(document.getElementById("club-wage-budget").value) || 0;
+      state.activeClub.max_wage_allowance = parseInt(document.getElementById("club-max-wage").value) || 600000;
+      state.activeClub.stadium_name = (document.getElementById("club-stadium-name").value || "").trim();
+      state.activeClub.stadium_capacity = parseInt(document.getElementById("club-stadium-cap").value) || 45000;
+      state.activeClub.stadium_expansion_cap = parseInt(document.getElementById("club-stadium-exp").value) || 60000;
+
+      // 6 Facilities Matrix
+      state.activeClub.training_facilities = parseInt(document.getElementById("fac-training").value) || 20;
+      state.activeClub.youth_facilities = parseInt(document.getElementById("fac-youth").value) || 20;
+      state.activeClub.youth_recruitment = parseInt(document.getElementById("fac-recruitment").value) || 20;
+      state.activeClub.junior_coaching = parseInt(document.getElementById("fac-coaching").value) || 20;
+      state.activeClub.data_analysis_facilities = parseInt(document.getElementById("fac-data-analysis").value) || 18;
+      state.activeClub.corporate_facilities = parseInt(document.getElementById("fac-corporate").value) || 19;
+
+      // Board & Ownership
+      state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
+      state.activeClub.board_patience = parseInt(document.getElementById("club-board-patience").value) || 15;
+      state.activeClub.fan_confidence = parseInt(document.getElementById("club-fan-confidence").value) || 85;
+      state.activeClub.board_confidence = parseInt(document.getElementById("club-board-confidence").value) || 88;
+      state.activeClub.transfer_retention_pct = parseInt(document.getElementById("club-transfer-retention").value) || 100;
+
+      try {
+        const res = await fetch("/api/club/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.activeClub)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`Saved ${state.activeClub.club_name} details & facilities!`, "success");
+        } else {
+          showToast(data.message || "Failed to save club", "error");
+        }
+      } catch (e) {
+        showToast("Club save error: " + e.message, "error");
+      }
+    }
+
+    function stepClubFac(sliderId, delta) {
+      const slider = document.getElementById(sliderId);
+      if (!slider) return;
+      const current = parseInt(slider.value) || 10;
+      const next = Math.max(1, Math.min(20, current + delta));
+      slider.value = next;
+      updateFacVal(`${sliderId}-disp`, next);
+      autoSaveClub();
+    }
+
+    function stepPatience(delta) {
+      const slider = document.getElementById("club-board-patience");
+      if (!slider) return;
+      const current = parseInt(slider.value) || 10;
+      const next = Math.max(1, Math.min(20, current + delta));
+      slider.value = next;
+      updateDisp("disp-patience", next);
+      autoSaveClub();
+    }
+
+    function handleSugarDaddySelect(val) {
+      updateSugarDaddyBadge(val);
+      if (state.activeClub) {
+        state.activeClub.sugar_daddy_type = val;
+        if (val === "Foreground") {
+          const balEl = document.getElementById("club-balance");
+          const tbEl = document.getElementById("club-transfer-budget");
+          if (balEl) balEl.value = Math.max(500000000, parseInt(balEl.value) || 0);
+          if (tbEl) tbEl.value = Math.max(250000000, parseInt(tbEl.value) || 0);
+        }
+      }
+      autoSaveClub();
+    }
+
+    function updateSugarDaddyBadge(val) {
+      const badge = document.getElementById("sugar-daddy-badge");
+      const desc = document.getElementById("sugar-daddy-desc");
+      if (!badge || !desc) return;
+      badge.innerText = val;
+      if (val === "Foreground") {
+        badge.className = "pill-badge badge-pos tier-wonderkid";
+        desc.innerText = "Foreground Benefactor: Continuous, limitless wealth injections to dominate world football.";
+      } else if (val === "Underwriter") {
+        badge.className = "pill-badge badge-club";
+        desc.innerText = "Underwriter: Subsidizes operating deficits and guarantees debt coverage unconditionally.";
+      } else if (val === "FrontEnd") {
+        badge.className = "pill-badge badge-morale";
+        desc.innerText = "Front-End Investor: Provides substantial initial cash injections to elevate team standing.";
+      } else {
+        badge.className = "pill-badge badge-nat";
+        desc.innerText = "Standard club economic operation without benefactor financing.";
+      }
+    }
+
+    function updateDisp(id, val) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerText = val;
+        el.className = `facility-val ${getTierClass(parseInt(val) || 10)}`;
+      }
+    }
+
+    function updateDispPercent(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.innerText = `${val}%`;
+    }
+
+    function renderAffiliatesList(affiliates) {
+      const container = document.getElementById("affiliates-list");
+      const countBadge = document.getElementById("affiliates-count-badge");
+      if (!container) return;
+      if (countBadge) countBadge.innerText = `${affiliates.length} Active`;
+
+      if (affiliates.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-muted); font-size: 12px; padding: 14px; text-align: center;">No affiliated clubs linked. Add one below!</div>`;
+        return;
+      }
+
+      container.innerHTML = affiliates.map(a => `
+        <div class="affiliate-card">
+          <div class="affiliate-card-header">
+            <div class="affiliate-card-title">
+              <span>🤝</span>
+              <span>${escapeHtml(a.affiliate_name || "Affiliate")}</span>
+              <span style="font-size: 10px; color: var(--text-dim);">#${a.affiliate_club_id}</span>
+            </div>
+            <button class="btn-remove-affiliate" onclick="removeAffiliate(${a.affiliate_club_id})" title="Terminate affiliate link">
+              ✕
+            </button>
+          </div>
+          <div class="affiliate-badges">
+            ${a.first_option_to_buy ? '<span class="affiliate-badge active">🏷️ First Option</span>' : ''}
+            ${a.send_players_on_loan ? '<span class="affiliate-badge active">✈️ Loans</span>' : ''}
+            ${a.shared_scouting ? '<span class="affiliate-badge active">🔍 Shared Scouting</span>' : ''}
+            ${a.work_permit_haven ? '<span class="affiliate-badge haven">🛡️ Work Permit Haven</span>' : ''}
+            <span class="affiliate-badge fee">💵 $${(a.annual_fee || 0).toLocaleString()}/yr</span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    async function submitNewAffiliate() {
+      if (!state.activeClub) {
+        showToast("No active club loaded", "warning");
+        return;
+      }
+      const id = parseInt(document.getElementById("new-aff-id").value) || 0;
+      const name = (document.getElementById("new-aff-name").value || "").trim();
+      const fee = parseInt(document.getElementById("new-aff-fee").value) || 0;
+      if (!name) {
+        showToast("Please enter an affiliate club name", "warning");
+        return;
+      }
+
+      const affiliateObj = {
+        affiliate_club_id: id,
+        affiliate_name: name,
+        is_parent: false,
+        first_option_to_buy: document.getElementById("new-aff-option").checked,
+        send_players_on_loan: document.getElementById("new-aff-loans").checked,
+        shared_scouting: document.getElementById("new-aff-scout").checked,
+        annual_fee: fee,
+        work_permit_haven: document.getElementById("new-aff-haven").checked
+      };
+
+      showToast(`Linking affiliate ${name}...`, "info");
+      try {
+        const res = await fetch("/api/club/affiliate/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            club_id: state.activeClub.club_id,
+            affiliate: affiliateObj
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.club || data.active_club) {
+            displayClub(data.club || data.active_club);
+          }
+          document.getElementById("new-aff-name").value = "";
+          showToast(`Linked ${name} as active affiliate!`, "success");
+        } else {
+          showToast(data.message || "Failed to add affiliate", "error");
+        }
+      } catch (e) {
+        showToast("Error adding affiliate: " + e.message, "error");
+      }
+    }
+
+    async function removeAffiliate(affiliateId) {
+      if (!state.activeClub) return;
+      showToast("Removing affiliate link...", "info");
+      try {
+        const res = await fetch("/api/club/affiliate/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            club_id: state.activeClub.club_id,
+            affiliate_id: affiliateId
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.club || data.active_club) {
+            displayClub(data.club || data.active_club);
+          }
+          showToast("Affiliate relationship removed!", "success");
+        } else {
+          showToast(data.message || "Failed to remove affiliate", "error");
+        }
+      } catch (e) {
+        showToast("Error removing affiliate: " + e.message, "error");
+      }
+    }
+
+    async function applyClubPreset(preset) {
+      showToast(`Executing '${preset}'...`, "info");
+      try {
+        const res = await fetch("/api/club/preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset: preset,
+            club_id: state.activeClub ? state.activeClub.club_id : null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.club || data.active_club) {
+            displayClub(data.club || data.active_club);
+          }
+          showToast(data.message || "Club preset applied!", "success");
+          fetchContext();
+        } else {
+          showToast(data.message || "Preset action failed", "error");
+        }
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    }
+
+    // Nation Details Management
+    function displayNation(nation) {
+      state.activeNation = JSON.parse(JSON.stringify(nation));
+
+      document.getElementById("nation-name").innerText = nation.name || "Nation";
+      document.getElementById("nation-code").innerText = nation.three_letter_code || "NAT";
+      document.getElementById("nation-continent").innerText = nation.continent || "Continent";
+      document.getElementById("nation-flag-avatar").innerText = getCountryFlag(nation.name);
+
+      document.getElementById("nation-rep-num").innerText = `${(nation.reputation || 7500).toLocaleString()} / 10,000`;
+      document.getElementById("nation-rep-stars").innerText = getReputationStars(nation.reputation || 7500);
+
+      // Youth Rating Slider & Gauge
+      const yr = nation.youth_rating ?? 120;
+      document.getElementById("nation-youth-val").innerText = yr;
+      document.getElementById("nation-youth-slider").value = yr;
+      updateYouthRatingDisplay(yr);
+
+      // Macro & Governance
+      document.getElementById("nation-reputation").value = nation.reputation ?? 7500;
+      document.getElementById("nation-development").value = nation.state_of_development ?? 2;
+
+      setNationStatUI("nation-economic", "disp-nation-econ", nation.economic_factor ?? 15);
+      setNationStatUI("nation-fa-power", "disp-nation-fa", nation.fa_financial_power ?? 15);
+
+      const tax = nation.tax_rate ?? 25;
+      document.getElementById("nation-tax-rate").value = tax;
+      document.getElementById("disp-nation-tax").innerText = `${tax}%`;
+
+      setNationStatUI("nation-corruption", "disp-nation-corruption", nation.corruption_index ?? 2);
+      setNationStatUI("nation-game-importance", "disp-nation-importance", nation.game_importance ?? 18);
+
+      // Infrastructure Averages
+      setNationStatUI("nation-fac-avg", "disp-nation-fac-avg", nation.youth_facilities_avg ?? 15);
+      setNationStatUI("nation-coaching-avg", "disp-nation-coaching-avg", nation.youth_coaching_avg ?? 15);
+      setNationStatUI("nation-rec-avg", "disp-nation-rec-avg", nation.youth_recruitment_avg ?? 15);
+    }
+
+    function setNationStatUI(sliderId, dispId, val) {
+      const s = document.getElementById(sliderId);
+      const d = document.getElementById(dispId);
+      if (s) s.value = val;
+      if (d) {
+        d.innerText = val;
+        d.className = `facility-val ${getTierClass(val)}`;
+      }
+    }
+
+    function handleYouthRatingInput(val) {
+      const yr = Math.max(1, Math.min(200, parseInt(val) || 1));
+      document.getElementById("nation-youth-val").innerText = yr;
+      updateYouthRatingDisplay(yr);
+      if (state.activeNation) state.activeNation.youth_rating = yr;
+      if (state.autoApply) debouncedSaveNation();
+    }
+
+    function updateYouthRatingDisplay(yr) {
+      const pct = (yr / 200) * 100;
+      const fill = document.getElementById("nation-youth-gauge-fill");
+      if (fill) fill.style.width = `${pct}%`;
+
+      const badge = document.getElementById("nation-youth-tier");
+      if (!badge) return;
+
+      if (yr >= 176) {
+        badge.className = "rating-tier-badge tier-wonderkid";
+        badge.innerText = "Tier 1: Wonderkid Hotbed / World Dominance 🌟";
+      } else if (yr >= 146) {
+        badge.className = "rating-tier-badge tier-elite";
+        badge.innerText = "Tier 2: Elite Football Power ⚡";
+      } else if (yr >= 111) {
+        badge.className = "rating-tier-badge tier-good";
+        badge.innerText = "Tier 3: Established Talent Pool 🏆";
+      } else if (yr >= 61) {
+        badge.className = "rating-tier-badge tier-avg";
+        badge.innerText = "Tier 4: Developing / Modest ⚽";
+      } else {
+        badge.className = "rating-tier-badge tier-low";
+        badge.innerText = "Tier 5: Obscure / Grassroots 🌱";
+      }
+    }
+
+    function stepNationStat(key, delta) {
+      if (!state.activeNation) return;
+      const current = state.activeNation[key] ?? 10;
+      const maxVal = key === "youth_rating" ? 200 : (key === "tax_rate" ? 100 : 20);
+      const minVal = key === "corruption_index" || key === "tax_rate" ? 0 : 1;
+      const next = Math.max(minVal, Math.min(maxVal, current + delta));
+      state.activeNation[key] = next;
+
+      if (key === "youth_rating") {
+        document.getElementById("nation-youth-slider").value = next;
+        handleYouthRatingInput(next);
+      } else if (key === "tax_rate") {
+        document.getElementById("nation-tax-rate").value = next;
+        document.getElementById("disp-nation-tax").innerText = `${next}%`;
+      } else {
+        const idMap = {
+          economic_factor: ["nation-economic", "disp-nation-econ"],
+          fa_financial_power: ["nation-fa-power", "disp-nation-fa"],
+          corruption_index: ["nation-corruption", "disp-nation-corruption"],
+          game_importance: ["nation-game-importance", "disp-nation-importance"],
+          youth_facilities_avg: ["nation-fac-avg", "disp-nation-fac-avg"],
+          youth_coaching_avg: ["nation-coaching-avg", "disp-nation-coaching-avg"],
+          youth_recruitment_avg: ["nation-rec-avg", "disp-nation-rec-avg"]
+        };
+        const mapping = idMap[key];
+        if (mapping) {
+          setNationStatUI(mapping[0], mapping[1], next);
+        }
+      }
+      if (state.autoApply) debouncedSaveNation();
+    }
+
+    function handleNationRepChange(val) {
+      const num = Math.max(1, Math.min(10000, parseInt(val) || 5000));
+      document.getElementById("nation-rep-num").innerText = `${num.toLocaleString()} / 10,000`;
+      document.getElementById("nation-rep-stars").innerText = getReputationStars(num);
+      if (state.activeNation) state.activeNation.reputation = num;
+      if (state.autoApply) debouncedSaveNation();
+    }
+
+    let nationSaveTimeout = null;
+    function debouncedSaveNation() {
+      clearTimeout(nationSaveTimeout);
+      nationSaveTimeout = setTimeout(() => {
+        saveNationToGame(true);
+      }, 400);
+    }
+
+    async function saveNationToGame(isQuiet = false) {
+      if (!state.activeNation) return;
+
+      state.activeNation.reputation = parseInt(document.getElementById("nation-reputation").value) || 7500;
+      state.activeNation.youth_rating = parseInt(document.getElementById("nation-youth-slider").value) || 120;
+      state.activeNation.state_of_development = parseInt(document.getElementById("nation-development").value) || 2;
+      state.activeNation.economic_factor = parseInt(document.getElementById("nation-economic").value) || 15;
+      state.activeNation.fa_financial_power = parseInt(document.getElementById("nation-fa-power").value) || 15;
+      state.activeNation.tax_rate = parseInt(document.getElementById("nation-tax-rate").value) || 25;
+      state.activeNation.corruption_index = parseInt(document.getElementById("nation-corruption").value) || 2;
+      state.activeNation.game_importance = parseInt(document.getElementById("nation-game-importance").value) || 18;
+      state.activeNation.youth_facilities_avg = parseInt(document.getElementById("nation-fac-avg").value) || 15;
+      state.activeNation.youth_coaching_avg = parseInt(document.getElementById("nation-coaching-avg").value) || 15;
+      state.activeNation.youth_recruitment_avg = parseInt(document.getElementById("nation-rec-avg").value) || 15;
+
+      try {
+        const res = await fetch("/api/nation/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.activeNation)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (!isQuiet) showToast(`Saved ${state.activeNation.name} macro & youth factors!`, "success");
+        } else {
+          showToast(data.message || "Failed to save nation", "error");
+        }
+      } catch (e) {
+        showToast("Nation save error: " + e.message, "error");
+      }
+    }
+
+    async function applyNationPreset(preset) {
+      showToast(`Executing nation preset '${preset}'...`, "info");
+      try {
+        const res = await fetch("/api/nation/preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset: preset,
+            nation_id: state.activeNation ? state.activeNation.id : null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.nation || data.active_nation) {
+            displayNation(data.nation || data.active_nation);
+          }
+          showToast(data.message || "Golden Generation triggered!", "success");
+        } else {
+          showToast(data.message || "Preset action failed", "error");
+        }
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    }
+
+    // Competition Details Management
+    function displayCompetition(comp) {
+      state.activeCompetition = JSON.parse(JSON.stringify(comp));
+
+      document.getElementById("comp-name").innerText = comp.name || "Competition";
+      document.getElementById("comp-short-name").innerText = comp.short_name || "COMP";
+      document.getElementById("comp-nation").innerText = comp.nation_name || "International";
+
+      document.getElementById("comp-rep-num").innerText = `${(comp.reputation || 8000).toLocaleString()} / 10,000`;
+      document.getElementById("comp-rep-stars").innerText = getReputationStars(comp.reputation || 8000);
+
+      // Financial prizes
+      document.getElementById("comp-prize-money").value = comp.winner_prize_money ?? 40000000;
+      document.getElementById("comp-tv-rights").value = comp.tv_rights_pool ?? 2000000000;
+
+      // Match rules
+      document.getElementById("comp-max-subs").value = comp.max_substitutes ?? 5;
+      document.getElementById("comp-bench-size").value = comp.max_bench_size ?? 9;
+      document.getElementById("comp-sub-windows").value = comp.substitution_windows ?? 3;
+      document.getElementById("comp-yellow-ban").value = comp.yellow_cards_for_ban ?? 5;
+
+      const varCheck = document.getElementById("comp-var-active");
+      if (varCheck) {
+        varCheck.checked = comp.var_active !== false;
+        handleVarToggle(varCheck.checked);
+      }
+
+      // Squad rules
+      document.getElementById("comp-squad-size").value = comp.max_squad_size ?? 25;
+      document.getElementById("comp-foreign-limit").value = comp.max_foreign_players ?? 17;
+      document.getElementById("comp-hg-club").value = comp.min_homegrown_club ?? 4;
+      document.getElementById("comp-hg-nation").value = comp.min_homegrown_nation ?? 8;
+    }
+
+    function stepCompField(id, delta, min, max) {
+      const input = document.getElementById(id);
+      if (!input) return;
+      const current = parseInt(input.value) || 0;
+      const next = Math.max(min, Math.min(max, current + delta));
+      input.value = next;
+    }
+
+    function handleVarToggle(active) {
+      const badge = document.getElementById("comp-var-status");
+      if (!badge) return;
+      if (active) {
+        badge.className = "pill-badge badge-fit";
+        badge.innerText = "🟢 VAR Active";
+      } else {
+        badge.className = "pill-badge badge-injured";
+        badge.innerText = "⚪ VAR Disabled";
+      }
+    }
+
+    async function saveCompetitionToGame() {
+      if (!state.activeCompetition) return;
+
+      state.activeCompetition.winner_prize_money = parseInt(document.getElementById("comp-prize-money").value) || 0;
+      state.activeCompetition.tv_rights_pool = parseInt(document.getElementById("comp-tv-rights").value) || 0;
+
+      state.activeCompetition.max_substitutes = parseInt(document.getElementById("comp-max-subs").value) || 5;
+      state.activeCompetition.max_bench_size = parseInt(document.getElementById("comp-bench-size").value) || 9;
+      state.activeCompetition.substitution_windows = parseInt(document.getElementById("comp-sub-windows").value) || 3;
+      state.activeCompetition.yellow_cards_for_ban = parseInt(document.getElementById("comp-yellow-ban").value) || 5;
+      state.activeCompetition.var_active = document.getElementById("comp-var-active").checked;
+
+      state.activeCompetition.max_squad_size = parseInt(document.getElementById("comp-squad-size").value) || 25;
+      state.activeCompetition.max_foreign_players = parseInt(document.getElementById("comp-foreign-limit").value) || 17;
+      state.activeCompetition.min_homegrown_club = parseInt(document.getElementById("comp-hg-club").value) || 0;
+      state.activeCompetition.min_homegrown_nation = parseInt(document.getElementById("comp-hg-nation").value) || 0;
+
+      showToast("Saving competition rules...", "info");
+      try {
+        const res = await fetch("/api/competition/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.activeCompetition)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`Saved ${state.activeCompetition.name} rules & prize money!`, "success");
+        } else {
+          showToast(data.message || "Failed to save competition rules", "error");
+        }
+      } catch (e) {
+        showToast("Competition save error: " + e.message, "error");
+      }
+    }
+
+    async function applyCompetitionPreset(preset) {
+      showToast(`Applying '${preset}' to competition rules...`, "info");
+      try {
+        const res = await fetch("/api/competition/preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset: preset,
+            competition_id: state.activeCompetition ? state.activeCompetition.id : null
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.competition || data.active_competition) {
+            displayCompetition(data.competition || data.active_competition);
+          }
+          showToast(data.message || "Rules relaxed (unlimited foreign & 12 bench)!", "success");
+        } else {
+          showToast(data.message || "Preset action failed", "error");
+        }
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    }
+
+    // Instant Search Implementation
+    let searchDebounce = null;
+    function handleSearchInput(query) {
+      const clearBtn = document.getElementById("search-clear-btn");
+      clearBtn.style.display = query.length > 0 ? "block" : "none";
+
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        performSearch(query);
+      }, 150);
+    }
+
+    async function performSearch(query) {
+      const dropdown = document.getElementById("search-results-dropdown");
+      if (!query || query.trim().length === 0) {
+        dropdown.style.display = "none";
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const players = data.players || [];
+        const clubs = data.clubs || [];
+        const nations = data.nations || [];
+        const competitions = data.competitions || [];
+
+        if (players.length === 0 && clubs.length === 0 && nations.length === 0 && competitions.length === 0) {
+          dropdown.innerHTML = `<div style="padding: 12px; text-align: center; color: var(--text-muted);">No players, clubs, nations, or competitions found</div>`;
+          dropdown.style.display = "block";
+          return;
+        }
+
+        let html = "";
+        if (players.length > 0) {
+          html += `<div class="search-section-title">⚽ Players (${players.length})</div>`;
+          html += players.slice(0, 5).map(p => `
+            <div class="search-item" onclick="selectSearchedPlayer(${p.id})">
+              <div class="search-item-info">
+                <div class="search-item-avatar">${getCountryFlag(p.nationality)}</div>
+                <div>
+                  <div class="search-item-name">${escapeHtml(p.name)}</div>
+                  <div class="search-item-meta">${p.position || "MC"} • ${escapeHtml(p.club_name || "Free Agent")}</div>
+                </div>
+              </div>
+              <span class="search-item-badge">CA ${p.current_ability || 150} / PA ${p.potential_ability || 170}</span>
+            </div>
+          `).join("");
+        }
+
+        if (clubs.length > 0) {
+          html += `<div class="search-section-title">🏟️ Clubs (${clubs.length})</div>`;
+          html += clubs.slice(0, 4).map(c => `
+            <div class="search-item" onclick="selectSearchedClub(${c.club_id})">
+              <div class="search-item-info">
+                <div class="search-item-avatar">🏟️</div>
+                <div>
+                  <div class="search-item-name">${escapeHtml(c.club_name)}</div>
+                  <div class="search-item-meta">${escapeHtml(c.league_name || "League")}</div>
+                </div>
+              </div>
+              <span class="search-item-badge">Rep: ${(c.reputation || 8000).toLocaleString()}</span>
+            </div>
+          `).join("");
+        }
+
+        if (nations.length > 0) {
+          html += `<div class="search-section-title">🌍 Nations (${nations.length})</div>`;
+          html += nations.slice(0, 4).map(n => `
+            <div class="search-item" onclick="selectSearchedNation(${n.id})">
+              <div class="search-item-info">
+                <div class="search-item-avatar">${getCountryFlag(n.name)}</div>
+                <div>
+                  <div class="search-item-name">${escapeHtml(n.name)} <span style="font-size:10px; color:var(--text-dim);">(${escapeHtml(n.three_letter_code || "")})</span></div>
+                  <div class="search-item-meta">${escapeHtml(n.continent || "Continent")} • Rep: ${(n.reputation || 7000).toLocaleString()}</div>
+                </div>
+              </div>
+              <span class="search-item-badge" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee; border-color: rgba(6, 182, 212, 0.3);">Youth ${n.youth_rating || 100}/200</span>
+            </div>
+          `).join("");
+        }
+
+        if (competitions.length > 0) {
+          html += `<div class="search-section-title">🏆 Competitions (${competitions.length})</div>`;
+          html += competitions.slice(0, 4).map(comp => `
+            <div class="search-item" onclick="selectSearchedCompetition(${comp.id})">
+              <div class="search-item-info">
+                <div class="search-item-avatar">🏆</div>
+                <div>
+                  <div class="search-item-name">${escapeHtml(comp.name)} <span style="font-size:10px; color:var(--text-dim);">(${escapeHtml(comp.short_name || "")})</span></div>
+                  <div class="search-item-meta">${escapeHtml(comp.nation_name || "International")} • Subs: ${comp.max_substitutes || 5}/${comp.max_bench_size || 9}</div>
+                </div>
+              </div>
+              <span class="search-item-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3);">Rep: ${(comp.reputation || 8000).toLocaleString()}</span>
+            </div>
+          `).join("");
+        }
+
+        dropdown.innerHTML = html;
+        dropdown.style.display = "block";
+      } catch (e) {
+        console.error("Search error:", e);
+      }
+    }
+
+    function handleSearchKey(event) {
+      if (event.key === "Escape") {
+        clearSearch();
+      }
+    }
+
+    function clearSearch() {
+      const input = document.getElementById("global-search");
+      input.value = "";
+      document.getElementById("search-clear-btn").style.display = "none";
+      document.getElementById("search-results-dropdown").style.display = "none";
+    }
+
+    async function selectSearchedPlayer(playerId) {
+      clearSearch();
+      showToast("Loading player profile...", "info");
+      try {
+        const res = await fetch("/api/context/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: playerId })
+        });
+        const data = await res.json();
+        if (data.player || data.active_player) {
+          displayPlayer(data.player || data.active_player);
+          state.isPinned = true;
+          updateSyncUI();
+          switchTab("tab-player");
+          showToast(`Loaded ${data.player?.name || "Player"}!`, "success");
+        }
+      } catch (e) {
+        showToast("Error selecting player", "error");
+      }
+    }
+
+    async function selectSearchedClub(clubId) {
+      clearSearch();
+      showToast("Loading club...", "info");
+      try {
+        const res = await fetch("/api/context/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ club_id: clubId })
+        });
+        const data = await res.json();
+        if (data.club || data.active_club) {
+          displayClub(data.club || data.active_club);
+          state.isPinned = true;
+          updateSyncUI();
+          switchTab("tab-club");
+          showToast(`Loaded ${data.club?.club_name || "Club"}!`, "success");
+        }
+      } catch (e) {
+        showToast("Error selecting club", "error");
+      }
+    }
+
+    async function selectSearchedNation(nationId) {
+      clearSearch();
+      showToast("Loading nation details...", "info");
+      try {
+        const res = await fetch("/api/context/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nation_id: nationId })
+        });
+        const data = await res.json();
+        if (data.nation || data.active_nation) {
+          displayNation(data.nation || data.active_nation);
+          state.isPinned = true;
+          updateSyncUI();
+          switchTab("tab-nation");
+          showToast(`Loaded ${(data.nation || data.active_nation).name}!`, "success");
+        }
+      } catch (e) {
+        showToast("Error selecting nation: " + e.message, "error");
+      }
+    }
+
+    async function selectSearchedCompetition(compId) {
+      clearSearch();
+      showToast("Loading competition details...", "info");
+      try {
+        const res = await fetch("/api/context/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competition_id: compId })
+        });
+        const data = await res.json();
+        if (data.competition || data.active_competition) {
+          displayCompetition(data.competition || data.active_competition);
+          state.isPinned = true;
+          updateSyncUI();
+          switchTab("tab-competition");
+          showToast(`Loaded ${(data.competition || data.active_competition).name}!`, "success");
+        }
+      } catch (e) {
+        showToast("Error selecting competition: " + e.message, "error");
+      }
+    }
+
+    // Close search dropdown on click outside
+    document.addEventListener("click", (e) => {
+      const searchBox = document.querySelector(".search-wrapper");
+      if (searchBox && !searchBox.contains(e.target)) {
+        document.getElementById("search-results-dropdown").style.display = "none";
+      }
+    });
+
+    // Toast helper
+    function showToast(msg, type = "info") {
+      const container = document.getElementById("toast-container");
+      if (!container) return;
+      const el = document.createElement("div");
+      el.className = `toast ${type}`;
+      el.innerHTML = `<div>${escapeHtml(msg)}</div>`;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = "0";
+        el.style.transform = "translateX(100%)";
+        setTimeout(() => el.remove(), 250);
+      }, 3200);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>

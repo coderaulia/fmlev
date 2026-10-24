@@ -79,3 +79,17 @@ crates/
   - `cargo test --workspace`: 108 tests passing (107 passed, 1 ignored, 0 failed).
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 26 passed, 0 failed.
 - **Initialized**: `AGENTS.md` guidelines established.
+
+### Phase 2: Writable Club Details & Facilities, Safe Player Heal & Clear Promises (Completed)
+- **Target**: Enable writable editor for Club Details & Facilities with transactional readback & rollback, and add Player Heal (100% Fitness) and Clear Promises actions.
+- **Results**:
+  - Fixed property string decoding bug across `live_club.rs`, `live_nation.rs`, and `live_competition.rs`.
+  - Added dynamic 1..20 facility ratings extraction from `DynamicReference` (`0x3235_2020`).
+  - Implemented `write_live_club` with atomic readback and rollback verification for `OverallBalance` and facility ratings.
+  - Replaced crash-inducing injury pointer zeroing with safe 100% condition & match sharpness restoration (10,000 units), eliminating fatigue safely without corrupting simulation objects.
+  - Added `remove_promises` action across engine, REST API, and web UI.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 108 tests passing.
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 26 passed, 0 failed.
+  - All files strictly $\le$ 1,328 LOC.

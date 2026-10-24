@@ -132,6 +132,11 @@ pub enum HudCommand {
     },
 
     // --- Selection commands ---
+    SelectPlayer {
+        player_id: i32,
+        #[serde(default)]
+        player_ptr: Option<usize>,
+    },
     SelectNation {
         nation_id: i32,
         #[serde(default)]
@@ -146,6 +151,32 @@ pub enum HudCommand {
         club_id: i32,
         #[serde(default)]
         club_ptr: Option<usize>,
+    },
+
+    // --- Positional macros ---
+    AllPositions20 {
+        #[serde(default)]
+        player_ptr: Option<usize>,
+        #[serde(default)]
+        player_id: Option<i32>,
+    },
+    BothFeet20 {
+        #[serde(default)]
+        player_ptr: Option<usize>,
+        #[serde(default)]
+        player_id: Option<i32>,
+    },
+    PureStriker {
+        #[serde(default)]
+        player_ptr: Option<usize>,
+        #[serde(default)]
+        player_id: Option<i32>,
+    },
+    UniversalWinger {
+        #[serde(default)]
+        player_ptr: Option<usize>,
+        #[serde(default)]
+        player_id: Option<i32>,
     },
 }
 
@@ -612,6 +643,142 @@ impl HudController {
                     message: format!("Selected club ID {}", club_id),
                 }
             }
+            HudCommand::SelectPlayer { player_id, player_ptr } => {
+                self.state.select_player(player_id, player_ptr);
+                CommandResult {
+                    success: true,
+                    message: format!("Selected player ID {}", player_id),
+                }
+            }
+            HudCommand::AllPositions20 { player_ptr, player_id } => {
+                let p_id = player_id.or(self.state.selected_player_id);
+                if let Some(ptr) = player_ptr {
+                    self.state.selected_player_ptr = Some(ptr);
+                }
+                if let Some(id) = p_id {
+                    self.state.selected_player_id = Some(id);
+                }
+                let mut p = self.state.active_player.clone().unwrap_or_else(OverlayState::default_preview_player);
+                if let Some(id) = p_id {
+                    p.id = id;
+                }
+                let pos = &mut p.positions;
+                pos.dl = 20; pos.dc = 20; pos.dr = 20;
+                pos.wbl = 20; pos.wbr = 20;
+                pos.dm = 20;
+                pos.ml = 20; pos.mc = 20; pos.mr = 20;
+                pos.aml = 20; pos.amc = 20; pos.amr = 20;
+                pos.st = 20;
+                pos.left_foot = 20;
+                pos.right_foot = 20;
+                p.position = "D/WB/DM/M/AM (RLC), ST (C)".to_string();
+                p.attributes.versatility = 20;
+                let p_name = p.name.clone();
+                self.state.active_player = Some(p);
+
+                info!("HUD: Applied all_positions_20 for {}", p_name);
+                self.state.add_notification(
+                    "🌟 Total Football",
+                    &format!("Maxed all positions and both feet to 20 for {}", p_name),
+                    NotificationLevel::Success,
+                );
+                CommandResult {
+                    success: true,
+                    message: format!("All positions maxed to 20 for {}", p_name),
+                }
+            }
+            HudCommand::BothFeet20 { player_ptr, player_id } => {
+                let p_id = player_id.or(self.state.selected_player_id);
+                if let Some(ptr) = player_ptr {
+                    self.state.selected_player_ptr = Some(ptr);
+                }
+                if let Some(id) = p_id {
+                    self.state.selected_player_id = Some(id);
+                }
+                let mut p = self.state.active_player.clone().unwrap_or_else(OverlayState::default_preview_player);
+                if let Some(id) = p_id {
+                    p.id = id;
+                }
+                p.positions.left_foot = 20;
+                p.positions.right_foot = 20;
+                let p_name = p.name.clone();
+                self.state.active_player = Some(p);
+
+                info!("HUD: Applied both_feet_20 for {}", p_name);
+                self.state.add_notification(
+                    "👣 Both Feet 20",
+                    &format!("Set left foot and right foot to 20 for {}", p_name),
+                    NotificationLevel::Success,
+                );
+                CommandResult {
+                    success: true,
+                    message: format!("Both feet set to 20 for {}", p_name),
+                }
+            }
+            HudCommand::PureStriker { player_ptr, player_id } => {
+                let p_id = player_id.or(self.state.selected_player_id);
+                if let Some(ptr) = player_ptr {
+                    self.state.selected_player_ptr = Some(ptr);
+                }
+                if let Some(id) = p_id {
+                    self.state.selected_player_id = Some(id);
+                }
+                let mut p = self.state.active_player.clone().unwrap_or_else(OverlayState::default_preview_player);
+                if let Some(id) = p_id {
+                    p.id = id;
+                }
+                p.positions.st = 20;
+                p.positions.aml = 14;
+                p.positions.amc = 14;
+                p.positions.amr = 14;
+                p.position = p.positions.to_position_string();
+                let p_name = p.name.clone();
+                self.state.active_player = Some(p);
+
+                info!("HUD: Applied pure_striker for {}", p_name);
+                self.state.add_notification(
+                    "⚽ Pure Striker",
+                    &format!("Natural striker preset applied for {}", p_name),
+                    NotificationLevel::Success,
+                );
+                CommandResult {
+                    success: true,
+                    message: format!("Pure striker preset applied for {}", p_name),
+                }
+            }
+            HudCommand::UniversalWinger { player_ptr, player_id } => {
+                let p_id = player_id.or(self.state.selected_player_id);
+                if let Some(ptr) = player_ptr {
+                    self.state.selected_player_ptr = Some(ptr);
+                }
+                if let Some(id) = p_id {
+                    self.state.selected_player_id = Some(id);
+                }
+                let mut p = self.state.active_player.clone().unwrap_or_else(OverlayState::default_preview_player);
+                if let Some(id) = p_id {
+                    p.id = id;
+                }
+                p.positions.aml = 20;
+                p.positions.amr = 20;
+                p.positions.ml = 20;
+                p.positions.mr = 20;
+                p.positions.wbl = 20;
+                p.positions.wbr = 20;
+                p.position = p.positions.to_position_string();
+                let p_name = p.name.clone();
+                self.state.active_player = Some(p);
+
+                info!("HUD: Applied universal_winger for {}", p_name);
+                self.state.add_notification(
+                    "🚀 Universal Winger",
+                    &format!("Flank and wing positions set to 20 for {}", p_name),
+                    NotificationLevel::Success,
+                );
+                CommandResult {
+                    success: true,
+                    message: format!("Universal winger preset applied for {}", p_name),
+                }
+            }
         }
     }
 
@@ -631,6 +798,57 @@ impl HudController {
 
         match cmd.as_str() {
             // Tab switching & views
+            "player" | "players" => {
+                if args.is_empty() {
+                    self.state.set_active_tab(OverlayTab::PlayerEditor);
+                    CommandResult {
+                        success: true,
+                        message: "Switched to Player tab".to_string(),
+                    }
+                } else if let Ok(id) = args[0].parse::<i32>() {
+                    self.handle_command(HudCommand::SelectPlayer { player_id: id, player_ptr: None });
+                    self.state.set_active_tab(OverlayTab::PlayerEditor);
+                    CommandResult {
+                        success: true,
+                        message: format!("Selected player ID {} and switched to Player tab", id),
+                    }
+                } else {
+                    self.state.set_active_tab(OverlayTab::PlayerEditor);
+                    CommandResult {
+                        success: true,
+                        message: "Switched to Player tab".to_string(),
+                    }
+                }
+            }
+            "positions" | "position" | "pos" => {
+                self.state.set_active_tab(OverlayTab::Positions);
+                CommandResult {
+                    success: true,
+                    message: "Switched to Positions tab".to_string(),
+                }
+            }
+            "club" | "clubs" => {
+                if args.is_empty() {
+                    self.state.set_active_tab(OverlayTab::ClubFinances);
+                    CommandResult {
+                        success: true,
+                        message: "Switched to ClubFinances tab".to_string(),
+                    }
+                } else if let Ok(id) = args[0].parse::<i32>() {
+                    self.handle_command(HudCommand::SelectClub { club_id: id, club_ptr: None });
+                    self.state.set_active_tab(OverlayTab::ClubFinances);
+                    CommandResult {
+                        success: true,
+                        message: format!("Selected club ID {} and switched to Club tab", id),
+                    }
+                } else {
+                    self.state.set_active_tab(OverlayTab::ClubFinances);
+                    CommandResult {
+                        success: true,
+                        message: "Switched to ClubFinances tab".to_string(),
+                    }
+                }
+            }
             "nation" | "nations" => {
                 if args.is_empty() {
                     self.state.set_active_tab(OverlayTab::Nation);
@@ -715,7 +933,11 @@ impl HudController {
                         self.state.set_active_tab(OverlayTab::PlayerEditor);
                         CommandResult { success: true, message: "Switched to PlayerEditor tab".to_string() }
                     }
-                    "club" | "finances" | "club_finances" => {
+                    "positions" | "pos" | "position" => {
+                        self.state.set_active_tab(OverlayTab::Positions);
+                        CommandResult { success: true, message: "Switched to Positions tab".to_string() }
+                    }
+                    "club" | "finances" | "club_finances" | "facilities" => {
                         self.state.set_active_tab(OverlayTab::ClubFinances);
                         CommandResult { success: true, message: "Switched to ClubFinances tab".to_string() }
                     }
@@ -789,6 +1011,40 @@ impl HudController {
                 self.handle_command(HudCommand::ForegroundSugarDaddy {
                     club_ptr: self.state.selected_club_ptr,
                     club_id: self.state.selected_club_id,
+                })
+            }
+
+            // --- Positional macros ---
+            "all_positions_20" | "all_positions" | "total_football" | "all_pos" => {
+                self.handle_command(HudCommand::AllPositions20 {
+                    player_ptr: self.state.selected_player_ptr,
+                    player_id: self.state.selected_player_id,
+                })
+            }
+            "both_feet_20" | "both_feet" | "either_foot" => {
+                self.handle_command(HudCommand::BothFeet20 {
+                    player_ptr: self.state.selected_player_ptr,
+                    player_id: self.state.selected_player_id,
+                })
+            }
+            "pure_striker" => {
+                self.handle_command(HudCommand::PureStriker {
+                    player_ptr: self.state.selected_player_ptr,
+                    player_id: self.state.selected_player_id,
+                })
+            }
+            "universal_winger" => {
+                self.handle_command(HudCommand::UniversalWinger {
+                    player_ptr: self.state.selected_player_ptr,
+                    player_id: self.state.selected_player_id,
+                })
+            }
+            "max_ability" | "ca_pa_200" | "wonderkid" => {
+                let p_ptr = self.state.selected_player_ptr.unwrap_or(0x18218e590);
+                self.handle_command(HudCommand::SetPlayerAbility {
+                    player_ptr: p_ptr,
+                    current_ability: 200,
+                    potential_ability: 200,
                 })
             }
 

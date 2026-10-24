@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner (backend engine) -->
+<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner, fmlev 26 engine -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>fmlev 26 - Football Manager 26 Live Editor & Overlay</title>
+  <title>FMLE by Vanaila - Football Manager Live Editor</title>
   <style>
     :root {
       --bg-dark: #0a0d17;
@@ -1422,11 +1422,12 @@
     <div class="topbar-container">
       <!-- Brand & Mode Title -->
       <div class="brand-section">
-        <div class="brand-logo">FM</div>
+        <div class="brand-logo" style="background: linear-gradient(135deg, #ec4899, #8b5cf6, #06b6d4); font-size: 13px; font-weight: 900; letter-spacing: -0.5px;">FMLE</div>
         <div>
-          <div class="brand-name">
-            fmlev 26
-            <span class="badge-sub">Live Editor</span>
+          <div class="brand-name" style="display: flex; align-items: baseline; gap: 6px;">
+            <span style="background: linear-gradient(135deg, #ffffff, #a5f3fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-size: 16px;">FMLE</span>
+            <span style="font-size: 11px; font-weight: 600; color: #a78bfa; letter-spacing: 0.2px;">by Vanaila</span>
+            <span class="badge-sub" style="background: rgba(236, 72, 153, 0.2); border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">Live Editor</span>
           </div>
         </div>
       </div>
@@ -1491,8 +1492,11 @@
       <button class="tab-btn" onclick="switchTab('tab-competition')">
         🏆 Competition Details
       </button>
+      <button class="tab-btn" onclick="switchTab('tab-godmode')">
+        ⚡ God Mode / Quick Cheats
+      </button>
       <button class="tab-btn" onclick="switchTab('tab-status')">
-        ⚙️ Game Sync & Status
+        ⚙️ Game Sync & Diagnostics
       </button>
     </div>
   </nav>
@@ -1516,7 +1520,7 @@
               <span id="player-nat" class="pill-badge badge-nat">🇳🇴 Norway</span>
               <span id="player-age" class="pill-badge badge-nat">24 yrs</span>
               <span id="player-pos" class="pill-badge badge-pos">ST (C)</span>
-              <span id="player-club" class="pill-badge badge-club">Manchester City</span>
+              <span id="player-club" class="pill-badge badge-club" onclick="jumpToPlayerClub()" style="cursor: pointer;" title="Click to manage this club in Club Details">Manchester City</span>
               <span id="player-morale" class="pill-badge badge-morale">🔥 Superb</span>
               <span id="player-injury" class="pill-badge badge-fit">💚 Match Fit</span>
             </div>
@@ -1553,6 +1557,42 @@
               <input id="input-pa" type="number" min="1" max="200" class="ca-pa-val-input pa-color" value="195" onchange="handlePAChange(this.value)">
               <div id="star-rating-pa" class="star-rating">★★★★★</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Identity & Current Club Quick Editor Bar -->
+      <div class="card" style="margin: 12px 0; padding: 12px 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 800; color: var(--accent-cyan); text-transform: uppercase;">✏️ Player Identity & Current Team</span>
+            <span id="save-status-indicator" class="pill-badge badge-fit">✅ All Changes Saved</span>
+          </div>
+          <button class="btn" style="font-size: 11px; padding: 4px 10px; display: flex; align-items: center; gap: 4px;" onclick="jumpToPlayerClub()" title="Jump to player's current club in Club Details">
+            <span>🏟️ Manage Club</span>
+            <span style="font-size: 13px;">↗</span>
+          </button>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr 2fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">FULL NAME</label>
+            <input id="edit-player-name" type="text" class="form-control" placeholder="Player Name" oninput="handlePlayerFieldChange('name', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">AGE</label>
+            <input id="edit-player-age" type="number" min="14" max="50" class="form-control" placeholder="Age" oninput="handlePlayerFieldChange('age', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">NATIONALITY</label>
+            <input id="edit-player-nat" type="text" class="form-control" placeholder="Nationality" oninput="handlePlayerFieldChange('nationality', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">CURRENT CLUB</label>
+            <input id="edit-player-club" type="text" class="form-control" placeholder="Club Name (e.g. Persib)" oninput="handlePlayerFieldChange('club_name', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">POSITION</label>
+            <input id="edit-player-pos" type="text" class="form-control" placeholder="Position" oninput="handlePlayerFieldChange('position', this.value)">
           </div>
         </div>
       </div>
@@ -1931,22 +1971,31 @@
       <!-- Club Header -->
       <div class="player-header-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(16, 185, 129, 0.35);">
         <div>
-          <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <h2 id="club-title" style="font-size: 22px; font-weight: 800;">Manchester City</h2>
             <span id="club-league-badge" class="pill-badge badge-club">Premier League</span>
+            <span id="save-club-status-indicator" class="pill-badge badge-fit">✅ Synced with FM26</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap;">
             <span style="font-size: 11px; color: var(--text-muted);">Reputation:</span>
             <span id="club-rep-num" style="font-weight: 800; color: var(--accent-gold);">9,450 / 10,000</span>
             <span id="club-rep-stars" class="star-rating">★★★★★</span>
+            <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
+              <span style="font-size: 11px; color: var(--text-dim);">Switch Club:</span>
+              <select id="club-switcher" class="form-control" style="width: auto; min-width: 170px; padding: 3px 8px; font-size: 11px;" onchange="if (this.value) selectSearchedClub(this.value)">
+                <option value="">Select Club...</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="preset-btn" onclick="applyClubPreset('max_facilities')">⭐ Max All Facilities (20/20)</button>
+          <button class="preset-btn" onclick="applyClubPreset('max_facilities')">⭐ Max Facilities (20/20)</button>
           <button class="preset-btn" onclick="applyClubPreset('add_50m')">💰 +$50M Transfer Budget</button>
           <button class="preset-btn" onclick="applyClubPreset('sugar_daddy')">💎 Sugar Daddy Takeover</button>
           <button class="preset-btn" onclick="applyClubPreset('wipe_debt')">🏦 Wipe All Debt</button>
+          <button class="preset-btn" onclick="applyClubPreset('morale_squad')">❤️ Max Squad Morale</button>
+          <button class="preset-btn" onclick="applyClubPreset('clear_bans')">🩹 Clear Bans & Fatigue</button>
         </div>
       </div>
 
@@ -1954,43 +2003,63 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
         <!-- Left: Financial Budgets & Stadium -->
         <div class="card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
             <span>💰 Financial Budgets & Stadium</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Live Balance & Capacity</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Overall Balance ($)</label>
-            <input id="club-balance" type="number" class="form-control" value="220000000" onchange="autoSaveClub()">
+            <label class="form-label">
+              <span>Overall Balance ($)</span>
+              <span style="display: flex; gap: 4px;">
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(50000000)">+$50M</button>
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(-50000000)">-$50M</button>
+              </span>
+            </label>
+            <input id="club-balance" type="number" class="form-control" value="220000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Transfer Budget ($)</label>
-            <input id="club-transfer-budget" type="number" class="form-control" value="115000000" onchange="autoSaveClub()">
+            <label class="form-label">
+              <span>Transfer Budget ($)</span>
+              <span style="display: flex; gap: 4px;">
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(50000000)">+$50M</button>
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(10000000)">+$10M</button>
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(-10000000)">-$10M</button>
+              </span>
+            </label>
+            <input id="club-transfer-budget" type="number" class="form-control" value="115000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
 
           <div class="form-group">
-            <label class="form-label">Wage Budget ($ / week)</label>
-            <input id="club-wage-budget" type="number" class="form-control" value="4200000" onchange="autoSaveClub()">
+            <label class="form-label">
+              <span>Wage Budget ($ / week)</span>
+              <span style="display: flex; gap: 4px;">
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(500000)">+500k</button>
+                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(-500000)">-500k</button>
+              </span>
+            </label>
+            <input id="club-wage-budget" type="number" class="form-control" value="4200000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
 
           <div class="form-group">
             <label class="form-label">Max Wage Allowance ($ / week)</label>
-            <input id="club-max-wage" type="number" class="form-control" value="600000" onchange="autoSaveClub()">
+            <input id="club-max-wage" type="number" class="form-control" value="600000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
 
           <div class="form-group">
             <label class="form-label">Stadium Name</label>
-            <input id="club-stadium-name" type="text" class="form-control" value="Etihad Stadium" onchange="autoSaveClub()">
+            <input id="club-stadium-name" type="text" class="form-control" value="Etihad Stadium" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Stadium Capacity</label>
-              <input id="club-stadium-cap" type="number" class="form-control" value="53400" onchange="autoSaveClub()">
+              <input id="club-stadium-cap" type="number" class="form-control" value="53400" oninput="markClubUnsaved()" onchange="autoSaveClub()">
             </div>
             <div class="form-group">
               <label class="form-label">Expansion Cap</label>
-              <input id="club-stadium-exp" type="number" class="form-control" value="62000" onchange="autoSaveClub()">
+              <input id="club-stadium-exp" type="number" class="form-control" value="62000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
             </div>
           </div>
 
@@ -2007,51 +2076,51 @@
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Training Facilities</span>
+            <span class="facility-name" title="Governs squad training quality and attribute growth rates">Training Facilities</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-training', -1)">−</button>
-            <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-training', 1)">+</button>
-            <span id="fac-training-disp" class="facility-val tier-elite">20</span>
+            <span id="fac-training-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-training', 'Training Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Youth Facilities</span>
+            <span class="facility-name" title="Governs youth training environment and development quality">Youth Facilities</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-youth', -1)">−</button>
-            <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-youth', 1)">+</button>
-            <span id="fac-youth-disp" class="facility-val tier-elite">20</span>
+            <span id="fac-youth-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-youth', 'Youth Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Youth Recruitment</span>
+            <span class="facility-name" title="Determines youth intake talent pool quality and wonderkid newgen generation">Youth Recruitment</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', -1)">−</button>
-            <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', 1)">+</button>
-            <span id="fac-recruitment-disp" class="facility-val tier-elite">19</span>
+            <span id="fac-recruitment-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-recruitment', 'Youth Recruitment')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Junior Coaching</span>
+            <span class="facility-name" title="Governs the starting CA and fundamentals of newly generated youth candidates">Junior Coaching</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-coaching', -1)">−</button>
-            <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-coaching', 1)">+</button>
-            <span id="fac-coaching-disp" class="facility-val tier-elite">19</span>
+            <span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Data Analysis</span>
+            <span class="facility-name" title="Governs match analyst report precision and opposition data">Data Analysis</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
-            <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
-            <span id="fac-data-analysis-disp" class="facility-val tier-elite">18</span>
+            <span id="fac-data-analysis-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-data-analysis', 'Data Analysis')" title="Click to enter 1-20" style="cursor: pointer;">18</span>
           </div>
 
           <div class="facility-row">
-            <span class="facility-name">Corporate Facilities</span>
+            <span class="facility-name" title="Governs corporate suites and commercial revenue potential">Corporate Facilities</span>
             <button class="stepper-btn" onclick="stepClubFac('fac-corporate', -1)">−</button>
-            <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value)" onchange="autoSaveClub()">
+            <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepClubFac('fac-corporate', 1)">+</button>
-            <span id="fac-corporate-disp" class="facility-val tier-elite">19</span>
+            <span id="fac-corporate-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-corporate', 'Corporate Facilities')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
           </div>
 
           <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveClubToGame()">
@@ -2064,8 +2133,9 @@
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
         <!-- Board & Ownership -->
         <div class="card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
             <span>👔 Board & Ownership</span>
+            <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px; border-color: rgba(139, 92, 246, 0.4); color: #c4b5fd;" onclick="applyInvincibleBoard()">🛡️ Board Immunity</button>
           </div>
 
           <div class="form-group">
@@ -2087,9 +2157,9 @@
           <div class="facility-row" style="margin-top: 14px;">
             <span class="facility-name">Board Patience (1-20)</span>
             <button class="stepper-btn" onclick="stepPatience(-1)">−</button>
-            <input id="club-board-patience" type="range" min="1" max="20" value="15" class="facility-slider" oninput="updateDisp('disp-patience', this.value)" onchange="autoSaveClub()">
+            <input id="club-board-patience" type="range" min="1" max="20" value="15" class="facility-slider" oninput="updateDisp('disp-patience', this.value); markClubUnsaved();" onchange="autoSaveClub()">
             <button class="stepper-btn" onclick="stepPatience(1)">+</button>
-            <span id="disp-patience" class="facility-val tier-elite">15</span>
+            <span id="disp-patience" class="facility-val tier-elite" onclick="promptEditClubFac('club-board-patience', 'Board Patience')" title="Click to enter 1-20" style="cursor: pointer;">15</span>
           </div>
 
           <div style="margin: 14px 0 10px;">
@@ -2097,7 +2167,7 @@
               <span>FAN CONFIDENCE</span>
               <span id="disp-fan-conf">85%</span>
             </div>
-            <input id="club-fan-confidence" type="range" min="1" max="100" value="85" style="width: 100%; accent-color: var(--accent-emerald);" oninput="document.getElementById('disp-fan-conf').innerText = this.value + '%'" onchange="autoSaveClub()">
+            <input id="club-fan-confidence" type="range" min="1" max="100" value="85" style="width: 100%; accent-color: var(--accent-emerald);" oninput="document.getElementById('disp-fan-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
 
           <div style="margin: 14px 0 10px;">
@@ -2105,7 +2175,7 @@
               <span>BOARD CONFIDENCE</span>
               <span id="disp-board-conf">88%</span>
             </div>
-            <input id="club-board-confidence" type="range" min="1" max="100" value="88" style="width: 100%; accent-color: var(--accent-cyan);" oninput="document.getElementById('disp-board-conf').innerText = this.value + '%'" onchange="autoSaveClub()">
+            <input id="club-board-confidence" type="range" min="1" max="100" value="88" style="width: 100%; accent-color: var(--accent-cyan);" oninput="document.getElementById('disp-board-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
 
           <div style="margin: 14px 0 10px;">
@@ -2113,7 +2183,7 @@
               <span>TRANSFER REVENUE RETENTION</span>
               <span id="disp-retention">100%</span>
             </div>
-            <input id="club-transfer-retention" type="range" min="0" max="100" value="100" style="width: 100%; accent-color: var(--accent-gold);" oninput="document.getElementById('disp-retention').innerText = this.value + '%'" onchange="autoSaveClub()">
+            <input id="club-transfer-retention" type="range" min="0" max="100" value="100" style="width: 100%; accent-color: var(--accent-gold);" oninput="document.getElementById('disp-retention').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
 
           <button class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="saveClubToGame()">
@@ -2167,45 +2237,15 @@
         </div>
       </div>
 
-      <!-- Whole-Squad God Mode Cards -->
-      <div style="margin-top: 20px;">
-        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-          <span>⚡ Whole-Squad God Mode (1-Click Actions)</span>
-        </h3>
-
-        <div class="god-grid">
-          <div class="god-card" style="border-top: 3px solid var(--accent-emerald);">
-            <div>
-              <div class="god-card-title">🏥 100% Squad Fitness</div>
-              <div class="god-card-desc">Restores match sharpness and condition to 100% for every player in your club squad. Wipes match fatigue.</div>
-            </div>
-            <button class="btn btn-emerald" onclick="applyClubPreset('heal_squad')">Restores 100% Squad Fitness</button>
-          </div>
-
-          <div class="god-card" style="border-top: 3px solid var(--accent-gold);">
-            <div>
-              <div class="god-card-title">🔥 Max Squad Morale</div>
-              <div class="god-card-desc">Maximizes team morale to Superb (100) and delight across every squad member. Fixes team dynamics instantly.</div>
-            </div>
-            <button class="btn btn-primary" onclick="applyClubPreset('morale_squad')">Max Squad Morale (Superb)</button>
-          </div>
-
-          <div class="god-card" style="border-top: 3px solid var(--accent-cyan);">
-            <div>
-              <div class="god-card-title">🛡️ Clear All Injuries & Bans</div>
-              <div class="god-card-desc">Instantly removes all active injuries, red/yellow card suspensions, and international restrictions across the squad.</div>
-            </div>
-            <button class="btn" onclick="applyClubPreset('clear_bans')">Clear Injuries & Bans</button>
-          </div>
-
-          <div class="god-card" style="border-top: 3px solid var(--accent-purple);">
-            <div>
-              <div class="god-card-title">🔓 Unlock Built-In IGE</div>
-              <div class="god-card-desc">Patches game memory to enable Football Manager 26's official built-in In-Game Editor pencil toolbar.</div>
-            </div>
-            <button class="btn" onclick="applyClubPreset('unlock_ige')">Unlock Built-In IGE</button>
-          </div>
+      <!-- Dedicated Squad God Mode & Cheats Callout Banner -->
+      <div style="margin-top: 20px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: var(--radius-sm); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-weight: 800; font-size: 13px; color: #c4b5fd;">⚡ Squad God Mode & Live Cheats</div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">Whole-squad fitness cures, max morale, injury removals, and built-in IGE unlocks are organized in the dedicated God Mode tab.</div>
         </div>
+        <button class="btn btn-primary" onclick="switchTab('tab-godmode')">
+          ⚡ Open God Mode & Quick Cheats ↗
+        </button>
       </div>
     </section>
 
@@ -2528,6 +2568,225 @@
       </div>
     </section>
 
+    <!-- VIEW 7: GOD MODE & QUICK CHEATS -->
+    <section id="tab-godmode" class="tab-view">
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(139, 92, 246, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(245, 158, 11, 0.4);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 style="font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⚡ God Mode & Quick Cheats</h2>
+            <span class="pill-badge badge-pos" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">Instant Live Memory Cheats</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
+            One-click instantaneous game cheats across Active Player, Entire Squad, Club Finances, and National / Competition Rules.
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-emerald" onclick="applyGodModeAll()">
+            ⚡ Apply Ultimate God Mode (All Active)
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid of 4 Cheat Domains -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+        <!-- Card 1: Active Player God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-cyan);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-cyan);">
+              👤 Active Player God Mode
+            </div>
+            <span id="god-player-target" class="pill-badge badge-nat">Target: Active Player</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Instant cheat modifications applied directly to the loaded player profile.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🐐 All 20s (Instant GOAT)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets every technical, mental, and physical attribute to 20, CA 200, PA 200</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('goat')">Make GOAT</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💎 Wonderkid Forge (195 PA)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Unlocks elite 195 potential ability and boosts natural development rate</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('wonderkid')">Forge Wonderkid</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💚 100% Fitness & Cure All</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Restores condition & sharpness to 100%, cures all major injuries</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('heal')">Instant Cure</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔥 Max Morale (Superb)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets individual player morale to 100 Superb and delight</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('morale')">Max Morale</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">👟 Both Feet 20/20 Master</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Grants Left Foot 20 & Right Foot 20 (Either Foot mastery)</div>
+              </div>
+              <button class="preset-btn" onclick="applyBothFeetGodMode()">Max Both Feet</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Squad God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-emerald);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-emerald);">
+              ⚡ Squad God Mode
+            </div>
+            <span id="god-squad-target" class="pill-badge badge-club">Target: First Team Squad</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Batch operations affecting all active players in your club squad simultaneously.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏥 100% Squad Fitness</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Restores 100% condition & sharpness across all squad players</div>
+              </div>
+              <button class="btn btn-emerald" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('heal_squad')">Heal Squad</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔥 Superb Squad Morale</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets whole-squad morale to Superb (100) and delight</div>
+              </div>
+              <button class="btn btn-primary" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('morale_squad')">Max Morale</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🛡️ Clear Injuries & Bans</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Wipes yellow/red suspensions and injury timers across squad</div>
+              </div>
+              <button class="btn" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('clear_bans')">Wipe Bans</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔓 Unlock Built-In IGE</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Patches game memory to display FM26 official pencil icon toolbar</div>
+              </div>
+              <button class="btn" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('unlock_ige')">Unlock IGE</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Club & Financial God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-gold);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-gold);">
+              💰 Club & Financial God Mode
+            </div>
+            <span id="god-club-target" class="pill-badge badge-pos">Target: Active Club</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Elevate your club to unstoppable global financial and infrastructural dominance.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💎 Foreground Sugar Daddy ($1 Billion)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Limitless state-backed wealth, wipes debt, $1B balance, $500M budget</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('sugar_daddy')">Infinite Wealth</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏟️ Max Facilities Matrix (All 20/20)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">State of the art training, youth academy, recruitment & data analysis</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('max_facilities')">Max Facilities</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🛡️ Invincible Board Job Security</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Board patience 20/20, fan & board confidence 100%, 100% transfer retention</div>
+              </div>
+              <button class="preset-btn" onclick="applyInvincibleBoard()">Invincible Board</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏦 Wipe Club Debt</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Clears all outstanding loans, debentures, and bank interest payments</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('wipe_debt')">Wipe Debt</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Nation & Competition God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-purple);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: #c4b5fd;">
+              🌍 Nation & Competition God Mode
+            </div>
+            <span id="god-nation-target" class="pill-badge badge-nat">Target: Active Nation</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Transform national youth production and remove restrictive competition rules.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🧬 Trigger Golden Generation (Youth Rating 200)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Max national youth rating (200), FA wealth (20), youth facilities (20)</div>
+              </div>
+              <button class="preset-btn" onclick="applyNationPreset('golden_generation')">Trigger Golden Gen</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🌍 Relax Rules & Unlimited Foreigners</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets foreign limit to 99, 12 bench size, 5 subs across 3 windows</div>
+              </div>
+              <button class="preset-btn" onclick="applyCompetitionPreset('relax_rules')">Relax Comp Rules</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💰 Massive Prize Pool ($500M)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets winner prize money to $500,000,000 and TV pool to $3 Billion</div>
+              </div>
+              <button class="preset-btn" onclick="applyMassivePrizeMoney()">Massive Prizes</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">⚖️ Zero Corruption & Maximum Importance</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets national corruption index to 0 and football importance to 20</div>
+              </div>
+              <button class="preset-btn" onclick="applyCleanNationGovernance()">Clean Governance</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- VIEW 4: SYNC & STATUS -->
     <section id="tab-status" class="tab-view">
       <div class="card">
@@ -2580,6 +2839,11 @@
       screenState: "player",
       isOverlayMode: false,
       saveTimeout: null,
+      playerDirty: false,
+      clubDirty: false,
+      nationDirty: false,
+      competitionDirty: false,
+      lastSavedTime: null,
     };
 
     const techAttrs = [
@@ -2755,6 +3019,7 @@
 
     function stepAttr(key, delta) {
       if (!state.activePlayer || !state.activePlayer.attributes) return;
+      markUnsaved();
       const current = state.activePlayer.attributes[key] || 10;
       const next = Math.max(1, Math.min(20, current + delta));
       state.activePlayer.attributes[key] = next;
@@ -2775,6 +3040,7 @@
       if (input !== null) {
         const val = parseInt(input);
         if (!isNaN(val)) {
+          markUnsaved();
           const clamped = Math.max(1, Math.min(20, val));
           state.activePlayer.attributes[key] = clamped;
           updateAttrDisplay(key, clamped);
@@ -2821,29 +3087,33 @@
 
         if (data.active_player || data.player) {
           const player = data.active_player || data.player;
-          // Only update UI if not currently editing an input
-          if (!isInputFocused()) {
+          const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
+          // Prevent edit reversion: Never overwrite if user has unsaved edits or input focus on same player
+          if (!isSamePlayer || (!state.playerDirty && !isInputFocused())) {
             displayPlayer(player);
           }
         }
 
         if (data.active_club || data.club) {
           const club = data.active_club || data.club;
-          if (!isInputFocused()) {
+          const isSameClub = state.activeClub && state.activeClub.club_id === club.club_id;
+          if (!isSameClub || (!state.clubDirty && !isInputFocused())) {
             displayClub(club);
           }
         }
 
         if (data.active_nation || data.nation) {
           const nation = data.active_nation || data.nation;
-          if (!isInputFocused()) {
+          const isSameNation = state.activeNation && state.activeNation.id === nation.id;
+          if (!isSameNation || (!state.nationDirty && !isInputFocused())) {
             displayNation(nation);
           }
         }
 
         if (data.active_competition || data.competition) {
           const comp = data.active_competition || data.competition;
-          if (!isInputFocused()) {
+          const isSameComp = state.activeCompetition && state.activeCompetition.id === comp.id;
+          if (!isSameComp || (!state.competitionDirty && !isInputFocused())) {
             displayCompetition(comp);
           }
         }
@@ -2893,6 +3163,22 @@
       document.getElementById("player-pos").innerText = player.position || "MC";
       document.getElementById("player-club").innerText = player.club_name || "Free Agent";
       document.getElementById("contract-club-name").innerText = player.club_name || "Free Agent";
+
+      // Sync quick editor inputs if not actively focused
+      const editName = document.getElementById("edit-player-name");
+      if (editName && document.activeElement !== editName) editName.value = player.name || "";
+      const editAge = document.getElementById("edit-player-age");
+      if (editAge && document.activeElement !== editAge) editAge.value = player.age || 24;
+      const editNat = document.getElementById("edit-player-nat");
+      if (editNat && document.activeElement !== editNat) editNat.value = player.nationality || "";
+      const editClub = document.getElementById("edit-player-club");
+      if (editClub && document.activeElement !== editClub) editClub.value = player.club_name || "";
+      const editPos = document.getElementById("edit-player-pos");
+      if (editPos && document.activeElement !== editPos) editPos.value = player.position || "MC";
+
+      // Update God Mode Target Badge
+      const godPlayerTarget = document.getElementById("god-player-target");
+      if (godPlayerTarget) godPlayerTarget.innerText = `Target: ${player.name || "Active Player"}`;
 
       // Morale & Fitness
       const morale = player.morale_label || (player.morale >= 90 ? "Superb" : "Good");
@@ -3017,6 +3303,12 @@
 
       // Affiliated clubs
       renderAffiliatesList(club.affiliates || []);
+
+      // Update God Mode Target Badges
+      const godClubTarget = document.getElementById("god-club-target");
+      if (godClubTarget) godClubTarget.innerText = `Target: ${club.club_name || "Active Club"}`;
+      const godSquadTarget = document.getElementById("god-squad-target");
+      if (godSquadTarget) godSquadTarget.innerText = `Target: ${club.club_name || "Club"} 1st Team`;
     }
 
     function setFacVal(sliderId, dispId, val) {
@@ -3087,6 +3379,7 @@
     }
 
     function handleCAChange(val) {
+      markUnsaved();
       const v = Math.max(1, Math.min(200, parseInt(val) || 100));
       if (state.activePlayer) state.activePlayer.current_ability = v;
       document.getElementById("star-rating-ca").innerText = getStarString(v);
@@ -3094,6 +3387,7 @@
     }
 
     function handlePAChange(val) {
+      markUnsaved();
       const v = Math.max(1, Math.min(200, parseInt(val) || 150));
       if (state.activePlayer) state.activePlayer.potential_ability = v;
       document.getElementById("star-rating-pa").innerText = getStarString(v);
@@ -3104,10 +3398,146 @@
       if (!state.activePlayer) return;
       const newName = prompt("Edit Player Name:", state.activePlayer.name);
       if (newName && newName.trim()) {
-        state.activePlayer.name = newName.trim();
-        document.getElementById("player-name").innerText = newName.trim();
-        if (state.autoApply) debouncedSavePlayer();
+        handlePlayerFieldChange("name", newName.trim());
       }
+    }
+
+    function markSaved(timestamp) {
+      const timeStr = timestamp || new Date().toLocaleTimeString();
+      state.playerDirty = false;
+      state.lastSavedTime = timeStr;
+
+      const badge = document.getElementById("save-status-indicator");
+      if (badge) {
+        badge.className = "pill-badge badge-fit";
+        badge.innerText = `✅ Saved to FM26 (Persisted)! [${timeStr}]`;
+      }
+      const label = document.getElementById("last-saved-time");
+      if (label) {
+        label.innerText = `✅ Persisted at [${timeStr}]`;
+        label.style.color = "var(--accent-emerald)";
+      }
+    }
+
+    function markUnsaved() {
+      state.playerDirty = true;
+      const badge = document.getElementById("save-status-indicator");
+      if (badge) {
+        badge.className = "pill-badge badge-morale";
+        badge.innerText = `⏳ Unsaved Changes...`;
+      }
+      const label = document.getElementById("last-saved-time");
+      if (label) {
+        label.innerText = `Unsaved changes...`;
+        label.style.color = "var(--accent-gold)";
+      }
+    }
+
+    function handlePlayerFieldChange(field, val) {
+      if (!state.activePlayer) return;
+      markUnsaved();
+
+      if (field === "age") {
+        const num = parseInt(val) || 20;
+        state.activePlayer.age = num;
+        const el = document.getElementById("player-age");
+        if (el) el.innerText = `${num} yrs`;
+      } else if (field === "name") {
+        state.activePlayer.name = val;
+        const el = document.getElementById("player-name");
+        if (el) el.innerText = val || "Player Name";
+        const cEl = document.getElementById("contract-player-name");
+        if (cEl) cEl.innerText = `${val} — Contract`;
+        const posEl = document.getElementById("pos-player-name");
+        if (posEl) posEl.innerText = `${val} — Positions & Roles`;
+        const godTarget = document.getElementById("god-player-target");
+        if (godTarget) godTarget.innerText = `Target: ${val}`;
+      } else if (field === "nationality") {
+        state.activePlayer.nationality = val;
+        const el = document.getElementById("player-nat");
+        if (el) el.innerText = `${getCountryFlag(val)} ${val}`;
+      } else if (field === "club_name") {
+        state.activePlayer.club_name = val;
+        const el = document.getElementById("player-club");
+        if (el) el.innerText = val || "Free Agent";
+        const cEl = document.getElementById("contract-club-name");
+        if (cEl) cEl.innerText = val || "Free Agent";
+        const posEl = document.getElementById("pos-club-name");
+        if (posEl) posEl.innerText = val || "Free Agent";
+      } else if (field === "position") {
+        state.activePlayer.position = val;
+        const el = document.getElementById("player-pos");
+        if (el) el.innerText = val;
+        const posBadge = document.getElementById("pos-summary-badge");
+        if (posBadge) posBadge.innerText = val;
+      }
+
+      if (state.autoApply) {
+        debouncedSavePlayer();
+      }
+    }
+
+    async function jumpToPlayerClub() {
+      if (!state.activePlayer) {
+        showToast("No active player loaded", "warning");
+        return;
+      }
+      const clubName = state.activePlayer.club_name;
+      if (!clubName || clubName === "Free Agent") {
+        showToast("Player is currently a Free Agent without a club", "info");
+        return;
+      }
+
+      showToast(`Loading club details for ${clubName}...`, "info");
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(clubName)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const clubs = data.clubs || [];
+          const found = clubs.find(c => c.club_name.toLowerCase() === clubName.toLowerCase()) || clubs[0];
+          if (found) {
+            await selectSearchedClub(found.club_id);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Search club error:", e);
+      }
+
+      if (!state.activeClub) {
+        state.activeClub = {
+          club_id: 9999,
+          club_name: clubName,
+          league_name: "Domestic League",
+          reputation: 8200,
+          balance: 100000000,
+          transfer_budget: 45000000,
+          wage_budget: 1500000,
+          max_wage_allowance: 350000,
+          stadium_name: `${clubName} Stadium`,
+          stadium_capacity: 40000,
+          stadium_expansion_cap: 55000,
+          training_facilities: 18,
+          youth_facilities: 18,
+          youth_recruitment: 18,
+          junior_coaching: 18,
+          data_analysis_facilities: 17,
+          corporate_facilities: 17,
+          sugar_daddy_type: "None",
+          board_patience: 15,
+          fan_confidence: 85,
+          board_confidence: 88,
+          transfer_retention_pct: 100,
+          affiliates: []
+        };
+      } else {
+        state.activeClub.club_name = clubName;
+        state.activeClub.stadium_name = `${clubName} Stadium`;
+      }
+      displayClub(state.activeClub);
+      switchTab("tab-club");
+      showToast(`Loaded ${clubName} in Club Details!`, "success");
     }
 
     // Toggle Pin / Unpin
@@ -3156,7 +3586,8 @@
 
     function debouncedSavePlayer() {
       clearTimeout(state.saveTimeout);
-      document.getElementById("last-saved-time").innerText = "Saving changes...";
+      const label = document.getElementById("last-saved-time");
+      if (label) label.innerText = "Saving changes...";
       state.saveTimeout = setTimeout(() => {
         applyPlayerChanges();
       }, 300);
@@ -3173,14 +3604,85 @@
         });
         const data = await res.json();
         if (res.ok) {
-          document.getElementById("last-saved-time").innerText = "Saved just now";
-          showToast(`Saved ${state.activePlayer.name} to FM26!`, "success");
+          const now = new Date().toLocaleTimeString();
+          markSaved(now);
+          showToast(`Saved ${state.activePlayer.name} to FM26 (Persisted)!`, "success");
         } else {
           showToast(data.message || "Failed to save player", "error");
         }
       } catch (e) {
         showToast("Save error: " + e.message, "error");
       }
+    }
+
+    // God Mode Actions
+    async function applyGodModeAll() {
+      showToast("⚡ Activating Ultimate God Mode across all entities...", "info");
+      await applyPlayerPreset("goat");
+      await applyBothFeetGodMode();
+      await applyClubPreset("heal_squad");
+      await applyClubPreset("morale_squad");
+      await applyClubPreset("sugar_daddy");
+      await applyClubPreset("max_facilities");
+      await applyInvincibleBoard();
+      await applyNationPreset("golden_generation");
+      await applyCompetitionPreset("relax_rules");
+      showToast("🌟 Ultimate God Mode successfully activated!", "success");
+    }
+
+    async function applyBothFeetGodMode() {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.positions) state.activePlayer.positions = {};
+      state.activePlayer.positions.left_foot = 20;
+      state.activePlayer.positions.right_foot = 20;
+      renderPositionsTab();
+      await applyPlayerChanges();
+    }
+
+    async function applyInvincibleBoard() {
+      if (!state.activeClub) return;
+      state.activeClub.board_patience = 20;
+      const bp = document.getElementById("club-board-patience");
+      if (bp) {
+        bp.value = 20;
+        updateDisp("disp-patience", 20);
+      }
+      const fc = document.getElementById("club-fan-confidence");
+      if (fc) fc.value = 100;
+      const bc = document.getElementById("club-board-confidence");
+      if (bc) bc.value = 100;
+      const tr = document.getElementById("club-transfer-retention");
+      if (tr) tr.value = 100;
+      updateDispPercent("disp-fan-conf", 100);
+      updateDispPercent("disp-board-conf", 100);
+      updateDispPercent("disp-retention", 100);
+      await saveClubToGame();
+      showToast("Invincible Board Job Security Activated (Can never be sacked)!", "success");
+    }
+
+    async function applyMassivePrizeMoney() {
+      if (!state.activeCompetition) return;
+      state.activeCompetition.winner_prize_money = 500000000;
+      state.activeCompetition.tv_rights_pool = 3000000000;
+      const pm = document.getElementById("comp-prize-money");
+      if (pm) pm.value = 500000000;
+      const tv = document.getElementById("comp-tv-rights");
+      if (tv) tv.value = 3000000000;
+      await saveCompetitionToGame();
+    }
+
+    async function applyCleanNationGovernance() {
+      if (!state.activeNation) return;
+      state.activeNation.corruption_index = 0;
+      state.activeNation.game_importance = 20;
+      const nc = document.getElementById("nation-corruption");
+      if (nc) nc.value = 0;
+      const ng = document.getElementById("nation-game-importance");
+      if (ng) ng.value = 20;
+      updateDisp("disp-nation-corruption", 0);
+      updateDisp("disp-nation-importance", 20);
+      await saveNationToGame();
+      showToast("Clean Governance & Maximum Game Importance applied!", "success");
     }
 
     // Apply Player Preset
@@ -3218,6 +3720,7 @@
     }
 
     function autoSaveContract() {
+      markUnsaved();
       if (state.autoApply) {
         clearTimeout(state.saveTimeout);
         state.saveTimeout = setTimeout(() => {
@@ -3403,6 +3906,7 @@
 
     function cyclePosition(key) {
       if (!state.activePlayer) return;
+      markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
           gk: 1, dl: 1, dc: 1, dr: 1,
@@ -3426,6 +3930,7 @@
 
     function stepPosition(key, delta) {
       if (!state.activePlayer) return;
+      markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
           gk: 1, dl: 1, dc: 1, dr: 1,
@@ -3444,6 +3949,7 @@
 
     function handleFootSlider(foot, val) {
       if (!state.activePlayer) return;
+      markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
           gk: 1, dl: 1, dc: 1, dr: 1,
@@ -3497,6 +4003,7 @@
 
     // Club & Squad Management
     function autoSaveClub() {
+      state.clubDirty = true;
       if (state.autoApply) {
         clearTimeout(state.saveTimeout);
         state.saveTimeout = setTimeout(() => {
@@ -3539,6 +4046,7 @@
         });
         const data = await res.json();
         if (res.ok) {
+          state.clubDirty = false;
           showToast(`Saved ${state.activeClub.club_name} details & facilities!`, "success");
         } else {
           showToast(data.message || "Failed to save club", "error");
@@ -3786,6 +4294,10 @@
       setNationStatUI("nation-fac-avg", "disp-nation-fac-avg", nation.youth_facilities_avg ?? 15);
       setNationStatUI("nation-coaching-avg", "disp-nation-coaching-avg", nation.youth_coaching_avg ?? 15);
       setNationStatUI("nation-rec-avg", "disp-nation-rec-avg", nation.youth_recruitment_avg ?? 15);
+
+      // Update God Mode Target Badge
+      const godNationTarget = document.getElementById("god-nation-target");
+      if (godNationTarget) godNationTarget.innerText = `Target: ${nation.name || "Active Nation"}`;
     }
 
     function setNationStatUI(sliderId, dispId, val) {
@@ -3874,6 +4386,7 @@
 
     let nationSaveTimeout = null;
     function debouncedSaveNation() {
+      state.nationDirty = true;
       clearTimeout(nationSaveTimeout);
       nationSaveTimeout = setTimeout(() => {
         saveNationToGame(true);
@@ -3903,6 +4416,7 @@
         });
         const data = await res.json();
         if (res.ok) {
+          state.nationDirty = false;
           if (!isQuiet) showToast(`Saved ${state.activeNation.name} macro & youth factors!`, "success");
         } else {
           showToast(data.message || "Failed to save nation", "error");
@@ -4017,6 +4531,7 @@
         });
         const data = await res.json();
         if (res.ok) {
+          state.competitionDirty = false;
           showToast(`Saved ${state.activeCompetition.name} rules & prize money!`, "success");
         } else {
           showToast(data.message || "Failed to save competition rules", "error");

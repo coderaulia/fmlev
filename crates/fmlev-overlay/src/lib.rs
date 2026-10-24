@@ -248,38 +248,103 @@ mod tests {
     fn test_terminal_hud_render_all_tabs() {
         let mut state = OverlayState::new();
 
-        // Render Nation tab
+        // 1. Rebranded banner check
+        let banner_out = TerminalHud::render(&state);
+        assert!(banner_out.contains("FMLE by Vanaila - Football Manager 26 Live HUD"));
+
+        // 2. Render Player tab (Decoupled from club finances)
+        state.set_active_tab(OverlayTab::PlayerEditor);
+        let out_player = TerminalHud::render(&state);
+        assert!(out_player.contains("Player Details & Attributes"));
+        assert!(out_player.contains("Team:"));
+        assert!(out_player.contains("Manchester City"));
+        assert!(out_player.contains("Finishing:"));
+        assert!(out_player.contains("CA:"));
+        // Ensure no club finances in player tab!
+        assert!(!out_player.contains("Balance: $"));
+        assert!(!out_player.contains("Transfer Budget:"));
+
+        // 3. Render Positions tab
+        state.set_active_tab(OverlayTab::Positions);
+        let out_pos = TerminalHud::render(&state);
+        assert!(out_pos.contains("Player Positional Versatility & Footedness"));
+        assert!(out_pos.contains("Positions: ST:"));
+        assert!(out_pos.contains("Feet: Left Foot:"));
+        assert!(out_pos.contains("all_positions_20"));
+        assert!(out_pos.contains("both_feet_20"));
+
+        // 4. Render Club tab (Dedicated facilities & ownership)
+        state.set_active_tab(OverlayTab::ClubFinances);
+        let out_club = TerminalHud::render(&state);
+        assert!(out_club.contains("Club Facilities & Ownership"));
+        assert!(out_club.contains("Balance: $"));
+        assert!(out_club.contains("max_facilities"));
+        assert!(out_club.contains("foreground_sugar_daddy"));
+
+        // 5. Render Nation tab
         state.set_active_tab(OverlayTab::Nation);
         let out_nat = TerminalHud::render(&state);
         assert!(out_nat.contains("Nation Editor"));
         assert!(out_nat.contains("golden_generation"));
         assert!(out_nat.contains("max_youth_rating"));
 
-        // Render Competition tab
+        // 6. Render Competition tab
         state.set_active_tab(OverlayTab::Competition);
         let out_comp = TerminalHud::render(&state);
         assert!(out_comp.contains("Competition & Match Rules"));
         assert!(out_comp.contains("relax_rules"));
         assert!(out_comp.contains("five_subs"));
 
-        // Render Club tab
-        state.set_active_tab(OverlayTab::ClubFinances);
-        let out_club = TerminalHud::render(&state);
-        assert!(out_club.contains("Club Facilities & Ownership"));
-        assert!(out_club.contains("max_facilities"));
-        assert!(out_club.contains("foreground_sugar_daddy"));
-
-        // Render Affiliates tab
+        // 7. Render Affiliates tab
         state.set_active_tab(OverlayTab::Affiliates);
         let out_aff = TerminalHud::render(&state);
         assert!(out_aff.contains("Club Affiliate Network"));
 
-        // Render GodMode tab
+        // 8. Render GodMode tab
         state.set_active_tab(OverlayTab::GodMode);
         let out_god = TerminalHud::render(&state);
         assert!(out_god.contains("Heal Squad"));
         assert!(out_god.contains("Golden Generation"));
         assert!(out_god.contains("Relax Competition Rules"));
+    }
+
+    #[test]
+    fn test_player_and_position_macros() {
+        let mut controller = TerminalHudController::new();
+
+        // Switch to player tab and select player
+        let res_p = controller.execute_command("player 8000");
+        assert!(res_p.success);
+        assert_eq!(controller.state.active_tab, OverlayTab::PlayerEditor);
+        assert_eq!(controller.state.selected_player_id, Some(8000));
+
+        // Switch to positions tab
+        let res_pos = controller.execute_command("positions");
+        assert!(res_pos.success);
+        assert_eq!(controller.state.active_tab, OverlayTab::Positions);
+
+        // Test all_positions_20 macro
+        let res_all = controller.execute_command("all_positions_20");
+        assert!(res_all.success);
+        let p = controller.state.active_player.as_ref().unwrap();
+        assert_eq!(p.positions.st, 20);
+        assert_eq!(p.positions.dc, 20);
+        assert_eq!(p.positions.left_foot, 20);
+        assert_eq!(p.positions.right_foot, 20);
+
+        // Test pure_striker macro
+        let res_striker = controller.execute_command("pure_striker");
+        assert!(res_striker.success);
+        let p2 = controller.state.active_player.as_ref().unwrap();
+        assert_eq!(p2.positions.st, 20);
+        assert_eq!(p2.positions.aml, 14);
+
+        // Test both_feet_20 macro
+        let res_feet = controller.execute_command("both_feet_20");
+        assert!(res_feet.success);
+        let p3 = controller.state.active_player.as_ref().unwrap();
+        assert_eq!(p3.positions.left_foot, 20);
+        assert_eq!(p3.positions.right_foot, 20);
     }
 
     #[test]

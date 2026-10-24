@@ -120,11 +120,11 @@ impl OverlayLauncher {
         Ok(child)
     }
 
-    /// Prints instructions for configuring Linux Window Managers to keep fmlev overlay always on top
+    /// Prints instructions for configuring Linux Window Managers to keep FMLE overlay always on top
     pub fn window_manager_tips() -> &'static str {
         r#"
 ======================================================================
-  FMLEV LINUX OVERLAY - ALWAYS ON TOP WINDOW MANAGER GUIDE
+  FMLE by Vanaila - ALWAYS ON TOP LINUX HUD OVERLAY GUIDE
 ======================================================================
 The overlay window uses WM_CLASS / app_id: 'fmlev-overlay'.
 To pin this window on top of Football Manager 26:

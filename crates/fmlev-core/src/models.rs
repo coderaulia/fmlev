@@ -90,9 +90,12 @@ impl PlayerPositions {
         }
         for part in u.split(',') {
             let s = part.trim();
-            let has_l = s.contains("(L") || s.contains("L)") || s.contains("LC") || s.contains("RL");
-            let has_r = s.contains("(R") || s.contains("R)") || s.contains("RC") || s.contains("RL");
-            let has_c = s.contains("(C") || s.contains("C)") || (!has_l && !has_r);
+            let has_l = s.contains("(L") || s.contains("L)") || s.contains("LC") || s.contains("RL")
+                || s.ends_with("L") || s.contains(" L") || s.contains("/L");
+            let has_r = s.contains("(R") || s.contains("R)") || s.contains("RC") || s.contains("RL")
+                || s.ends_with("R") || s.contains(" R") || s.contains("/R");
+            let has_c = s.contains("(C") || s.contains("C)") || s.ends_with("C") || s.contains(" C") || s.contains("/C")
+                || (!has_l && !has_r);
 
             if s.starts_with("D/WB") || s.contains("D/WB") {
                 if has_l { p.dl = 20; p.wbl = 20; p.ml = 12; }
@@ -103,7 +106,7 @@ impl PlayerPositions {
                 if has_r { p.dr = 20; p.wbr = 14; }
                 if has_c { p.dc = 20; }
             }
-            if s.contains("WB") {
+            if s.contains("WB") && !s.contains("D/WB") {
                 if has_l { p.wbl = 20; p.dl = p.dl.max(15); }
                 if has_r { p.wbr = 20; p.dr = p.dr.max(15); }
             }
@@ -115,12 +118,14 @@ impl PlayerPositions {
                 if has_l { p.ml = 20; p.aml = 20; }
                 if has_r { p.mr = 20; p.amr = 20; }
                 if has_c { p.mc = 20; p.amc = 20; }
-            } else if (s.starts_with("M ") || s == "M" || s.starts_with("M(") || s.contains(" M (")) && !s.contains("AM") && !s.contains("DM") {
+            } else if (s.starts_with("M ") || s == "M" || s.starts_with("M(") || s.contains(" M (") || s == "MC" || s == "ML" || s == "MR")
+                && !s.contains("AM") && !s.contains("DM")
+            {
                 if has_l { p.ml = 20; p.aml = p.aml.max(14); }
                 if has_r { p.mr = 20; p.amr = p.amr.max(14); }
                 if has_c { p.mc = 20; p.dm = p.dm.max(14); }
             }
-            if s.contains("AM") {
+            if s.contains("AM") && !s.contains("M/AM") {
                 if has_l { p.aml = 20; p.ml = p.ml.max(14); }
                 if has_r { p.amr = 20; p.mr = p.mr.max(14); }
                 if has_c { p.amc = 20; p.mc = p.mc.max(14); }
@@ -254,6 +259,8 @@ pub struct Player {
     pub is_suspended: bool,
     #[serde(default)]
     pub contract: PlayerContract,
+    #[serde(default)]
+    pub user_modified: bool,
 }
 
 impl Player {
@@ -309,6 +316,7 @@ impl Player {
             is_injured: condition < 5000,
             is_suspended: false,
             contract: PlayerContract::default(),
+            user_modified: false,
         })
     }
 
@@ -1283,5 +1291,15 @@ mod tests {
         assert_eq!(roundtrip.st, 20);
         assert_eq!(roundtrip.aml, 20);
         assert_eq!(roundtrip.amr, 20);
+
+        let p_dr = PlayerPositions::from_position_string("D (R)");
+        assert_eq!(p_dr.dr, 20);
+        assert_eq!(p_dr.dl, 1);
+        assert_eq!(p_dr.dc, 1);
+
+        let p_dr2 = PlayerPositions::from_position_string("D(R)");
+        assert_eq!(p_dr2.dr, 20);
+        assert_eq!(p_dr2.dl, 1);
+        assert_eq!(p_dr2.dc, 1);
     }
 }

@@ -21,7 +21,7 @@ impl TerminalHud {
             "{bold}{cyan}╔══════════════════════════════════════════════════════════════════════════════╗{reset}\n"
         ));
         out.push_str(&format!(
-            "{bold}{cyan}║       FMLEV 26 - FOOTBALL MANAGER 26 LIVE EDITOR & HUD OVERLAY (LINUX)       ║{reset}\n"
+            "{bold}{cyan}║                FMLE by Vanaila - Football Manager 26 Live HUD                ║{reset}\n"
         ));
         out.push_str(&format!(
             "{bold}{cyan}╠══════════════════════════════════════════════════════════════════════════════╣{reset}\n"
@@ -80,6 +80,100 @@ impl TerminalHud {
 
         // Content per active tab
         match state.active_tab {
+            OverlayTab::PlayerEditor => {
+                out.push_str("║ [Tab: Player Details & Attributes]                                           ║\n");
+                let default_p = OverlayState::default_preview_player();
+                let p = state.active_player.as_ref().unwrap_or(&default_p);
+                let p_name = if p.name.is_empty() { "Active Player" } else { p.name.as_str() };
+                let p_club = if p.club_name.is_empty() { "Unattached" } else { p.club_name.as_str() };
+                let p_nat = if p.nationality.is_empty() { "Unknown" } else { p.nationality.as_str() };
+                let p_pos = if p.position.is_empty() { "M (C)" } else { p.position.as_str() };
+                let cond_pct = p.condition as f32 / 100.0;
+                let sharp_pct = p.sharpness as f32 / 100.0;
+
+                out.push_str(&format!(
+                    "║ Player: {bold}{gold}{:<16}{reset} [ID: {:<5}] | Age: {:<2} | Nat: {:<17}║\n",
+                    p_name, p.id, p.age, p_nat
+                ));
+                out.push_str(&format!(
+                    "║ Team: {bold}{cyan}{:<18}{reset} | Pos: {:<14} | Morale: {:<15}║\n",
+                    p_club, p_pos, if p.morale_label.is_empty() { "Superb".to_string() } else { format!("{} ({})", p.morale_label, p.morale) }
+                ));
+                out.push_str(&format!(
+                    "║ CA: {bold}{emerald}{:<3}/200{reset} | PA: {bold}{emerald}{:<3}/200{reset} | Cond: {:<5.1}% | Sharp: {:<5.1}% | Injured: {:<5}║\n",
+                    p.current_ability, p.potential_ability, cond_pct, sharp_pct, if p.is_injured { "YES" } else { "NO" }
+                ));
+                out.push_str(&format!(
+                    "{bold}{cyan}╠══════════════════════════════════════════════════════════════════════════════╣{reset}\n"
+                ));
+                out.push_str("║ Key Attributes:                                                              ║\n");
+                out.push_str(&format!(
+                    "║   Finishing: {:<2} | Pace: {:<2} | Accel: {:<2} | Passing: {:<2} | Dribbling: {:<2}          ║\n",
+                    p.attributes.finishing, p.attributes.pace, p.attributes.acceleration, p.attributes.passing, p.attributes.dribbling
+                ));
+                out.push_str(&format!(
+                    "║   Tackling:  {:<2} | Dec:  {:<2} | Comp:  {:<2} | Det:     {:<2} | Work Rate: {:<2}          ║\n",
+                    p.attributes.tackling, p.attributes.decisions, p.attributes.composure, p.attributes.determination, p.attributes.work_rate
+                ));
+                out.push_str(&format!(
+                    "{bold}{cyan}╠══════════════════════════════════════════════════════════════════════════════╣{reset}\n"
+                ));
+                out.push_str("║ Player Quick Actions:                                                        ║\n");
+                out.push_str(&format!(
+                    "║   {bold}[H]{reset} ⚡ heal_player   (Restore 100% Condition & Match Sharpness)             ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[M]{reset} 🔥 max_morale    (Set Morale to Superb 100)                             ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[F]{reset} 🛡️ clear_fatigue (Clear Match Fatigue & Suspensions)                    ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[P]{reset} ⭐ max_ability   (Set CA 200 & PA 200)                                  ║\n"
+                ));
+            }
+            OverlayTab::Positions => {
+                out.push_str("║ [Tab: Player Positional Versatility & Footedness]                            ║\n");
+                let default_p = OverlayState::default_preview_player();
+                let p = state.active_player.as_ref().unwrap_or(&default_p);
+                let p_name = if p.name.is_empty() { "Active Player" } else { p.name.as_str() };
+                let p_club = if p.club_name.is_empty() { "Unattached" } else { p.club_name.as_str() };
+                let pos_str = if p.position.is_empty() { "M (C)" } else { p.position.as_str() };
+                let pos = &p.positions;
+
+                out.push_str(&format!(
+                    "║ Player: {bold}{gold}{:<16}{reset} | Team: {bold}{cyan}{:<18}{reset} | Natural: {:<13}║\n",
+                    p_name, p_club, pos_str
+                ));
+                out.push_str(&format!(
+                    "║ Positions: ST: {:<2} | AM(C): {:<2} | AM(L): {:<2} | AM(R): {:<2} | M(C): {:<2} | DM: {:<2}       ║\n",
+                    pos.st, pos.amc, pos.aml, pos.amr, pos.mc, pos.dm
+                ));
+                out.push_str(&format!(
+                    "║            D(C): {:<2}| D(L):   {:<2}| D(R):   {:<2}| WB(L): {:<2}| WB(R): {:<2}| GK: {:<2}        ║\n",
+                    pos.dc, pos.dl, pos.dr, pos.wbl, pos.wbr, pos.gk
+                ));
+                out.push_str(&format!(
+                    "║ Feet: Left Foot: {bold}{cyan}{:<2}/20{reset} | Right Foot: {bold}{cyan}{:<2}/20{reset}                                      ║\n",
+                    pos.left_foot, pos.right_foot
+                ));
+                out.push_str(&format!(
+                    "{bold}{cyan}╠══════════════════════════════════════════════════════════════════════════════╣{reset}\n"
+                ));
+                out.push_str("║ Position Quick Actions & Macros:                                             ║\n");
+                out.push_str(&format!(
+                    "║   {bold}[A]{reset} 🌟 all_positions_20 (Natural 20 in Every Position on the Pitch)        ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[B]{reset} 👣 both_feet_20     (20 Left Foot & 20 Right Foot)                    ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[S]{reset} ⚽ pure_striker     (Natural 20 Striker Rating)                       ║\n"
+                ));
+                out.push_str(&format!(
+                    "║   {bold}[W]{reset} 🚀 universal_winger (Natural 20 on Both Flanks: AML/AMR/ML/MR/WBL/WBR) ║\n"
+                ));
+            }
             OverlayTab::Nation => {
                 out.push_str("║ [Tab: Nation Editor & Development Rating]                                    ║\n");
                 let nat = state.active_nation.as_ref();
@@ -151,10 +245,13 @@ impl TerminalHud {
                 out.push_str("║ [Tab: Club Facilities & Ownership]                                           ║\n");
                 let club = state.active_club.as_ref();
                 let club_name = club.map(|c| if c.club_name.is_empty() { "Active Club" } else { c.club_name.as_str() }).unwrap_or("Active Club");
+                let balance = club.map(|c| c.balance).unwrap_or(150_000_000);
+                let transfer = club.map(|c| c.transfer_budget).unwrap_or(50_000_000);
+                let wage = club.map(|c| c.wage_budget).unwrap_or(2_500_000);
                 let tf = club.map(|c| c.training_facilities).unwrap_or(10);
                 let yf = club.map(|c| c.youth_facilities).unwrap_or(10);
-                let yr = club.map(|c| c.youth_recruitment).unwrap_or(10);
                 let jc = club.map(|c| c.junior_coaching).unwrap_or(10);
+                let da = club.map(|c| c.data_analysis_facilities).unwrap_or(10);
                 let sd = club.map(|c| c.sugar_daddy_type.as_str()).unwrap_or("None");
 
                 out.push_str(&format!(
@@ -162,8 +259,12 @@ impl TerminalHud {
                     club_name, sd
                 ));
                 out.push_str(&format!(
-                    "║ Facilities: Training: {:<2}/20 | Youth: {:<2}/20 | Recruitment: {:<2}/20 | Coaching: {:<2}/20║\n",
-                    tf, yf, yr, jc
+                    "║ Balance: ${:<12} | Transfer: ${:<11} | Wage: ${:<8}/wk       ║\n",
+                    balance, transfer, wage
+                ));
+                out.push_str(&format!(
+                    "║ Facilities: Training: {:<2}/20 | Youth: {:<2}/20 | Coaching: {:<2}/20 | Analysis: {:<2}/20  ║\n",
+                    tf, yf, jc, da
                 ));
                 out.push_str(&format!(
                     "{bold}{cyan}╠══════════════════════════════════════════════════════════════════════════════╣{reset}\n"

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use fmlev_core::{ClubAffiliate, ClubFinances, CompetitionDetails, NationDetails};
+use fmlev_core::{ClubAffiliate, ClubFinances, CompetitionDetails, NationDetails, Player};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -15,6 +15,7 @@ pub enum OverlayTab {
     #[default]
     GodMode,
     PlayerEditor,
+    Positions,
     ClubFinances,
     Nation,
     Competition,
@@ -62,6 +63,8 @@ pub struct OverlayState {
     pub selected_competition_id: Option<i32>,
     pub selected_competition_ptr: Option<usize>,
     #[serde(default)]
+    pub active_player: Option<Player>,
+    #[serde(default)]
     pub active_nation: Option<NationDetails>,
     #[serde(default)]
     pub active_competition: Option<CompetitionDetails>,
@@ -92,6 +95,7 @@ impl Default for OverlayState {
             selected_nation_ptr: None,
             selected_competition_id: None,
             selected_competition_ptr: None,
+            active_player: None,
             active_nation: None,
             active_competition: None,
             active_club: None,
@@ -183,6 +187,69 @@ impl OverlayState {
 
     pub fn clear_notifications(&mut self) {
         self.notifications.clear();
+    }
+
+    pub fn select_player(&mut self, id: i32, ptr: Option<usize>) {
+        self.selected_player_id = Some(id);
+        self.selected_player_ptr = ptr;
+        let mut p = self.active_player.clone().unwrap_or_else(Self::default_preview_player);
+        p.id = id;
+        self.active_player = Some(p);
+        self.add_notification(
+            "Player Selected",
+            &format!("Active player set to ID {}", id),
+            NotificationLevel::Info,
+        );
+    }
+
+    pub fn set_active_player(&mut self, player: Player) {
+        self.selected_player_id = Some(player.id);
+        self.active_player = Some(player);
+    }
+
+    pub fn default_preview_player() -> Player {
+        Player {
+            id: 8000,
+            name: "Erling Haaland".to_string(),
+            club_id: 102,
+            current_ability: 195,
+            potential_ability: 200,
+            condition: 10000,
+            sharpness: 10000,
+            morale: 100,
+            age: 24,
+            nationality: "Norway".to_string(),
+            position: "ST (C)".to_string(),
+            positions: fmlev_core::PlayerPositions {
+                st: 20,
+                amc: 12,
+                aml: 10,
+                amr: 10,
+                mc: 10,
+                left_foot: 20,
+                right_foot: 15,
+                ..Default::default()
+            },
+            club_name: "Manchester City".to_string(),
+            morale_label: "Superb".to_string(),
+            is_injured: false,
+            is_suspended: false,
+            contract: fmlev_core::PlayerContract::default(),
+            attributes: fmlev_core::PlayerAttributes {
+                finishing: 20,
+                pace: 19,
+                acceleration: 18,
+                dribbling: 15,
+                passing: 14,
+                tackling: 7,
+                decisions: 17,
+                composure: 18,
+                determination: 19,
+                work_rate: 16,
+                ..Default::default()
+            },
+            user_modified: false,
+        }
     }
 
     pub fn select_nation(&mut self, id: i32, ptr: Option<usize>) {

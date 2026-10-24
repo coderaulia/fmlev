@@ -2161,4 +2161,89 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
     }
+
+    #[tokio::test]
+    async fn test_player_update_persists_across_context_polls() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let state = ServerState {
+            inner: Arc::new(RwLock::new(AppState::default())),
+        };
+        let app = create_router(state.clone());
+
+        // 1. Select player 73 (Zulkifli Lukmansyah)
+        let select_body = serde_json::to_string(&serde_json::json!({
+            "player_id": 73
+        })).unwrap();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/context/select")
+            .header("content-type", "application/json")
+            .body(Body::from(select_body))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Verify player is Zulkifli Lukmansyah at Persib
+        {
+            let r = state.inner.read().await;
+            assert_eq!(r.context_mgr.context.player.id, 73);
+            assert_eq!(r.context_mgr.context.player.name, "Zulkifli Lukmansyah");
+            assert_eq!(r.context_mgr.context.player.club_name, "Persib");
+            assert_eq!(r.context_mgr.context.club.club_name, "Persib");
+        }
+
+        // 2. User edits player attributes via /api/player/update
+        let mut p = {
+            let r = state.inner.read().await;
+            r.context_mgr.context.player.clone()
+        };
+        p.attributes.finishing = 20;
+        p.attributes.passing = 20;
+        p.attributes.pace = 20;
+        p.current_ability = 195;
+
+        let update_body = serde_json::to_string(&p).unwrap();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/player/update")
+            .header("content-type", "application/json")
+            .body(Body::from(update_body))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Verify player was marked user_modified
+        {
+            let r = state.inner.read().await;
+            assert!(r.context_mgr.context.player.user_modified);
+            assert!(r.context_mgr.user_modified_players.contains(&73));
+            assert_eq!(r.context_mgr.context.player.attributes.finishing, 20);
+        }
+
+        // 3. Simulate continuous UI polling of /api/context (which calls sync_live_context)
+        for _ in 0..5 {
+            let req = Request::builder()
+                .method("GET")
+                .uri("/api/context")
+                .body(Body::empty())
+                .unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+
+            let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+            let json_val: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+            assert_eq!(json_val["player"]["id"], 73);
+            assert_eq!(json_val["player"]["attributes"]["finishing"], 20);
+            assert_eq!(json_val["player"]["attributes"]["passing"], 20);
+            assert_eq!(json_val["player"]["attributes"]["pace"], 20);
+            assert_eq!(json_val["player"]["current_ability"], 195);
+            assert_eq!(json_val["player"]["club_name"], "Persib");
+            assert_eq!(json_val["player"]["user_modified"], true);
+            assert_eq!(json_val["club"]["club_name"], "Persib");
+        }
+    }
 }

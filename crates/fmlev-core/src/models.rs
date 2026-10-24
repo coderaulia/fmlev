@@ -356,6 +356,12 @@ impl Player {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PlayerAttributes {
+    #[serde(default)] pub marking: u8,
+    #[serde(default)] pub long_throws: u8,
+    #[serde(default)] pub punching: u8,
+    #[serde(default)] pub dirtiness: u8,
+    #[serde(default)] pub controversy: u8,
+
     // Technical
     #[serde(default)] pub corners: u8,
     #[serde(default)] pub crossing: u8,

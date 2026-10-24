@@ -50,7 +50,11 @@
 
 ---
 
-Live write support is currently limited to validated player positions and foot ratings.
+Live player writes support positions, foot ratings, all 60 exposed attributes
+(technical, mental, physical, goalkeeper and hidden/personality), CA/PA,
+and validated weekly wages (GBP) and contract expiry years. Open one Attributes profile in FM26, then use
+**Scan Loaded Players** to index native records for name search and editing without
+opening every profile. The live scan indexed 49,467 players in the tested save.
 Other entity saves return an explicit unsupported error until their native layouts
 are verified. See [live verification and limitations](LIVE_READ_WRITE.md).
 

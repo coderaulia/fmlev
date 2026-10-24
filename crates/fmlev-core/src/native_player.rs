@@ -2,7 +2,7 @@
 //! No managed reference is ever accepted as a native record.
 use crate::{
     error::{CoreError, Result},
-    models::PlayerPositions,
+    models::{Player, PlayerAttributes, PlayerPositions},
 };
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
@@ -13,6 +13,102 @@ const PERSON: usize = 0x140;
 const INDEX: usize = PERSON + 8;
 const UID: usize = PERSON + 12;
 
+pub struct NativeAttribute {
+    pub name: &'static str,
+    offset: usize,
+    scale: u8,
+    pub get: fn(&PlayerAttributes) -> u8,
+    pub set: fn(&mut PlayerAttributes, u8),
+}
+
+macro_rules! attributes {
+    ($name:ident; $($field:ident: $offset:literal => $scale:literal),+ $(,)?) => {
+        pub const $name: &[NativeAttribute] = &[$(NativeAttribute {
+            name: stringify!($field), offset: $offset, scale: $scale,
+            get: |a| a.$field, set: |a, value| a.$field = value,
+        }),+];
+    };
+}
+
+// Native ratings use a 0..100 scale with nearest-integer 1..20 presentation.
+// This block was correlated against independent bindings for Dion and Zulkifli.
+// Every record must also pass the complete observed-attribute check below.
+attributes! { NATIVE_OUTFIELD_ATTRIBUTES;
+    crossing: 0x17 => 5, dribbling: 0x18 => 5, finishing: 0x19 => 5, heading: 0x1a => 5,
+    long_shots: 0x1b => 5, off_the_ball: 0x1d => 5, passing: 0x1e => 5,
+    penalty_taking: 0x1f => 5, tackling: 0x20 => 5, vision: 0x21 => 5,
+    anticipation: 0x28 => 5, decisions: 0x29 => 5, positioning: 0x2b => 5,
+    first_touch: 0x2d => 5, technique: 0x2e => 5, flair: 0x31 => 5, corners: 0x32 => 5,
+    teamwork: 0x33 => 5, work_rate: 0x34 => 5, acceleration: 0x39 => 5,
+    free_kicks: 0x3a => 5, strength: 0x3b => 5, stamina: 0x3c => 5, pace: 0x3d => 5,
+    jumping_reach: 0x3e => 5, leadership: 0x3f => 5, balance: 0x41 => 5, bravery: 0x42 => 5,
+    aggression: 0x44 => 5, agility: 0x45 => 5, natural_fitness: 0x49 => 5,
+    determination: 0x4a => 5, composure: 0x4b => 5, concentration: 0x4c => 5,
+}
+
+// Relative offsets corroborated by FMSuperScout's native field map. Our validated
+// player subobject is 0x148 bytes after its plao base. No third-party code copied.
+attributes! { NATIVE_EXTRA_ATTRIBUTES;
+    marking: 0x1c => 5, handling: 0x22 => 5, aerial_reach: 0x23 => 5,
+    command_of_area: 0x24 => 5, communication: 0x25 => 5, kicking: 0x26 => 5,
+    throwing: 0x27 => 5, one_on_ones: 0x2a => 5, reflexes: 0x2c => 5,
+    long_throws: 0x35 => 5, eccentricity: 0x36 => 5, rushing_out: 0x37 => 5,
+    punching: 0x38 => 5, dirtiness: 0x40 => 5, consistency: 0x43 => 5,
+    important_matches: 0x46 => 5, injury_proneness: 0x47 => 5, versatility: 0x48 => 5,
+    adaptability: 0x1b0 => 1, ambition: 0x1b1 => 1, loyalty: 0x1b2 => 1,
+    pressure: 0x1b3 => 1, professionalism: 0x1b4 => 1, sportsmanship: 0x1b5 => 1,
+    temperament: 0x1b6 => 1, controversy: 0x1b7 => 1,
+}
+
+pub fn native_attributes() -> impl Iterator<Item = &'static NativeAttribute> {
+    NATIVE_OUTFIELD_ATTRIBUTES.iter().chain(NATIVE_EXTRA_ATTRIBUTES.iter())
+}
+
+impl NativeAttribute {
+    fn decode(&self, raw: u8) -> Result<u8> {
+        if self.scale == 5 { displayed_rating(raw) }
+        else if raw <= 20 { Ok(raw) }
+        else { Err(invalid(&format!("Native {} is outside the verified personality scale", self.name))) }
+    }
+}
+
+fn displayed_rating(raw: u8) -> Result<u8> {
+    if raw > 100 {
+        return Err(invalid("Native attribute exceeded the verified 0..100 scale"));
+    }
+    Ok(((raw as u16 + 2) / 5).max(1) as u8)
+}
+
+struct NativeEdit { address: usize, old: Vec<u8>, next: Vec<u8> }
+
+impl NativeEdit {
+    fn capture(driver: &LinuxMemoryDriver, address: usize, next: Vec<u8>) -> Result<Self> {
+        let mut old = vec![0; next.len()];
+        if driver.read_bytes(address, &mut old)? != old.len() { return Err(invalid("Short native edit snapshot")); }
+        Ok(Self { address, old, next })
+    }
+}
+
+#[derive(Clone, Copy)]
+struct NativeContract { address: usize, vtable: usize }
+
+fn leap(year: u32) -> bool { year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) }
+
+fn expiry_with_year(raw: u32, year: i32) -> Result<u32> {
+    let old_year = raw >> 16;
+    let mut day = raw & 0x1ff;
+    if !(2000..=2200).contains(&old_year) || !(2000..=2200).contains(&year)
+        || day == 0 || day > if leap(old_year) { 366 } else { 365 }
+    { return Err(invalid("Contract expiry is not a valid FM calendar date")); }
+    let mut month = 0;
+    let mut days = [31, if leap(old_year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    while day > days[month] { day -= days[month]; month += 1; }
+    days[1] = if leap(year as u32) { 29 } else { 28 };
+    day = day.min(days[month]);
+    let new_day = days[..month].iter().sum::<u32>() + day;
+    Ok(((year as u32) << 16) | (raw & 0xfe00) | new_day)
+}
+
 #[derive(Debug, Clone)]
 pub struct NativePlayerRecord {
     address: usize,
@@ -21,6 +117,7 @@ pub struct NativePlayerRecord {
     uid: u32,
     player_vtable: usize,
     person_vtable: usize,
+    attributes_verified: bool,
 }
 
 fn invalid(message: &str) -> CoreError {
@@ -105,6 +202,7 @@ impl NativePlayerRecord {
                 uid,
                 player_vtable,
                 person_vtable,
+                attributes_verified: false,
             };
             if record.validate(driver).is_err() {
                 continue;
@@ -192,6 +290,246 @@ impl NativePlayerRecord {
             left_foot: left / 5,
             right_foot: right / 5,
         })
+    }
+
+    pub fn attributes_verified(&self) -> bool { self.attributes_verified }
+
+    pub fn index(&self) -> i32 { self.index }
+
+    /// Native name records are pooled references to length-prefixed UTF-8 strings.
+    /// These are read-only: editing pooled strings would rename other people too.
+    pub fn name(&self, driver: &LinuxMemoryDriver) -> Result<String> {
+        self.validate(driver)?;
+        let mut names = Vec::new();
+        for offset in [0x190, 0x198] {
+            let reference = driver.read_ptr(self.address + offset)?;
+            if reference == 0 { continue; }
+            let string = driver.read_ptr(reference)?;
+            if string == 0 { continue; }
+            let length = driver.read::<u32>(string)? as usize;
+            if length == 0 { continue; }
+            if length > 256 { return Err(invalid("Native player name length is invalid")); }
+            let mut bytes = vec![0u8; length];
+            if driver.read_bytes(string + 4, &mut bytes)? != length { return Err(invalid("Short native name read")); }
+            let name = String::from_utf8(bytes).map_err(|_| invalid("Native player name is not UTF-8"))?;
+            if name.chars().any(char::is_control) { return Err(invalid("Native player name contains control characters")); }
+            names.push(name);
+        }
+        if names.is_empty() { return Err(invalid("Native player has no readable name")); }
+        Ok(names.join(" "))
+    }
+
+    /// Bootstrap the loaded database from a record independently validated against
+    /// game bindings. Both native C++ vtables must match that record's type; each
+    /// candidate still validates its own index, duplicate UID, positions and ratings.
+    pub fn discover_loaded(&self, driver: &LinuxMemoryDriver) -> Result<Vec<Self>> {
+        self.validate(driver)?;
+        if !self.attributes_verified { return Err(invalid("Open one player's Attributes screen first to calibrate the native player layout")); }
+        let pattern = self.player_vtable.to_le_bytes().iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+        let mut found = std::collections::HashMap::<i32, Option<Self>>::new();
+        for address in driver.scan_aob(&pattern)? {
+            let Ok(candidate) = self.peer_at(driver, address) else { continue; };
+            found.entry(candidate.index).and_modify(|record| *record = None).or_insert(Some(candidate));
+        }
+        self.validate(driver)?;
+        Ok(found.into_values().flatten().collect())
+    }
+
+    fn peer_at(&self, driver: &LinuxMemoryDriver, address: usize) -> Result<Self> {
+        self.validate(driver)?;
+        if !self.attributes_verified || address % 8 != 0 { return Err(invalid("Uncalibrated native player type or unaligned address")); }
+        let index = driver.read::<i32>(address + INDEX)?;
+        let uid = driver.read::<u32>(address + UID)?;
+        if index <= 0 || uid == 0 { return Err(invalid("Invalid native player identity")); }
+        let candidate = Self { address, index, uid, ..self.clone() };
+        candidate.validate(driver)?;
+        candidate.read_positions(driver)?;
+        candidate.refresh_attributes(driver, &mut PlayerAttributes::default())?;
+        candidate.name(driver)?;
+        Ok(candidate)
+    }
+
+    /// Independently match every visible outfield attribute before accepting this layout.
+    pub fn verify_attributes(&mut self, driver: &LinuxMemoryDriver, observed: &PlayerAttributes) -> Result<()> {
+        self.validate(driver)?;
+        for field in NATIVE_OUTFIELD_ATTRIBUTES {
+            let expected = (field.get)(observed);
+            if !(1..=20).contains(&expected)
+                || displayed_rating(driver.read::<u8>(self.address + field.offset)?)? != expected
+            {
+                return Err(invalid(&format!("Cannot verify native {} for this player; open the Attributes screen in FM26 and refresh", field.name)));
+            }
+        }
+        self.attributes_verified = true;
+        Ok(())
+    }
+
+    pub fn refresh_attributes(&self, driver: &LinuxMemoryDriver, attributes: &mut PlayerAttributes) -> Result<()> {
+        self.validate(driver)?;
+        if !self.attributes_verified { return Err(invalid("Native attributes have not been verified for this player")); }
+        // Read all before publishing, so an invalid byte never produces a partial update.
+        let values: Vec<u8> = native_attributes().map(|field|
+            field.decode(driver.read::<u8>(self.address + field.offset)?)).collect::<Result<_>>()?;
+        for (field, value) in native_attributes().zip(values) { (field.set)(attributes, value); }
+        Ok(())
+    }
+
+    fn contract(&self, driver: &LinuxMemoryDriver) -> Result<NativeContract> {
+        self.validate(driver)?;
+        let address = driver.read_ptr(self.address + 0x1e8)?;
+        if address <= 0x10000 { return Err(invalid("Player has no native full contract")); }
+        let vtable = driver.read_ptr(address)?;
+        let maps = parse_process_maps(driver.pid())?;
+        if !maps.iter().any(|m| m.is_rw_private() && address >= m.start && address.checked_add(0x60).is_some_and(|end| end <= m.end))
+            || !maps.iter().any(|m| m.is_readable() && !m.is_writable() && vtable >= m.start && vtable.checked_add(8).is_some_and(|end| end <= m.end))
+            || !maps.iter().any(|m| m.is_executable() && driver.read_ptr(vtable).is_ok_and(|p| p >= m.start && p < m.end))
+        { return Err(invalid("Native contract memory/type validation failed")); }
+        let contract = NativeContract { address, vtable };
+        self.validate_contract(driver, contract)?;
+        let expiry = driver.read::<u32>(address + 0x48)?;
+        expiry_with_year(expiry, (expiry >> 16) as i32)?;
+        Ok(contract)
+    }
+
+    fn validate_contract(&self, driver: &LinuxMemoryDriver, contract: NativeContract) -> Result<()> {
+        self.validate(driver)?;
+        if driver.read_ptr(self.address + 0x1e8)? != contract.address
+            || driver.read_ptr(contract.address)? != contract.vtable
+            || driver.read_ptr(contract.address + 8)? != self.address + PERSON
+        { return Err(invalid("Native contract ownership changed")); }
+        Ok(())
+    }
+
+    pub fn refresh_player_fields(&self, driver: &LinuxMemoryDriver, player: &mut Player) -> Result<()> {
+        self.refresh_attributes(driver, &mut player.attributes)?;
+        let ca = driver.read::<u16>(self.address + 0x11c)?;
+        let pa = driver.read::<u16>(self.address + 0x11e)?;
+        player.current_ability = if (1..=200).contains(&ca) { ca as u8 } else { 0 };
+        player.potential_ability = if (1..=200).contains(&pa) { pa as u8 } else { 0 };
+        if let Ok(contract) = self.contract(driver) {
+            let wage = driver.read::<u32>(contract.address + 0x20)?;
+            player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);
+            player.contract.expiry_year = (driver.read::<u32>(contract.address + 0x48)? >> 16) as i32;
+        } else {
+            player.contract.wage_per_week = 0;
+            player.contract.expiry_year = 0;
+        }
+        Ok(())
+    }
+
+    pub fn has_contract(&self, driver: &LinuxMemoryDriver) -> bool { self.contract(driver).is_ok() }
+
+    /// Apply changed positions/attributes in one checked transaction. Keep exact old
+    /// bytes for rollback, including fractional (e.g. 53/100) native attributes.
+    pub fn write_player_edits(&self, driver: &LinuxMemoryDriver, previous: &Player, requested: &Player) -> Result<()> {
+        self.validate(driver)?;
+        let mut edits = Vec::new();
+        for field in native_attributes() {
+            if (field.get)(&previous.attributes) != (field.get)(&requested.attributes) {
+                if !self.attributes_verified { return Err(invalid("Open this player's Attributes screen in FM26 to verify the native attribute layout")); }
+                let rating = (field.get)(&requested.attributes);
+                if !(1..=20).contains(&rating) { return Err(invalid(&format!("{} must be between 1 and 20", field.name))); }
+                let old = driver.read::<u8>(self.address + field.offset)?;
+                field.decode(old)?;
+                edits.push((field.offset, old, rating * field.scale));
+            }
+        }
+        macro_rules! position {
+            ($field:ident, $offset:expr, $scale:expr) => {
+                if previous.positions.$field != requested.positions.$field {
+                    let value = requested.positions.$field;
+                    if !(1..=20).contains(&value) { return Err(invalid(concat!(stringify!($field), " must be between 1 and 20"))); }
+                    let old = driver.read::<u8>(self.address + $offset)?;
+                    edits.push(($offset, old, value * $scale));
+                }
+            };
+        }
+        // SW is absent from the model and never touched.
+        position!(gk, 8, 1); position!(dl, 10, 1); position!(dc, 11, 1);
+        position!(dr, 12, 1); position!(dm, 13, 1); position!(ml, 14, 1);
+        position!(mc, 15, 1); position!(mr, 16, 1); position!(aml, 17, 1);
+        position!(amc, 18, 1); position!(amr, 19, 1); position!(st, 20, 1);
+        position!(wbl, 21, 1); position!(wbr, 22, 1);
+        position!(left_foot, LEFT_FOOT, 5); position!(right_foot, RIGHT_FOOT, 5);
+        let mut patches: Vec<NativeEdit> = edits.into_iter().map(|(offset, old, next)| NativeEdit {
+            address: self.address + offset, old: vec![old], next: vec![next],
+        }).collect();
+        for (before, next, offset, name) in [
+            (previous.current_ability, requested.current_ability, 0x11c, "CA"),
+            (previous.potential_ability, requested.potential_ability, 0x11e, "PA"),
+        ] {
+            if before != next {
+                if !self.attributes_verified || !(1..=200).contains(&next)
+                    || !(1..=200).contains(&driver.read::<u16>(self.address + offset)?)
+                { return Err(invalid(&format!("{name} requires a verified native player and values between 1 and 200"))); }
+                patches.push(NativeEdit::capture(driver, self.address + offset, (next as u16).to_le_bytes().to_vec())?);
+            }
+        }
+        let contract = if previous.contract.wage_per_week != requested.contract.wage_per_week
+            || previous.contract.expiry_year != requested.contract.expiry_year
+        {
+            if !self.attributes_verified { return Err(invalid("Native player layout has not been calibrated")); }
+            let contract = self.contract(driver)?;
+            if previous.contract.wage_per_week != requested.contract.wage_per_week {
+                let wage = u32::try_from(requested.contract.wage_per_week).map_err(|_| invalid("Weekly wage cannot be negative"))?;
+                patches.push(NativeEdit::capture(driver, contract.address + 0x20, wage.to_le_bytes().to_vec())?);
+            }
+            if previous.contract.expiry_year != requested.contract.expiry_year {
+                let old = driver.read::<u32>(contract.address + 0x48)?;
+                let next = expiry_with_year(old, requested.contract.expiry_year)?;
+                patches.push(NativeEdit::capture(driver, contract.address + 0x48, next.to_le_bytes().to_vec())?);
+            }
+            Some(contract)
+        } else { None };
+        self.apply_edits(driver, &patches, contract)
+    }
+
+    #[cfg(test)]
+    fn apply_byte_edits(&self, driver: &LinuxMemoryDriver, edits: &[(usize, u8, u8)]) -> Result<()> {
+        let edits: Vec<_> = edits.iter().map(|&(offset, old, next)| NativeEdit {
+            address: self.address + offset, old: vec![old], next: vec![next],
+        }).collect();
+        self.apply_edits(driver, &edits, None)
+    }
+
+    fn apply_edits(&self, driver: &LinuxMemoryDriver, edits: &[NativeEdit], contract: Option<NativeContract>) -> Result<()> {
+        self.validate(driver)?;
+        let mut attempted = 0;
+        let result = (|| -> Result<()> {
+            for edit in edits {
+                self.validate(driver)?;
+                if let Some(contract) = contract { self.validate_contract(driver, contract)?; }
+                let mut current = vec![0; edit.old.len()];
+                if driver.read_bytes(edit.address, &mut current)? != current.len() || current != edit.old { return Err(invalid("Player data changed during Save; refresh and retry")); }
+                attempted += 1;
+                if driver.write_bytes(edit.address, &edit.next)? != edit.next.len() { return Err(invalid("Short native player write")); }
+            }
+            self.validate(driver)?;
+            if let Some(contract) = contract { self.validate_contract(driver, contract)?; }
+            for edit in edits {
+                let mut current = vec![0; edit.next.len()];
+                if driver.read_bytes(edit.address, &mut current)? != current.len() || current != edit.next { return Err(invalid("Native player Save readback mismatch")); }
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            self.validate(driver).map_err(|_| invalid("Save failed and player identity changed; rollback skipped"))?;
+            if let Some(contract) = contract { self.validate_contract(driver, contract).map_err(|_| invalid("Save failed and contract ownership changed; rollback skipped"))?; }
+            let rollback = (|| -> Result<()> {
+                let mut failures = Vec::new();
+                for edit in edits[..attempted].iter().rev() {
+                    if !driver.write_bytes(edit.address, &edit.old).is_ok_and(|n| n == edit.old.len()) { failures.push(edit.address); }
+                }
+                for edit in &edits[..attempted] {
+                    let mut current = vec![0; edit.old.len()];
+                    if !driver.read_bytes(edit.address, &mut current).is_ok_and(|n| n == current.len()) || current != edit.old { failures.push(edit.address); }
+                }
+                if !failures.is_empty() { return Err(invalid(&format!("Player Save rollback failed at {failures:x?}"))); }
+                Ok(())
+            })();
+            return Err(invalid(&format!("Player Save failed: {error}; rollback: {rollback:?}")));
+        }
+        Ok(())
     }
 
     fn rollback_positions(
@@ -289,6 +627,7 @@ mod tests {
             uid: 2000448177,
             player_vtable: 42,
             person_vtable: 43,
+            attributes_verified: false,
         };
         driver.write(a, &42usize).unwrap();
         driver.write(a + PERSON, &43usize).unwrap();
@@ -300,6 +639,181 @@ mod tests {
         driver.write(a + RIGHT_FOOT, &100u8).unwrap();
         (data, r)
     }
+    #[test]
+    fn calendar_year_edits_preserve_month_day_and_packed_flags() {
+        // 2028 is leap: June 1 = day 153; 2029 June 1 = day 152.
+        assert_eq!(expiry_with_year((2028 << 16) | 0x8800 | 153, 2029).unwrap(), (2029 << 16) | 0x8800 | 152);
+        assert_eq!(expiry_with_year((2028 << 16) | 60, 2029).unwrap(), (2029 << 16) | 59);
+        assert!(expiry_with_year((2029 << 16) | 366, 2030).is_err());
+        assert!(expiry_with_year((2028 << 16) | 153, 0).is_err());
+    }
+
+    #[test]
+    fn attribute_schema_has_unique_offsets_and_correct_scales() {
+        let fields: Vec<_> = native_attributes().collect();
+        assert_eq!(fields.len(), 60);
+        let offsets: std::collections::HashSet<_> = fields.iter().map(|f| f.offset).collect();
+        assert_eq!(offsets.len(), fields.len());
+        assert_eq!(fields.iter().find(|f| f.name == "composure").unwrap().offset, 0x4b);
+        assert_eq!(fields.iter().find(|f| f.name == "concentration").unwrap().offset, 0x4c);
+        let personality = fields.iter().find(|f| f.name == "professionalism").unwrap();
+        assert_eq!(personality.decode(12).unwrap(), 12);
+        assert!(personality.decode(60).is_err());
+    }
+
+    #[test]
+    fn mixed_attributes_abilities_and_owned_contract_round_trip() {
+        struct ContractTag(String);
+        impl std::fmt::Display for ContractTag {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+        }
+        let tag = ContractTag(String::from("contract type"));
+        let typed: &dyn std::fmt::Display = &tag;
+        // A genuine read-only vtable with an executable destructor, for contract guards.
+        let (_, vtable): (usize, usize) = unsafe { std::mem::transmute(typed) };
+        let (data, mut r) = fixture();
+        let mut contract = vec![0u64; 32];
+        let c = contract.as_mut_ptr() as usize;
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        d.write(c, &vtable).unwrap();
+        d.write(c + 8, &(r.address + PERSON)).unwrap();
+        d.write(c + 0x20, &542u32).unwrap();
+        d.write(c + 0x48, &((2028u32 << 16) | 153)).unwrap();
+        d.write(r.address + 0x1e8, &c).unwrap();
+        d.write(r.address + 0x11c, &80u16).unwrap();
+        d.write(r.address + 0x11e, &104u16).unwrap();
+        let mut observed = PlayerAttributes::default();
+        for field in native_attributes() {
+            d.write(r.address + field.offset, &(10u8 * field.scale)).unwrap();
+            (field.set)(&mut observed, 10);
+        }
+        r.verify_attributes(&d, &observed).unwrap();
+        let mut previous = Player { attributes: observed, positions: r.read_positions(&d).unwrap(), ..Player::default() };
+        r.refresh_player_fields(&d, &mut previous).unwrap();
+        let original = data.clone();
+        let original_contract = contract.clone();
+        let mut requested = previous.clone();
+        requested.attributes.passing = 15;
+        requested.attributes.professionalism = 12;
+        requested.current_ability = 81;
+        requested.potential_ability = 105;
+        requested.contract.wage_per_week = 543;
+        requested.contract.expiry_year = 2029;
+        r.write_player_edits(&d, &previous, &requested).unwrap();
+        let mut actual = previous.clone();
+        r.refresh_player_fields(&d, &mut actual).unwrap();
+        assert_eq!(actual, requested);
+        r.write_player_edits(&d, &actual, &previous).unwrap();
+        assert_eq!(data, original);
+        assert_eq!(contract, original_contract);
+        // A contract that now belongs to somebody else is rejected before Passing changes.
+        d.write(c + 8, &0usize).unwrap();
+        assert!(r.write_player_edits(&d, &previous, &requested).is_err());
+        assert_eq!(data, original);
+    }
+
+    #[test]
+    fn calibrated_type_discovers_another_player_and_rejects_wrong_vtable() {
+        let (_seed_data, mut seed) = fixture();
+        let (_peer_data, peer) = fixture();
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut text = vec![0u64; 4];
+        let string = text.as_mut_ptr() as usize;
+        d.write(string, &4u32).unwrap();
+        d.write(string + 4, b"Peer").unwrap();
+        let reference = vec![string];
+        let mut attrs = PlayerAttributes::default();
+        for record in [&seed, &peer] {
+            for field in native_attributes() { d.write(record.address + field.offset, &(10u8 * field.scale)).unwrap(); (field.set)(&mut attrs, 10); }
+            for offset in [0x190, 0x198] { d.write(record.address + offset, &(reference.as_ptr() as usize)).unwrap(); }
+        }
+        d.write(peer.address + INDEX, &54762i32).unwrap();
+        d.write(peer.address + UID, &2000249370u32).unwrap();
+        d.write(peer.address + UID + 4, &2000249370u32).unwrap();
+        assert!(seed.peer_at(&d, peer.address).is_err());
+        seed.verify_attributes(&d, &attrs).unwrap();
+        let found = seed.peer_at(&d, peer.address).unwrap();
+        assert_eq!(found.index(), 54762);
+        assert_eq!(found.name(&d).unwrap(), "Peer Peer");
+        d.write(peer.address + PERSON, &44usize).unwrap();
+        assert!(seed.peer_at(&d, peer.address).is_err());
+    }
+
+    #[test]
+    fn attributes_and_positions_save_together_without_touching_other_bytes() {
+        let (data, mut r) = fixture();
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut observed = PlayerAttributes::default();
+        for field in native_attributes() {
+            d.write(r.address + field.offset, &if field.scale == 5 { 53u8 } else { 11u8 }).unwrap();
+            (field.set)(&mut observed, 11);
+        }
+        r.verify_attributes(&d, &observed).unwrap();
+        let before = data.clone();
+        let previous = Player { positions: r.read_positions(&d).unwrap(), attributes: observed, ..Player::default() };
+        let mut requested = previous.clone();
+        requested.attributes.passing = 20;
+        requested.positions.dr = 19;
+        r.write_player_edits(&d, &previous, &requested).unwrap();
+        let mut actual = PlayerAttributes::default();
+        r.refresh_attributes(&d, &mut actual).unwrap();
+        assert_eq!(actual.passing, 20);
+        assert_eq!(r.read_positions(&d).unwrap().dr, 19);
+        for i in 0..data.len() * 8 {
+            if [0x1e, 12].contains(&i) { continue; }
+            let expected = (before[i / 8] >> ((i % 8) * 8)) as u8;
+            assert_eq!(d.read::<u8>(r.address + i).unwrap(), expected, "byte {i:x}");
+        }
+    }
+
+    #[test]
+    fn invalid_last_attribute_prevents_every_write() {
+        let (data, mut r) = fixture();
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut attrs = PlayerAttributes::default();
+        for field in native_attributes() {
+            d.write(r.address + field.offset, &(10u8 * field.scale)).unwrap();
+            (field.set)(&mut attrs, 10);
+        }
+        r.verify_attributes(&d, &attrs).unwrap();
+        let before = data.clone();
+        let previous = Player { attributes: attrs, positions: r.read_positions(&d).unwrap(), ..Player::default() };
+        let mut requested = previous.clone();
+        requested.attributes.passing = 20;
+        requested.attributes.controversy = 21;
+        assert!(r.write_player_edits(&d, &previous, &requested).is_err());
+        assert_eq!(data, before);
+    }
+
+    #[test]
+    fn conflict_rolls_back_exact_fractional_bytes() {
+        let (_data, r) = fixture();
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        d.write(r.address + 0x1e, &53u8).unwrap();
+        d.write(r.address + 0x20, &61u8).unwrap();
+        assert!(r.apply_byte_edits(&d, &[(0x1e, 53, 100), (0x20, 60, 100)]).is_err());
+        assert_eq!(d.read::<u8>(r.address + 0x1e).unwrap(), 53);
+        assert_eq!(d.read::<u8>(r.address + 0x20).unwrap(), 61);
+    }
+
+    #[test]
+    fn attribute_verification_requires_all_observed_fields() {
+        let (_data, mut r) = fixture();
+        let d = LinuxMemoryDriver::new(std::process::id() as i32);
+        let attrs = PlayerAttributes::default();
+        assert!(r.verify_attributes(&d, &attrs).is_err());
+        assert!(!r.attributes_verified());
+        assert!(r.refresh_attributes(&d, &mut PlayerAttributes::default()).is_err());
+    }
+
+    #[test]
+    fn attribute_scale_rounds_without_truncation_or_overflow() {
+        for (raw, value) in [(0, 1), (4, 1), (5, 1), (7, 1), (8, 2), (52, 10), (53, 11), (99, 20), (100, 20)] {
+            assert_eq!(displayed_rating(raw).unwrap(), value);
+        }
+        assert!(displayed_rating(101).is_err());
+    }
+
     #[test]
     fn native_round_trip_preserves_identity_and_surrounding_bytes() {
         let (data, r) = fixture();

@@ -1520,6 +1520,7 @@
 
       <!-- Right Controls: Auto-Follow, Pin, Overlay Toggle -->
       <div class="top-controls">
+        <button id="discover-players-btn" class="btn" onclick="discoverLoadedPlayers()" title="Open one player's Attributes screen first, then index loaded native player records for search">Scan Loaded Players</button>
         <!-- Follow / Pin Toggle Button -->
         <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following game screen">
           📌 Pin Player
@@ -1656,10 +1657,12 @@
           </div>
           <div>
             <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">POSITION</label>
-            <input id="edit-player-pos" type="text" class="form-control" placeholder="Position" oninput="handlePlayerFieldChange('position', this.value)">
+            <input id="edit-player-pos" type="text" class="form-control" placeholder="Position" readonly title="Derived from aptitude ratings. Edit ratings in the Positions tab.">
           </div>
         </div>
       </div>
+
+      <div id="player-write-support" style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;"></div>
 
       <!-- 1-Click Player Presets Bar -->
       <div class="presets-bar">
@@ -1667,8 +1670,9 @@
         <button class="preset-btn" onclick="applyPlayerPreset('heal')">💚 Heal & 100% Fitness</button>
         <button class="preset-btn" onclick="applyPlayerPreset('morale')">🔥 Max Morale</button>
         <button class="preset-btn" onclick="applyPlayerPreset('wonderkid')">💎 Wonderkid (195 PA)</button>
-        <button class="preset-btn" onclick="applyPlayerPreset('goat')">🐐 All 20s (GOAT)</button>
-        <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">⚡ +2 All Attributes</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('max_outfield_attributes')">Outfield Attributes 20</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('goat')">Max Attributes + CA/PA</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">+2 Player Attributes</button>
       </div>
 
       <!-- Authentic FM 3-Column Attribute Table -->
@@ -1959,7 +1963,7 @@
               <span id="currency-symbol-label">USD ($)</span>
             </label>
             <div style="display: flex; gap: 8px;">
-              <input id="contract-wage" type="number" class="form-control" value="400000" onchange="autoSaveContract('wage_per_week')">
+              <input title="Native weekly wage in GBP" id="contract-wage" type="number" class="form-control" value="400000" onchange="autoSaveContract('wage_per_week')">
               <button class="btn" onclick="adjustWage(50000)">+50k</button>
               <button class="btn" onclick="adjustWage(-50000)">-50k</button>
             </div>
@@ -2664,10 +2668,10 @@
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
               <div>
-                <div style="font-weight: 700; font-size: 12px;">🐐 All 20s (Instant GOAT)</div>
-                <div style="font-size: 10px; color: var(--text-dim);">Sets every technical, mental, and physical attribute to 20, CA 200, PA 200</div>
+                <div style="font-weight: 700; font-size: 12px;">Max Player Ratings</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Maxes player attributes and CA/PA; injury proneness and adverse traits set to 1</div>
               </div>
-              <button class="preset-btn" onclick="applyPlayerPreset('goat')">Make GOAT</button>
+              <button class="preset-btn" onclick="applyPlayerPreset('goat')">Max Player Ratings</button>
             </div>
 
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
@@ -2895,6 +2899,7 @@
 
     let state = {
       connected: false,
+      playerWritableFields: null,
       pid: null,
       isPinned: false,
       autoApply: false,
@@ -3037,6 +3042,8 @@
     }
 
     const techAttrs = [
+      ["marking", "Marking"],
+      ["long_throws", "Long Throws"],
       ["corners", "Corners"],
       ["crossing", "Crossing"],
       ["dribbling", "Dribbling"],
@@ -3080,6 +3087,11 @@
     ];
 
     const hiddenAttrs = [
+      ["adaptability", "Adaptability"],
+      ["sportsmanship", "Sportsmanship"],
+      ["versatility", "Versatility"],
+      ["dirtiness", "Dirtiness"],
+      ["controversy", "Controversy"],
       ["consistency", "Consistency"],
       ["important_matches", "Important Matches"],
       ["injury_proneness", "Injury Proneness"],
@@ -3091,6 +3103,7 @@
     ];
 
     const gkAttrs = [
+      ["punching", "Punching"],
       ["aerial_reach", "Aerial Reach"],
       ["command_of_area", "Command Of Area"],
       ["communication", "Communication"],
@@ -3309,6 +3322,18 @@
       }
     }
 
+    async function discoverLoadedPlayers() {
+      const button = document.getElementById("discover-players-btn");
+      if (button) { button.disabled = true; button.innerText = "Scanning players…"; }
+      try {
+        const res = await fetch("/api/players/discover", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Player scan failed");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+      finally { if (button) { button.disabled = false; button.innerText = "Scan Loaded Players"; } }
+    }
+
     // Fetch Context from Backend
     async function fetchContext() {
       try {
@@ -3317,6 +3342,14 @@
         const data = await res.json();
 
         state.connected = data.connected;
+        state.playerWritableFields = data.player_writable_fields ?? null;
+        const support = document.getElementById("player-write-support");
+        if (support) {
+          const fields = state.playerWritableFields;
+          const count = fields?.filter(field => field.startsWith("attributes.")).length || 0;
+          support.innerText = !data.connected ? "Game disconnected. Displayed fixtures do not change FM26." : fields === null ? "" :
+            `Live Save: ${count} native player attributes${fields.includes("positions") ? ", positions and feet" : ""}${fields.includes("current_ability") ? ", CA/PA" : ""}${fields.includes("contract.wage_per_week") ? ", weekly wage (GBP) and expiry year" : ""}. Names, transfers, fitness/morale and other entity data still require separate write paths.`;
+        }
         state.pid = data.pid;
         state.isPinned = data.is_pinned;
         state.syncMode = data.sync_mode;
@@ -3765,14 +3798,9 @@
       const sum = exposed.reduce((acc, k) => acc + (parseInt(attrs[k], 10) || 0), 0);
       const rec = Math.min(200, Math.max(1, Math.round((sum / exposed.length) * 10)));
 
-      // Only update CA recommendation if CA is already exposed (> 0) or user is editing CA
-      if ((state.activePlayer.current_ability || 0) > 0 || state.playerDirtyFields.has("current_ability")) {
-        const inputCa = document.getElementById("input-ca");
-        if (inputCa) inputCa.value = rec;
-        state.activePlayer.current_ability = rec;
-        const starEl = document.getElementById("star-rating-ca");
-        if (starEl) starEl.innerText = getStarString(rec);
-      }
+      // A recommendation is not game data or an explicit CA edit.
+      // Updating Passing must never silently add a CA write to the same Save.
+      return rec;
     }
 
     const populatePlayerForm = displayPlayer;
@@ -4106,7 +4134,11 @@
         const res = await fetch("/api/player/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: submittedPlayer
+          body: JSON.stringify({
+            ...JSON.parse(submittedPlayer),
+            changed_fields: Array.from(state.playerDirtyFields, field =>
+              field.startsWith("attr_") ? `attributes.${field.slice(5)}` : field)
+          })
         });
         const data = await res.json();
         if (res.ok) {

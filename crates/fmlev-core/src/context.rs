@@ -311,6 +311,7 @@ impl GameContextManager {
         if let (Some(record), Some(session)) = (self.native_player_records.get(&id), self.session.as_ref()) {
             player.positions = record.read_positions(&session.driver)?;
             player.position = player.positions.to_position_string();
+            if record.attributes_verified() { record.refresh_player_fields(&session.driver, &mut player)?; }
         }
 
         // The selected response and subsequent delta-save baseline must be identical.
@@ -443,7 +444,7 @@ impl GameContextManager {
         }
 
         let mut matched_players = Vec::new();
-        for p in self.all_players() {
+        for p in self.player_registry.values() {
             if p.name.to_lowercase().contains(&q)
                 || p.nationality.to_lowercase().contains(&q)
                 || p.position.to_lowercase().contains(&q)
@@ -515,6 +516,63 @@ impl GameContextManager {
     }
 
     /// Updates local state only after the explicitly bound record write succeeds.
+    /// Merge only explicit UI edits into the latest server snapshot. A stale name,
+    /// condition, contract, or recommendation must not hitchhike on an attribute Save.
+    pub fn update_player_fields(&mut self, player: Player, fields: Option<&[String]>) -> Result<()> {
+        let Some(fields) = fields else { return self.update_player(player); };
+        let previous = self.player_registry.get(&player.id).ok_or(CoreError::PlayerNotFound(player.id))?;
+        let mut target = serde_json::to_value(previous).unwrap();
+        let source = serde_json::to_value(&player).unwrap();
+        for field in fields {
+            let parts: Vec<_> = field.split('.').collect();
+            if parts.len() > 2 || matches!(parts[0], "id" | "user_modified") {
+                return Err(CoreError::InvalidValue(format!("Invalid player edit field: {field}")));
+            }
+            let mut dst = &mut target;
+            let mut src = &source;
+            for part in &parts {
+                dst = dst.get_mut(*part).ok_or_else(|| CoreError::InvalidValue(format!("Unknown player edit field: {field}")))?;
+                src = src.get(*part).ok_or_else(|| CoreError::InvalidValue(format!("Missing player edit field: {field}")))?;
+            }
+            *dst = src.clone();
+        }
+        let merged = serde_json::from_value(target).map_err(|error| CoreError::InvalidValue(error.to_string()))?;
+        self.update_player(merged)
+    }
+
+    /// None denotes offline fixtures; a live session advertises only validated fields.
+    pub fn player_writable_fields(&self) -> Option<Vec<String>> {
+        let session = self.session.as_ref()?;
+        if session.driver.pid() == std::process::id() as i32 && session.bases.game_assembly_base.is_none() { return None; }
+        let mut fields = Vec::new();
+        if let Some(record) = self.native_player_records.get(&self.context.player.id) {
+            fields.push("positions".to_string());
+            if record.attributes_verified() {
+                fields.extend(crate::native_player::native_attributes().map(|field| format!("attributes.{}", field.name)));
+                fields.extend(["current_ability", "potential_ability"].map(str::to_string));
+                if record.has_contract(&session.driver) { fields.extend(["contract.wage_per_week", "contract.expiry_year"].map(str::to_string)); }
+            }
+        }
+        Some(fields)
+    }
+
+    pub fn discover_loaded_players(&mut self) -> Result<usize> {
+        let seed = self.verified_native_player(self.context.player.id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live game session".into()))?;
+        let records = seed.discover_loaded(&session.driver)?;
+        for record in records {
+            let id = record.index();
+            let name = record.name(&session.driver)?;
+            let player = self.player_registry.entry(id).or_insert_with(|| build_template_live_player(id, name, String::new()));
+            player.positions = record.read_positions(&session.driver)?;
+            player.position = player.positions.to_position_string();
+            record.refresh_attributes(&session.driver, &mut player.attributes)?;
+            self.native_player_records.insert(id, record);
+            self.failed_native_fingerprints.remove(&id);
+        }
+        Ok(self.native_player_records.len())
+    }
+
     pub fn update_player(&mut self, mut player: Player) -> Result<()> {
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
@@ -537,7 +595,15 @@ impl GameContextManager {
     }
 
     fn verified_native_player(&mut self, id: i32) -> Result<crate::native_player::NativePlayerRecord> {
-        if let Some(record) = self.native_player_records.get(&id) { return Ok(record.clone()); }
+        if let Some(mut record) = self.native_player_records.get(&id).cloned() {
+            if !record.attributes_verified() {
+                if let (Some(session), Some(player)) = (self.session.as_ref(), self.player_registry.get(&id)) {
+                    let _ = record.verify_attributes(&session.driver, &player.attributes);
+                    self.native_player_records.insert(id, record.clone());
+                }
+            }
+            return Ok(record);
+        }
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         let subsystem = resolve_binding_subsystem(session)
             .ok_or_else(|| CoreError::InvalidValue("Live player bindings are unavailable; open this player's profile in FM26".into()))?;
@@ -545,7 +611,7 @@ impl GameContextManager {
         if self.failed_native_fingerprints.get(&id) == Some(&fingerprint) {
             return Err(CoreError::InvalidValue("Native player could not be verified for these bindings; reopen the profile or reconnect before retrying".into()));
         }
-        let record = match crate::native_player::NativePlayerRecord::discover(
+        let mut record = match crate::native_player::NativePlayerRecord::discover(
             &session.driver, id, fingerprint.unique_id, fingerprint.aptitudes,
             fingerprint.left_foot, fingerprint.right_foot,
         ) {
@@ -556,6 +622,9 @@ impl GameContextManager {
             }
         };
         self.failed_native_fingerprints.remove(&id);
+        if let Some(player) = self.player_registry.get(&id) {
+            let _ = record.verify_attributes(&session.driver, &player.attributes);
+        }
         self.native_player_records.insert(id, record.clone());
         Ok(record)
     }
@@ -567,21 +636,18 @@ impl GameContextManager {
     fn save_live_player_positions(&mut self, mut player: Player, preset: Option<PlayerPositions>) -> Result<()> {
         let previous = self.player_registry.get(&player.id)
             .ok_or(CoreError::PlayerNotFound(player.id))?.clone();
-        if !is_positions_only_edit(&previous, &player) {
-            return Err(CoreError::InvalidValue(
-                "Only positions and foot ratings have a verified native write path. Other player fields cannot be saved to FM26 yet.".into(),
-            ));
+        let unsupported = unsupported_live_player_changes(&previous, &player);
+        if !unsupported.is_empty() {
+            return Err(CoreError::InvalidValue(format!(
+                "No verified native write path for: {}. No fields were written. Native player attributes, positions, feet, CA/PA and validated wage/expiry fields can be saved.", unsupported.join(", ")
+            )));
         }
         let record = self.verified_native_player(player.id)?;
         let session = self.session.as_ref().unwrap();
-        let mut positions = record.read_positions(&session.driver)?;
-        if let Some(preset) = preset {
-            positions = preset;
-        } else {
-            apply_changed_positions(&previous.positions, &player.positions, &mut positions);
-        }
-        record.write_positions(&session.driver, &positions)?;
+        if let Some(preset) = preset { player.positions = preset; }
+        record.write_player_edits(&session.driver, &previous, &player)?;
         player.positions = record.read_positions(&session.driver)?;
+        if record.attributes_verified() { record.refresh_player_fields(&session.driver, &mut player)?; }
         player.position = player.positions.to_position_string();
         // Native edits remain live: subsequent polling must never freeze the cached values.
         player.user_modified = false;
@@ -694,6 +760,30 @@ impl GameContextManager {
         let normalized = action_name.trim().to_lowercase().replace([' ', '-'], "_");
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(), "max_outfield_attributes" | "boost_all_2" | "max_attributes" | "max_stats" | "goat")
+        {
+            let record = self.verified_native_player(self.context.player.id)?;
+            let mut player = self.context.player.clone();
+            record.refresh_player_fields(&self.session.as_ref().unwrap().driver, &mut player)?;
+            player.positions = record.read_positions(&self.session.as_ref().unwrap().driver)?;
+            player.position = player.positions.to_position_string();
+            // Presets compare against fresh native values, including fields that
+            // happen to equal an old cached target but have changed in the game.
+            self.player_registry.insert(player.id, player.clone());
+            for field in crate::native_player::native_attributes() {
+                if normalized == "max_outfield_attributes" && !crate::native_player::NATIVE_OUTFIELD_ATTRIBUTES.iter().any(|f| f.name == field.name) { continue; }
+                let value = if matches!(field.name, "injury_proneness" | "eccentricity" | "dirtiness" | "controversy") { 1 }
+                    else if normalized == "boost_all_2" { (field.get)(&player.attributes).saturating_add(2).min(20) } else { 20 };
+                (field.set)(&mut player.attributes, value);
+            }
+            if matches!(normalized.as_str(), "max_attributes" | "max_stats" | "goat") {
+                player.current_ability = 200;
+                player.potential_ability = 200;
+            }
+            return self.save_live_player_positions(player, None);
+        }
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
             && matches!(normalized.as_str(),
                 "all_positions_20" | "all_positions" | "total_football"
                 | "both_feet_20" | "either_foot" | "both_feet"
@@ -704,6 +794,10 @@ impl GameContextManager {
             // The native path writes only its advertised positions/feet fields.
             let record = self.verified_native_player(self.context.player.id)?;
             let native_positions = record.read_positions(&self.session.as_ref().unwrap().driver)?;
+            if let Some(previous) = self.player_registry.get_mut(&self.context.player.id) {
+                previous.positions = native_positions.clone();
+                previous.position = native_positions.to_position_string();
+            }
             let mut proposal = Self::new_offline();
             proposal.context.player = self.context.player.clone();
             proposal.context.player.positions = native_positions;
@@ -835,6 +929,10 @@ impl GameContextManager {
                     }
                 }
                 info!("Applied quick action: wonderkid (Player ID: {})", self.context.player.id);
+            }
+            "max_outfield_attributes" => {
+                for field in crate::native_player::native_attributes() { (field.set)(&mut self.context.player.attributes, 20); }
+                self.player_registry.insert(self.context.player.id, self.context.player.clone());
             }
             "max_attributes" | "max_stats" | "goat" => {
                 self.context.player.current_ability = 200;
@@ -1442,11 +1540,17 @@ impl GameContextManager {
             // Failed complete fingerprints suppress repeated full process scans.
             let _ = self.verified_native_player(self.context.player.id);
         }
+        if self.native_player_records.get(&self.context.player.id).is_some_and(|r| !r.attributes_verified()) {
+            let _ = self.verified_native_player(self.context.player.id);
+        }
         if let Some(record) = self.native_player_records.get(&self.context.player.id) {
             match record.read_positions(&self.session.as_ref().unwrap().driver) {
                 Ok(positions) => {
                     self.context.player.position = positions.to_position_string();
                     self.context.player.positions = positions;
+                    if record.attributes_verified() {
+                        record.refresh_player_fields(&self.session.as_ref().unwrap().driver, &mut self.context.player)?;
+                    }
                     self.player_registry.insert(self.context.player.id, self.context.player.clone());
                 }
                 Err(error) => {
@@ -2697,6 +2801,7 @@ fn build_default_registries() -> (
 }
 
 /// Apply the user's changed fields to fresh authoritative values, preserving untouched native ratings.
+#[cfg(test)]
 fn apply_changed_positions(previous: &PlayerPositions, requested: &PlayerPositions, native: &mut PlayerPositions) {
     macro_rules! patch {
         ($($field:ident),+ $(,)?) => { $(if requested.$field != previous.$field { native.$field = requested.$field; })+ };
@@ -2704,6 +2809,33 @@ fn apply_changed_positions(previous: &PlayerPositions, requested: &PlayerPositio
     patch!(gk, dl, dc, dr, wbl, wbr, dm, ml, mc, mr, aml, amc, amr, st, left_foot, right_foot);
 }
 
+fn unsupported_live_player_changes(previous: &Player, requested: &Player) -> Vec<String> {
+    let mut comparable = requested.clone();
+    comparable.positions = previous.positions.clone();
+    if requested.positions != previous.positions { comparable.position = previous.position.clone(); }
+    comparable.user_modified = previous.user_modified;
+    comparable.current_ability = previous.current_ability;
+    comparable.potential_ability = previous.potential_ability;
+    comparable.contract.wage_per_week = previous.contract.wage_per_week;
+    comparable.contract.expiry_year = previous.contract.expiry_year;
+    for field in crate::native_player::native_attributes() {
+        (field.set)(&mut comparable.attributes, (field.get)(&previous.attributes));
+    }
+    fn differences(path: &str, old: &serde_json::Value, new: &serde_json::Value, output: &mut Vec<String>) {
+        if old == new { return; }
+        if let (Some(old), Some(new)) = (old.as_object(), new.as_object()) {
+            for (key, value) in new {
+                let path = if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
+                differences(&path, &old[key], value, output);
+            }
+        } else { output.push(path.to_string()); }
+    }
+    let mut fields = Vec::new();
+    differences("", &serde_json::to_value(previous).unwrap(), &serde_json::to_value(comparable).unwrap(), &mut fields);
+    fields
+}
+
+#[cfg(test)]
 fn is_positions_only_edit(previous: &Player, requested: &Player) -> bool {
     let mut comparable = requested.clone();
     comparable.positions = previous.positions.clone();
@@ -2840,6 +2972,7 @@ fn merge_player_attributes(dst: &mut PlayerAttributes, src: &PlayerAttributes) {
         };
     }
     merge_field!(
+        marking, long_throws, punching, dirtiness, controversy,
         corners, crossing, dribbling, finishing, first_touch, free_kicks,
         heading, long_shots, passing, penalty_taking, tackling, technique,
         aggression, anticipation, bravery, composure, concentration, decisions,
@@ -3062,6 +3195,11 @@ fn apply_attribute_by_name(attrs: &mut PlayerAttributes, name: &str, raw_val: u3
 
     match norm.as_str() {
         // Technical & Set Pieces
+        "marking" => attrs.marking = val,
+        "longthrows" => attrs.long_throws = val,
+        "punching" => attrs.punching = val,
+        "dirtiness" => attrs.dirtiness = val,
+        "controversy" => attrs.controversy = val,
         "corners" | "cornertaking" => attrs.corners = val,
         "crossing" => attrs.crossing = val,
         "dribbling" => attrs.dribbling = val,
@@ -3929,6 +4067,46 @@ fn decode_base64_simple(input: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explicit_passing_edit_preserves_newer_unedited_fields() {
+        let mut manager = GameContextManager::new_offline();
+        let previous = manager.get_context().player;
+        let mut stale = previous.clone();
+        stale.attributes.passing = 19;
+        stale.name = "stale browser name".into();
+        stale.current_ability = 123;
+        stale.contract.wage_per_week = 1;
+        manager.update_player_fields(stale, Some(&["attributes.passing".into()])).unwrap();
+        let actual = manager.get_context().player;
+        assert_eq!(actual.attributes.passing, 19);
+        assert_eq!(actual.name, previous.name);
+        assert_eq!(actual.current_ability, previous.current_ability);
+        assert_eq!(actual.contract, previous.contract);
+    }
+
+    #[test]
+    fn unsupported_edits_report_exact_fields_before_any_write() {
+        let previous = Player::default();
+        let mut requested = previous.clone();
+        requested.attributes.passing = 20;
+        requested.positions.dr = 20;
+        assert!(unsupported_live_player_changes(&previous, &requested).is_empty());
+        requested.current_ability = 100;
+        requested.contract.wage_per_week = 123;
+        assert!(unsupported_live_player_changes(&previous, &requested).is_empty());
+        requested.contract.release_clause = 123;
+        requested.name = "Another name".into();
+        assert_eq!(unsupported_live_player_changes(&previous, &requested), vec!["contract.release_clause", "name"]);
+    }
+
+    #[test]
+    fn unknown_edit_fields_and_identity_edits_are_rejected() {
+        let mut manager = GameContextManager::new_offline();
+        let previous = manager.get_context().player;
+        for field in ["id", "user_modified", "attributes.unknown", "attributes.passing.extra"] {
+            assert!(manager.update_player_fields(previous.clone(), Some(&[field.into()])).is_err());
+        }
+    }
     use super::*;
 
     #[test]

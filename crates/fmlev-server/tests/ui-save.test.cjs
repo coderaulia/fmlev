@@ -195,3 +195,34 @@ test('every player Save includes edited contract fields and preserves untouched 
   assert.equal(submitted.contract.wage_per_week, 0);
   assert.equal(submitted.contract.expiry_year, 2030);
 });
+
+
+test('passing Save explicitly declares only user edits', async () => {
+  let submitted;
+  const app = ui(async (_url, request) => {
+    submitted = JSON.parse(request.body);
+    return { ok: true, json: async () => ({ status: 'success' }) };
+  });
+  app.run(`state.playerDirtyFields.clear(); state.activePlayer.attributes.passing = 15; state.playerDirtyFields.add("attr_passing")`);
+  assert.equal(await app.run('applyPlayerChanges()'), true);
+  assert.deepEqual(submitted.changed_fields, ['attributes.passing']);
+  assert.equal(submitted.attributes.passing, 15);
+});
+
+test('attribute recommendations never silently mutate CA', () => {
+  const app = ui(() => {});
+  app.run('state.activePlayer.current_ability = 90; state.activePlayer.attributes.passing = 14');
+  app.run('updateRecommendedCA()');
+  assert.equal(app.run('state.activePlayer.current_ability'), 90);
+  assert.equal(app.run('state.playerDirtyFields.has("current_ability")'), false);
+});
+
+
+test('all sixty native attributes have editing controls', () => {
+  const app = ui(() => {});
+  assert.equal(app.run('allAttrKeys.length'), 60);
+  assert.equal(app.run('new Set(allAttrKeys).size'), 60);
+  for (const key of ['marking', 'long_throws', 'punching', 'dirtiness', 'controversy', 'adaptability', 'sportsmanship', 'versatility']) {
+    assert.equal(app.run(`allAttrKeys.includes(${JSON.stringify(key)})`), true);
+  }
+});

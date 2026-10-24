@@ -8,10 +8,12 @@ used test-layout offsets against those handles. They must not be used for live e
 
 | Feature | Live reads | Live writes |
 | --- | --- | --- |
-| Player names, IDs, profile data | Available bindings only | Not supported |
-| Player attributes | Numeric bindings, including `m_ctx` row fallback | Not supported: native offsets unverified |
+| Player names, IDs, profile data | Bindings plus bounded native first/surname reads for discovery | Not supported |
+| Player attributes | Native values take precedence after layout calibration | 60 technical/mental/physical/GK/hidden/personality fields |
 | Position aptitudes and feet | Numeric bindings; validated native records take precedence | Native record write, identity validation, readback and rollback |
-| CA/PA, condition, morale, contracts | Available bindings only; zero/empty means unavailable | Not supported: native offsets unverified |
+| CA/PA | Validated native u16 fields; 1..200 | Native writes with readback/rollback |
+| Contract wages and expiry | Ownership-checked full contract; weekly wage in GBP | Weekly wage and expiry year, preserving month/day/flags |
+| Condition, sharpness, morale, other contract fields | Available bindings only; zero/empty means unavailable | Not supported: native layouts/semantics unverified |
 | Clubs, nations, competitions, affiliates | Available bindings only | Not supported: native offsets unverified |
 | Raw memory tools | Explicit address and type | Explicit address/type, range and transfer validation |
 | Offline demonstration data | Fixtures | Fixtures only; does not modify FM26 |
@@ -119,3 +121,81 @@ attached, including when reusing an existing server. Seven lifecycle regression
 tests pass. Live checks passed for duplicate prevention, Ctrl+C on a new server,
 Ctrl+C on an existing server, and background restart. The server was left running
 in background mode with output in `~/.local/state/fmlev/server.log`.
+
+## Native attribute editing and loaded-player discovery
+
+The former positions-only guard rejected legitimate attribute edits, including
+Dion Markx's Passing. A native writer now supports 34 technical, mental and
+physical fields in the player block at `+0x17..+0x4c`. Ratings use a native
+0..100 scale and displayed `max(1, (raw + 2) / 5)`. Initial calibration checks
+all 34 values against observed game bindings, as well as the separately verified
+identity/positions/feet layout. This first implementation was subsequently extended as described below.
+
+Player Save requests can include `changed_fields` (for example
+`["attributes.passing"]`). The server merges only these fields into its latest
+snapshot, so stale CA, names or contracts cannot hitchhike on an attribute edit.
+The UI also stops silently replacing CA with an attribute-based recommendation.
+Unsupported explicit edits report their exact field paths before any writes.
+Mixed position/attribute saves validate every edit up front, verify native
+readback, and roll back exact original bytes on failure, preserving fractional
+native ratings. Live polling reads native attributes rather than stale bindings.
+
+With one calibrated player, **Scan Loaded Players** (`POST /api/players/discover`)
+scans the validated native player vtable, then checks each record's person
+vtable, index, duplicate UID, position/foot ranges, attribute ranges and bounded
+native first/surname strings. Ambiguous indices are excluded. The live scan in
+PID 53451 indexed **49,467** loaded players, including Lionel Messi. This is a
+scan of loaded records, not proof that every player in every database is loaded.
+The type and addresses are learned from the running process; no player-specific
+address or index is compiled into the discovery or write paths. Search dropdown
+responses are capped at 100 matches and expose the total match count.
+
+Dion (index 54762, UID 2000249370): HTTP Save Passing 14 -> 15 changed native
+player+0x1e from 70 -> 75. Only that byte changed across a 512-byte snapshot;
+three context polls retained 15. Deliberately stale CA and wage values in the
+request were ignored because they were not explicit edits. Original bytes were
+restored and Passing returned to 14. Selection/write/readback also passed using
+the indexed player cache. Game UI visual confirmation and save/reload durability
+remain unverified. No commit or push was performed for this follow-up.
+
+## Extended player fields
+
+Reference evidence: [FMSuperScout native field map](https://github.com/mavarobli/FMSuperScout/blob/6af51d4959790ade94e4a575f5555338dc90a851/plugin/Fields.cs).
+The reference player base is 0x148 before this project's validated player
+subobject: positions and attribute block locations line up exactly. The source
+also resolves the previously ambiguous Composure (`+0x4b`) versus Concentration
+(`+0x4c`) ordering. No third-party implementation code was copied.
+
+The attribute schema now exposes 60 fields, including Marking, Long Throws,
+Punching, Dirtiness and Controversy, which previously had no model/UI fields.
+Performance and hidden playing attributes use the native 0..100 scale;
+personality bytes are unscaled 0..20. CA/PA are checked u16 values at
+`+0x11c/+0x11e`. Native data supersedes cached bindings on selection and polling.
+
+Full contracts are followed through player+0x1e8. Every access checks the
+contract vtable, writable object region, and backlink to this player's person
+subobject. Weekly wage is a u32 GBP value at contract+0x20; expiry is a packed
+calendar date at +0x48. Year edits retain the month/day and packed flags, with
+February 29 clamped to February 28 in non-leap years. Missing/unowned/invalid
+contracts fail before writes. Mixed attribute/CA/PA/contract saves use a single
+checked transaction and exact-byte rollback. Names, nationality/transfers,
+fitness/morale, release clauses and squad-status/happiness changes, and other
+entity writers remain outside the verified write schema; an explicit edit to
+one reports its precise field path instead of pretending success.
+
+### Extended live proof
+
+In PID 53451, after indexing 49,467 loaded players, a mixed HTTP Save on Dion
+changed Passing 14->15, Handling 3->4, Professionalism 12->13, CA/PA 80/104->81/105,
+weekly wage GBP 542->543, and expiry 2028-05-31->2029-05-31. Independent native
+player and contract snapshots showed only the requested field bytes changed;
+three context polls retained every edit. All original player and contract bytes
+were restored exactly, and the previous selection/follow mode was restored.
+The recovery snapshot is local at `/tmp/fmlev-dion-extended-backup.json`.
+
+Automated proof: 101 Rust tests, 16 UI behavior tests, and 7 launcher tests.
+Coverage includes mixed attribute/ability/contract writes, contract ownership
+rejection before any write, exact fractional-byte rollback, calendar/flag
+preservation, explicit changed-field merging, all 60 UI attribute controls,
+identity and range checks, and native-type peer discovery. The editor is running
+the updated release. This follow-up remains uncommitted and unpushed.

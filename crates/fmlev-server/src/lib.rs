@@ -229,6 +229,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/status", get(get_status))
         .route("/api/context", get(get_context))
         .route("/api/search", get(search_entities))
+        .route("/api/players/discover", post(discover_players))
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
         .route("/api/player/preset", post(apply_player_preset))
@@ -335,6 +336,7 @@ async fn get_context(State(state): State<ServerState>) -> impl IntoResponse {
         "is_pinned": ctx.sync_mode == "pinned",
         "player": ctx.player,
         "active_player": ctx.player,
+        "player_writable_fields": w.context_mgr.player_writable_fields(),
         "club": ctx.club,
         "active_club": ctx.club,
         "nation": ctx.nation,
@@ -351,18 +353,36 @@ async fn search_entities(
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
     let r = state.inner.read().await;
-    let results = r.context_mgr.search(&query.q);
+    let mut results = r.context_mgr.search(&query.q);
+    let total_players = results.players.len();
+    // Native discovery can add an entire loaded database. Keep dropdown responses bounded.
+    results.players.truncate(100);
     let nation = results.nations.first().cloned();
     let competition = results.competitions.first().cloned();
     Json(serde_json::json!({
         "query": query.q,
         "players": results.players,
+        "total_players": total_players,
         "clubs": results.clubs,
         "nations": results.nations,
         "competitions": results.competitions,
         "nation": nation,
         "competition": competition
     }))
+}
+
+async fn discover_players(State(state): State<ServerState>) -> impl IntoResponse {
+    // A full process scan is blocking; leave it off the async request executor.
+    match tokio::task::spawn_blocking(move || {
+        state.inner.blocking_write().context_mgr.discover_loaded_players()
+    }).await {
+        Ok(Ok(count)) => (StatusCode::OK, Json(serde_json::json!({
+            "status": "success", "count": count,
+            "message": format!("Indexed {count} loaded native players. Search by name to edit their verified attributes, positions and feet.")
+        }))),
+        Ok(Err(error)) => api_error(StatusCode::BAD_REQUEST, error),
+        Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
 }
 
 async fn select_context(
@@ -420,13 +440,21 @@ async fn select_context(
     })))
 }
 
+#[derive(Deserialize)]
+struct PlayerUpdateRequest {
+    #[serde(flatten)]
+    player: Player,
+    #[serde(default)]
+    changed_fields: Option<Vec<String>>,
+}
+
 async fn update_player(
     State(state): State<ServerState>,
-    Json(payload): Json<Player>,
+    Json(payload): Json<PlayerUpdateRequest>,
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
-    let name = payload.name.clone();
-    match w.context_mgr.update_player(payload) {
+    let name = payload.player.name.clone();
+    match w.context_mgr.update_player_fields(payload.player, payload.changed_fields.as_deref()) {
         Ok(_) => {
             let ctx = w.context_mgr.get_context();
             (
@@ -509,10 +537,15 @@ async fn apply_player_preset(
 
     match payload.preset.as_str() {
         "boost_all_2" | "boost_attributes_2" => {
-            let mut p = w.context_mgr.context.player.clone();
-            boost_player_attributes(&mut p.attributes, 2);
-            p.current_ability = (p.current_ability as u16 + 10).min(200) as u8;
-            if let Err(error) = w.context_mgr.update_player(p) {
+            let result = if w.context_mgr.player_writable_fields().is_some() {
+                w.context_mgr.apply_quick_action("boost_all_2")
+            } else {
+                let mut p = w.context_mgr.context.player.clone();
+                boost_player_attributes(&mut p.attributes, 2);
+                p.current_ability = (p.current_ability as u16 + 10).min(200) as u8;
+                w.context_mgr.update_player(p)
+            };
+            if let Err(error) = result {
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             let ctx = w.context_mgr.get_context();
@@ -520,7 +553,7 @@ async fn apply_player_preset(
                 StatusCode::OK,
                 Json(serde_json::json!({
                     "status": "success",
-                    "message": format!("Boosted all attributes for {} by +2!", ctx.player.name),
+                    "message": format!("Boosted writable attributes for {} by +2!", ctx.player.name),
                     "player": ctx.player,
                     "active_player": ctx.player
                 })),
@@ -1881,6 +1914,28 @@ mod tests {
             is_attached: false, scan_results: Vec::new(), last_scan_type: String::new(),
             context_mgr: GameContextManager::new_offline(),
         }
+    }
+
+    #[tokio::test]
+    async fn partial_attribute_http_update_preserves_other_player_data() {
+        use axum::{body::{Body, to_bytes}, http::Request};
+        use tower::ServiceExt;
+        let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+        let original = state.inner.read().await.context_mgr.get_context().player;
+        let app = create_router(state);
+        let response = app.oneshot(Request::post("/api/player/update")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::json!({
+                "id": original.id, "attributes": {"passing": 15},
+                "changed_fields": ["attributes.passing"]
+            }).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let actual: Player = serde_json::from_value(body["player"].clone()).unwrap();
+        assert_eq!(actual.attributes.passing, 15);
+        assert_eq!(actual.name, original.name);
+        assert_eq!(actual.current_ability, original.current_ability);
+        assert_eq!(actual.contract, original.contract);
     }
 
 

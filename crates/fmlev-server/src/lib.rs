@@ -344,7 +344,10 @@ async fn get_context(State(state): State<ServerState>) -> impl IntoResponse {
         "competition": ctx.competition,
         "active_competition": ctx.competition,
         "nations": nations,
-        "competitions": competitions
+        "competitions": competitions,
+        "live_clubs": w.context_mgr.live_clubs,
+        "live_nations": w.context_mgr.live_nations,
+        "live_competitions": w.context_mgr.live_competitions
     }))
 }
 
@@ -352,7 +355,10 @@ async fn search_entities(
     State(state): State<ServerState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let r = state.inner.read().await;
+    let mut r = state.inner.write().await;
+    let discovery_error = if query.q.trim().chars().count() >= 2 {
+        r.context_mgr.maybe_auto_discover_players().and_then(|result| result.err().map(|error| error.to_string()))
+    } else { None };
     let mut results = r.context_mgr.search(&query.q);
     let total_players = results.players.len();
     // Native discovery can add an entire loaded database. Keep dropdown responses bounded.
@@ -363,6 +369,7 @@ async fn search_entities(
         "query": query.q,
         "players": results.players,
         "total_players": total_players,
+        "discovery_error": discovery_error,
         "clubs": results.clubs,
         "nations": results.nations,
         "competitions": results.competitions,

@@ -49,11 +49,15 @@ pub struct GameContextManager {
     pub session: Option<LiveSession>,
     native_player_records: HashMap<i32, crate::native_player::NativePlayerRecord>,
     failed_native_fingerprints: HashMap<i32, crate::live_write::NativePlayerFingerprint>,
+    auto_discovery_attempted: bool,
     pub registry: OffsetsRegistry,
     pub player_registry: HashMap<i32, Player>,
     pub club_registry: HashMap<i32, ClubFinances>,
     pub nation_registry: HashMap<i32, NationDetails>,
     pub competition_registry: HashMap<i32, CompetitionDetails>,
+    pub live_clubs: HashMap<i32, crate::live_club::LiveClubSnapshot>,
+    pub live_nations: HashMap<i32, crate::live_nation::LiveNationSnapshot>,
+    pub live_competitions: HashMap<i32, crate::live_competition::LiveCompetitionSnapshot>,
     pub player_memory_bindings: HashMap<i32, usize>,
     pub club_memory_bindings: HashMap<i32, usize>,
     pub nation_memory_bindings: HashMap<i32, usize>,
@@ -117,11 +121,15 @@ impl GameContextManager {
             session: None,
             native_player_records: HashMap::new(),
             failed_native_fingerprints: HashMap::new(),
+            auto_discovery_attempted: false,
             registry,
             player_registry,
             club_registry,
             nation_registry,
             competition_registry,
+            live_clubs: HashMap::new(),
+            live_nations: HashMap::new(),
+            live_competitions: HashMap::new(),
             player_memory_bindings: HashMap::new(),
             club_memory_bindings: HashMap::new(),
             nation_memory_bindings: HashMap::new(),
@@ -151,6 +159,10 @@ impl GameContextManager {
     fn reset_live_state(&mut self) {
         self.native_player_records.clear();
         self.failed_native_fingerprints.clear();
+        self.auto_discovery_attempted = false;
+        self.live_clubs.clear();
+        self.live_nations.clear();
+        self.live_competitions.clear();
         self.player_registry.clear();
         self.club_registry.clear();
         self.nation_registry.clear();
@@ -567,10 +579,25 @@ impl GameContextManager {
             player.positions = record.read_positions(&session.driver)?;
             player.position = player.positions.to_position_string();
             record.refresh_attributes(&session.driver, &mut player.attributes)?;
+            record.refresh_abilities(&session.driver, player)?;
             self.native_player_records.insert(id, record);
             self.failed_native_fingerprints.remove(&id);
         }
         Ok(self.native_player_records.len())
+    }
+
+    /// Populate global search once a real player's attributes have calibrated
+    /// the native layout. Manual discovery remains available for retry.
+    pub fn maybe_auto_discover_players(&mut self) -> Option<Result<usize>> {
+        if self.auto_discovery_attempted || self.native_player_records.len() > 100 {
+            return None;
+        }
+        let id = self.context.player.id;
+        if !self.native_player_records.get(&id).is_some_and(|record| record.attributes_verified()) {
+            return None;
+        }
+        self.auto_discovery_attempted = true;
+        Some(self.discover_loaded_players())
     }
 
     pub fn update_player(&mut self, mut player: Player) -> Result<()> {
@@ -807,6 +834,52 @@ impl GameContextManager {
             requested.position = requested.positions.to_position_string();
             let positions = requested.positions.clone();
             return self.save_live_player_positions(requested, Some(positions));
+        }
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(), "heal_player" | "heal")
+        {
+            let record = self.verified_native_player(self.context.player.id)?;
+            let session = self.session.as_ref().unwrap();
+            record.heal(&session.driver)?;
+            self.context.player.condition = 10000;
+            self.context.player.sharpness = 10000;
+            self.context.player.is_injured = false;
+            self.player_registry
+                .insert(self.context.player.id, self.context.player.clone());
+            info!("Applied live quick action: heal_player (Player ID: {})", self.context.player.id);
+            return Ok(());
+        }
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(), "heal_squad")
+        {
+            let target_club_id = self.context.club.club_id;
+            let active_id = self.context.player.id;
+            let active_rec = self.verified_native_player(active_id).ok();
+            let session = self.session.as_ref().unwrap();
+            for (&pid, record) in &self.native_player_records {
+                if let Some(player) = self.player_registry.get(&pid) {
+                    if target_club_id == 0 || player.club_id == target_club_id {
+                        let _ = record.heal(&session.driver);
+                    }
+                }
+            }
+            if let Some(rec) = active_rec {
+                let _ = rec.heal(&session.driver);
+            }
+            self.context.player.condition = 10000;
+            self.context.player.sharpness = 10000;
+            self.context.player.is_injured = false;
+            for player in self.player_registry.values_mut() {
+                if target_club_id == 0 || player.club_id == target_club_id {
+                    player.condition = 10000;
+                    player.sharpness = 10000;
+                    player.is_injured = false;
+                }
+            }
+            info!("Applied live quick action: heal_squad (Club ID: {})", target_club_id);
+            return Ok(());
         }
         self.ensure_record_writes_supported()?;
         let saved_context = self.context.clone();
@@ -1267,8 +1340,14 @@ impl GameContextManager {
 
         // 3b. Inspect PanelHistoryManagerModule & GameSubsystems (BindingSubsystem) for real-time FM26 UI bindings
         let mut live_discovered_players: Vec<Player> = Vec::new();
+        let mut live_bound_ref_names: HashMap<(i32, i32), String> = HashMap::new();
+        let mut live_clubs = Vec::new();
+        let mut live_nations = Vec::new();
+        let mut live_competitions = Vec::new();
         let mut panel_history_person_id: Option<i32> = None;
         let mut panel_history_club_id: Option<i32> = None;
+        let mut panel_history_nation_id: Option<i32> = None;
+        let mut panel_history_competition_id: Option<i32> = None;
 
         if let Ok(phmm_singleton) = session.registry.get_singleton("PanelHistoryManagerModule") {
             if let Ok(phmm_ptr) = fmlev_il2cpp::read_static_singleton(&session.driver, base, phmm_singleton) {
@@ -1289,6 +1368,10 @@ impl GameContextManager {
                                                 detected_screen = Some("player".to_string());
                                             } else if lower.contains("club") || lower.contains("finance") {
                                                 detected_screen = Some("club".to_string());
+                                            } else if lower.contains("nation") {
+                                                detected_screen = Some("nation".to_string());
+                                            } else if lower.contains("competition") || lower.contains("comp") {
+                                                detected_screen = Some("competition".to_string());
                                             } else if lower.contains("squad") || lower.contains("tactic") {
                                                 detected_screen = Some("squad".to_string());
                                             }
@@ -1311,6 +1394,10 @@ impl GameContextManager {
                                                                         panel_history_person_id = Some(m_idx);
                                                                     } else if t_typ == 3 && m_idx > 0 {
                                                                         panel_history_club_id = Some(m_idx);
+                                                                    } else if t_typ == 10 && m_idx > 0 {
+                                                                        panel_history_nation_id = Some(m_idx);
+                                                                    } else if t_typ == 25 && m_idx > 0 {
+                                                                        panel_history_competition_id = Some(m_idx);
                                                                     }
                                                                 }
                                                             }
@@ -1342,7 +1429,15 @@ impl GameContextManager {
                     if sub_items > 0x10000 && sub_count > 11 {
                         let b_sub = session.driver.read_ptr(sub_items + 0x20 + 11 * 8).unwrap_or(0);
                         if b_sub > 0x10000 {
-                            live_discovered_players = extract_live_bound_players(&session.driver, b_sub);
+                            let (players, names) = extract_live_bound_players(&session.driver, b_sub);
+                            live_discovered_players = players;
+                            live_bound_ref_names = names;
+                            match detected_screen.as_deref() {
+                                Some("club") => live_clubs = crate::live_club::read_live_clubs(&session.driver, b_sub),
+                                Some("nation") => live_nations = crate::live_nation::read_live_nations(&session.driver, b_sub),
+                                Some("competition") => live_competitions = crate::live_competition::read_live_competitions(&session.driver, b_sub),
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -1364,13 +1459,61 @@ impl GameContextManager {
         };
 
         // Now session borrow is finished! Merge any live discovered players from FM26 BindingSubsystem:
+        for ((kind, id), name) in live_bound_ref_names {
+            if name.trim().is_empty() { continue; }
+            match kind {
+                3 => {
+                    let club = self.club_registry.entry(id).or_insert_with(unknown_clubfinances);
+                    club.club_id = id;
+                    if club.club_name.is_empty() { club.club_name = name; }
+                }
+                10 => {
+                    let nation = self.nation_registry.entry(id).or_insert_with(unknown_nationdetails);
+                    nation.id = id;
+                    if nation.name.is_empty() { nation.name = name; }
+                }
+                25 => {
+                    let comp = self.competition_registry.entry(id).or_insert_with(unknown_competitiondetails);
+                    comp.id = id;
+                    if comp.name.is_empty() { comp.name = name; }
+                }
+                _ => {}
+            }
+        }
+        let sole_live_club = (live_clubs.len() == 1).then(|| live_clubs[0].id);
+        let sole_live_nation = (live_nations.len() == 1).then(|| live_nations[0].id);
+        let sole_live_competition = (live_competitions.len() == 1).then(|| live_competitions[0].id);
+        for snapshot in live_clubs {
+            let club = self.club_registry.entry(snapshot.id).or_insert_with(unknown_clubfinances);
+            club.club_id = snapshot.id;
+            club.club_name = snapshot.name.clone();
+            self.live_clubs.insert(snapshot.id, snapshot);
+        }
+        for snapshot in live_nations {
+            let nation = self.nation_registry.entry(snapshot.id).or_insert_with(unknown_nationdetails);
+            nation.id = snapshot.id;
+            nation.name = snapshot.name.clone();
+            if let Some(continent) = &snapshot.continent { nation.continent = continent.clone(); }
+            self.live_nations.insert(snapshot.id, snapshot);
+        }
+        for snapshot in live_competitions {
+            let competition = self.competition_registry.entry(snapshot.id).or_insert_with(unknown_competitiondetails);
+            competition.id = snapshot.id;
+            competition.name = snapshot.name.clone();
+            if let Some(nation_id) = snapshot.nation_id { competition.nation_id = nation_id; }
+            self.live_competitions.insert(snapshot.id, snapshot);
+        }
         let mut first_live_id: Option<i32> = None;
         let mut active_profile_live_id: Option<i32> = None;
         for lp in live_discovered_players {
             if lp.club_id > 0 && !lp.club_name.is_empty() {
                 let club = self.club_registry.entry(lp.club_id).or_insert_with(unknown_clubfinances);
                 club.club_id = lp.club_id;
-                club.club_name = lp.club_name.clone();
+                if let Some(snapshot) = self.live_clubs.get(&lp.club_id) {
+                    club.club_name = snapshot.name.clone();
+                } else if club.club_name.is_empty() {
+                    club.club_name = lp.club_name.clone();
+                }
             }
             if first_live_id.is_none() {
                 first_live_id = Some(lp.id);
@@ -1429,8 +1572,26 @@ impl GameContextManager {
 
         // Apply state updates to self:
         if self.context.sync_mode == "auto_follow" {
-            if let Some(screen) = detected_screen {
-                self.context.active_screen = screen;
+            if let Some(screen) = detected_screen.as_deref() {
+                self.context.active_screen = screen.to_string();
+                match screen {
+                    "club" => {
+                        if let Some(id) = sole_live_club.or(panel_history_club_id) {
+                            if self.club_registry.contains_key(&id) && self.context.club.club_id != id { let _ = self.select_club(id); }
+                        }
+                    }
+                    "nation" => {
+                        if let Some(id) = sole_live_nation.or(panel_history_nation_id) {
+                            if self.nation_registry.contains_key(&id) && self.context.nation.id != id { let _ = self.select_nation(id); }
+                        }
+                    }
+                    "competition" => {
+                        if let Some(id) = sole_live_competition.or(panel_history_competition_id) {
+                            if self.competition_registry.contains_key(&id) && self.context.competition.id != id { let _ = self.select_competition(id); }
+                        }
+                    }
+                    _ => {}
+                }
             }
             if let Some(pid) = panel_history_person_id {
                 if !self.player_registry.contains_key(&pid) {
@@ -3583,12 +3744,28 @@ fn extract_position_aptitude_list(
     }
 }
 
+// A TeamName can describe a reserve/youth squad sharing its parent Club ID.
+// Prefer the actual ClubReference name so it cannot contaminate the club registry.
+fn resolve_bound_club_name(
+    club_id: i32,
+    fallback: String,
+    ref_names: &HashMap<(i32, i32), String>,
+) -> String {
+    ref_names.get(&(3, club_id))
+        .filter(|name| !name.trim().is_empty())
+        .cloned()
+        .unwrap_or(fallback)
+}
+
 /// Extracts live bound players from FM26's `SI.Bindable.BindingSubsystem` in memory.
-fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usize) -> Vec<Player> {
+fn extract_live_bound_players(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    b_sub: usize,
+) -> (Vec<Player>, HashMap<(i32, i32), String>) {
     let m_data = driver.read_ptr(b_sub + 0x78).unwrap_or(0);
     let m_ctx = driver.read_ptr(b_sub + 0x88).unwrap_or(0);
     if m_data <= 0x10000 || m_ctx <= 0x10000 {
-        return Vec::new();
+        return (Vec::new(), HashMap::new());
     }
 
     let data_items = driver.read_ptr(m_data + 0x10).unwrap_or(0);
@@ -3597,13 +3774,13 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
     let count = driver.read::<i32>(m_ctx + 0x20).unwrap_or(0);
 
     if data_items <= 0x10000 || entries <= 0x10000 || count <= 0 || data_size <= 0 {
-        return Vec::new();
+        return (Vec::new(), HashMap::new());
     }
 
     let max_entries = (count as usize).min(50_000);
     let mut raw_entries = vec![0u8; max_entries * 56];
     if driver.read_bytes(entries + 0x20, &mut raw_entries).is_err() {
-        return Vec::new();
+        return (Vec::new(), HashMap::new());
     }
 
     #[derive(Default)]
@@ -3976,9 +4153,7 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         if let Some(pos) = live_pos {
             player.positions = pos;
         }
-        if !p.club_name.is_empty() {
-            player.club_name = p.club_name;
-        }
+        player.club_name = resolve_bound_club_name(player.club_id, p.club_name, &ref_names);
         if !p.nationality.is_empty() {
             player.nationality = p.nationality;
         }
@@ -4006,7 +4181,7 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         out.push(player);
     }
     out.sort_by_key(|p| p.id);
-    out
+    (out, ref_names)
 }
 
 /// Decodes FM26's `\x01<Base64Metadata>\x02<ShortName>\x01` link strings into `(full_name, short_name)`.

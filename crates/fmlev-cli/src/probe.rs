@@ -152,6 +152,41 @@ pub struct ProbeArgs {
     pub all_types: bool,
 }
 
+// Stage references use bounded InteropReference.Pair IDs, not the database
+// index/type fields. Accept only an explicit competition reference and season.
+fn stage_identity(pairs: &[u8]) -> Option<(i32, i32)> {
+    if pairs.is_empty() || pairs.len() > 32 * 8 || pairs.len() % 8 != 0 { return None; }
+    let mut competition = None;
+    let mut year = None;
+    for pair in pairs.chunks_exact(8) {
+        let key = u32::from_ne_bytes(pair[..4].try_into().ok()?);
+        let value = i32::from_ne_bytes(pair[4..].try_into().ok()?);
+        if key == 0x64726566 {
+            if competition.is_some() || (value as u32 >> 24) != 25 || value & 0x00ff_ffff == 0 { return None; }
+            competition = Some(value & 0x00ff_ffff);
+        } else if key == 0x79656172 {
+            if year.is_some() || !(1900..=2200).contains(&value) { return None; }
+            year = Some(value);
+        }
+    }
+    Some((competition?, year?))
+}
+
+fn read_stage_identity(driver: &LinuxMemoryDriver, object: usize) -> Option<(i32, i32)> {
+    let (class, namespace, _) = class_of(driver, object)?;
+    if namespace != "FM.UI" || !matches!(class.as_str(), "CompetitionStageReference" | "CompetitionStageWithStatsReference") { return None; }
+    let list = driver.read_ptr(object + 0x10).ok()?;
+    if !is_ptr(list) { return None; }
+    let items = driver.read_ptr(list + 0x10).ok()?;
+    let count = driver.read::<i32>(list + 0x18).ok()?;
+    if !is_ptr(items) || !(1..=32).contains(&count) { return None; }
+    let capacity = driver.read::<usize>(items + 0x18).ok()?;
+    if capacity < count as usize || capacity > 256 { return None; }
+    let mut pairs = vec![0; count as usize * 8];
+    driver.read_bytes(items + 0x20, &mut pairs).ok()?;
+    stage_identity(&pairs)
+}
+
 pub fn run(args: ProbeArgs) -> anyhow::Result<()> {
     if args.person.as_deref() == Some("__deep__") {
         return run_deep_probe(args.prop.as_deref());
@@ -192,6 +227,7 @@ pub fn run(args: ProbeArgs) -> anyhow::Result<()> {
     let rd = |b: &[u8], o: usize| usize::from_ne_bytes(b[o..o + 8].try_into().unwrap());
     let mut rows: Vec<Row> = Vec::new();
     let mut names: HashMap<i32, String> = HashMap::new();
+    let mut stage_groups: HashMap<usize, i32> = HashMap::new();
     let mut ref_types: BTreeMap<i32, usize> = BTreeMap::new();
 
     for i in 0..max_entries {
@@ -209,7 +245,8 @@ pub fn run(args: ProbeArgs) -> anyhow::Result<()> {
         let m_idx = driver.read::<i32>(ref_obj + 0x20).unwrap_or(0);
         let t_typ = driver.read::<i32>(ref_obj + 0x24).unwrap_or(0);
         *ref_types.entry(t_typ).or_default() += 1;
-        if (!args.all_types && t_typ != 1) || m_idx <= 0 {
+        let stage = if args.all_types && m_idx <= 0 { read_stage_identity(&driver, ref_obj) } else { None };
+        if stage.is_none() && ((!args.all_types && t_typ != 1) || m_idx <= 0) {
             continue;
         }
         let p_str_ptr = driver.read_ptr(prop_ptr + 0x10).unwrap_or(0);
@@ -221,7 +258,12 @@ pub fn run(args: ProbeArgs) -> anyhow::Result<()> {
         if prop.is_empty() {
             continue;
         }
-        let person = if args.all_types { m_idx | (t_typ << 24) } else { m_idx };
+        let person = if let Some((competition, year)) = stage {
+            let next_group = i32::MIN + stage_groups.len() as i32;
+            let group = *stage_groups.entry(ref_obj).or_insert(next_group);
+            names.entry(group).or_insert_with(|| format!("CompetitionStageReference source=0x{ref_obj:x} competition={competition} year={year}"));
+            group
+        } else if args.all_types { m_idx | (t_typ << 24) } else { m_idx };
 
         let d_obj = driver.read_ptr(data_items + 0x20 + data_key * 8).unwrap_or(0);
         let val_tv = if is_ptr(d_obj) { driver.read_ptr(d_obj + 0x30).unwrap_or(0) } else { 0 };
@@ -793,5 +835,23 @@ mod tests {
         assert!(is_ident("NumericTypedValue"));
         assert!(!is_ident(""));
         assert!(!is_ident("bad name"));
+    }
+}
+
+#[cfg(test)]
+mod stage_probe_tests {
+    use super::stage_identity;
+    fn pairs(values: &[(u32, i32)]) -> Vec<u8> {
+        values.iter().flat_map(|(key, value)| key.to_ne_bytes().into_iter().chain(value.to_ne_bytes())).collect()
+    }
+    #[test]
+    fn stage_probe_validates_competition_and_season_without_database_offsets() {
+        assert_eq!(stage_identity(&pairs(&[(0x64726566, (25 << 24) | 3295), (0x79656172, 2025), (0x73737374, -1)])), Some((3295, 2025)));
+        assert_eq!(stage_identity(&pairs(&[(0x64726566, (24 << 24) | 3295), (0x79656172, 2025)])), None);
+        assert_eq!(stage_identity(&pairs(&[(0x64726566, 25 << 24), (0x79656172, 2025)])), None);
+        assert_eq!(stage_identity(&pairs(&[(0x64726566, (25 << 24) | 3295)])), None);
+        assert_eq!(stage_identity(&pairs(&[(0x64726566, (25 << 24) | 3295), (0x79656172, 2025), (0x79656172, 2026)])), None);
+        assert_eq!(stage_identity(&vec![0; 264]), None);
+        assert_eq!(stage_identity(&[0; 7]), None);
     }
 }

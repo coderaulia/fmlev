@@ -97,6 +97,9 @@ impl Il2CppString {
     pub const CHARS_OFFSET: usize = 0x14;
 
     pub fn read(driver: &LinuxMemoryDriver, addr: usize) -> Result<String> {
+        if addr <= 0x10000 || addr >= 0x7fff_ffff_ffff {
+            return Ok(String::new());
+        }
         let len: i32 = driver.read(addr + Self::LENGTH_OFFSET)?;
         if len <= 0 || len > 2048 {
             return Ok(String::new());

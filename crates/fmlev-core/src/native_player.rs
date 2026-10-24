@@ -46,6 +46,20 @@ attributes! { NATIVE_OUTFIELD_ATTRIBUTES;
     determination: 0x4a => 5, composure: 0x4b => 5, concentration: 0x4c => 5,
 }
 
+attributes! { NATIVE_GOALKEEPER_ATTRIBUTES;
+    handling: 0x22 => 5, aerial_reach: 0x23 => 5, command_of_area: 0x24 => 5,
+    communication: 0x25 => 5, kicking: 0x26 => 5, throwing: 0x27 => 5,
+    one_on_ones: 0x2a => 5, reflexes: 0x2c => 5, eccentricity: 0x36 => 5,
+    rushing_out: 0x37 => 5, passing: 0x1e => 5, first_touch: 0x2d => 5,
+    anticipation: 0x28 => 5, decisions: 0x29 => 5, positioning: 0x2b => 5,
+    flair: 0x31 => 5, teamwork: 0x33 => 5, work_rate: 0x34 => 5,
+    acceleration: 0x39 => 5, strength: 0x3b => 5, stamina: 0x3c => 5, pace: 0x3d => 5,
+    jumping_reach: 0x3e => 5, leadership: 0x3f => 5, balance: 0x41 => 5, bravery: 0x42 => 5,
+    aggression: 0x44 => 5, agility: 0x45 => 5, natural_fitness: 0x49 => 5,
+    determination: 0x4a => 5, composure: 0x4b => 5, concentration: 0x4c => 5,
+    off_the_ball: 0x1d => 5, vision: 0x21 => 5,
+}
+
 // Relative offsets corroborated by FMSuperScout's native field map. Our validated
 // player subobject is 0x148 bytes after its plao base. No third-party code copied.
 attributes! { NATIVE_EXTRA_ATTRIBUTES;
@@ -295,6 +309,7 @@ impl NativePlayerRecord {
     pub fn attributes_verified(&self) -> bool { self.attributes_verified }
 
     pub fn index(&self) -> i32 { self.index }
+    pub fn address(&self) -> usize { self.address }
 
     /// Native name records are pooled references to length-prefixed UTF-8 strings.
     /// These are read-only: editing pooled strings would rename other people too.
@@ -349,10 +364,15 @@ impl NativePlayerRecord {
         Ok(candidate)
     }
 
-    /// Independently match every visible outfield attribute before accepting this layout.
+    /// Independently match every visible attribute before accepting this layout.
     pub fn verify_attributes(&mut self, driver: &LinuxMemoryDriver, observed: &PlayerAttributes) -> Result<()> {
         self.validate(driver)?;
-        for field in NATIVE_OUTFIELD_ATTRIBUTES {
+        let fields = if observed.reflexes > 0 && observed.handling > 0 {
+            NATIVE_GOALKEEPER_ATTRIBUTES
+        } else {
+            NATIVE_OUTFIELD_ATTRIBUTES
+        };
+        for field in fields {
             let expected = (field.get)(observed);
             if !(1..=20).contains(&expected)
                 || displayed_rating(driver.read::<u8>(self.address + field.offset)?)? != expected
@@ -400,12 +420,19 @@ impl NativePlayerRecord {
         Ok(())
     }
 
-    pub fn refresh_player_fields(&self, driver: &LinuxMemoryDriver, player: &mut Player) -> Result<()> {
-        self.refresh_attributes(driver, &mut player.attributes)?;
+    pub fn refresh_abilities(&self, driver: &LinuxMemoryDriver, player: &mut Player) -> Result<()> {
+        self.validate(driver)?;
+        if !self.attributes_verified { return Err(invalid("Native attributes have not been verified for this player")); }
         let ca = driver.read::<u16>(self.address + 0x11c)?;
         let pa = driver.read::<u16>(self.address + 0x11e)?;
         player.current_ability = if (1..=200).contains(&ca) { ca as u8 } else { 0 };
         player.potential_ability = if (1..=200).contains(&pa) { pa as u8 } else { 0 };
+        Ok(())
+    }
+
+    pub fn refresh_player_fields(&self, driver: &LinuxMemoryDriver, player: &mut Player) -> Result<()> {
+        self.refresh_attributes(driver, &mut player.attributes)?;
+        self.refresh_abilities(driver, player)?;
         if let Ok(contract) = self.contract(driver) {
             let wage = driver.read::<u32>(contract.address + 0x20)?;
             player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);
@@ -482,6 +509,45 @@ impl NativePlayerRecord {
             Some(contract)
         } else { None };
         self.apply_edits(driver, &patches, contract)
+    }
+
+    /// Clear any active injuries in the native injury vector and restore condition and sharpness to 100%.
+    pub fn heal(&self, driver: &LinuxMemoryDriver) -> Result<()> {
+        self.validate(driver)?;
+        let mut patches = Vec::new();
+
+        let inj_vec_ptr = driver.read_ptr(self.address + 0x248)?;
+        if inj_vec_ptr > 0x10000 {
+            let start = driver.read_ptr(inj_vec_ptr + 0x18)?;
+            let end = driver.read_ptr(inj_vec_ptr + 0x20)?;
+            if end > start && (end - start) % 8 == 0 && (end - start) <= 256 {
+                let count = (end - start) / 8;
+                for i in 0..count {
+                    let item = driver.read_ptr(start + i * 8)?;
+                    if item > 0x10000 {
+                        let active_ptr = driver.read_ptr(item + 0x60)?;
+                        if active_ptr != 0 {
+                            patches.push(NativeEdit::capture(driver, item + 0x60, 0u64.to_le_bytes().to_vec())?);
+                        }
+                    }
+                }
+                patches.push(NativeEdit::capture(driver, inj_vec_ptr + 0x20, start.to_le_bytes().to_vec())?);
+            }
+        }
+
+        let c0 = driver.read::<i32>(self.address + 0xc0)?;
+        if c0 < 10000 {
+            patches.push(NativeEdit::capture(driver, self.address + 0xc0, 10000i32.to_le_bytes().to_vec())?);
+        }
+        let f0 = driver.read::<i32>(self.address + 0x100)?;
+        if f0 < 10000 {
+            patches.push(NativeEdit::capture(driver, self.address + 0x100, 10000i32.to_le_bytes().to_vec())?);
+        }
+
+        if !patches.is_empty() {
+            self.apply_edits(driver, &patches, None)?;
+        }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -659,6 +725,50 @@ mod tests {
         let personality = fields.iter().find(|f| f.name == "professionalism").unwrap();
         assert_eq!(personality.decode(12).unwrap(), 12);
         assert!(personality.decode(60).is_err());
+    }
+
+    #[test]
+    fn indexed_abilities_require_calibration_and_preserve_unread_contract_fields() {
+        let (_data, mut record) = fixture();
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        driver.write(record.address + 0x11c, &125u16).unwrap();
+        driver.write(record.address + 0x11e, &175u16).unwrap();
+        let mut player = Player::default();
+        player.contract.wage_per_week = 543;
+        player.contract.expiry_year = 2029;
+        let contract = player.contract.clone();
+        assert!(record.refresh_abilities(&driver, &mut player).is_err());
+        let mut observed = PlayerAttributes::default();
+        for field in NATIVE_OUTFIELD_ATTRIBUTES {
+            driver.write(record.address + field.offset, &50u8).unwrap();
+            (field.set)(&mut observed, 10);
+        }
+        record.verify_attributes(&driver, &observed).unwrap();
+        record.refresh_abilities(&driver, &mut player).unwrap();
+        assert_eq!((player.current_ability, player.potential_ability), (125, 175));
+        assert_eq!(player.contract, contract);
+        driver.write(record.address + 0x11c, &201u16).unwrap();
+        driver.write(record.address + 0x11e, &0u16).unwrap();
+        record.refresh_abilities(&driver, &mut player).unwrap();
+        assert_eq!((player.current_ability, player.potential_ability), (0, 0));
+    }
+
+    #[test]
+    fn goalkeeper_attributes_verify_and_calibrate_layout() {
+        let (_data, mut record) = fixture();
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        driver.write(record.address + 0x11c, &130u16).unwrap();
+        driver.write(record.address + 0x11e, &160u16).unwrap();
+        let mut observed = PlayerAttributes::default();
+        for field in NATIVE_GOALKEEPER_ATTRIBUTES {
+            driver.write(record.address + field.offset, &65u8).unwrap();
+            (field.set)(&mut observed, 13);
+        }
+        record.verify_attributes(&driver, &observed).unwrap();
+        assert!(record.attributes_verified());
+        let mut player = Player::default();
+        record.refresh_abilities(&driver, &mut player).unwrap();
+        assert_eq!((player.current_ability, player.potential_ability), (130, 160));
     }
 
     #[test]

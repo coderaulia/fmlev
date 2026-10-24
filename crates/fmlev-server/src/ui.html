@@ -1615,6 +1615,8 @@
               <div class="ca-pa-label">CA (Ability)</div>
               <input id="input-ca" type="text" inputmode="numeric" class="ca-pa-val-input ca-color" value="—" placeholder="—" onfocus="if(this.value==='—')this.value=''" oninput="handleCAInput(this.value)" onblur="handleCAChange(this.value)" onchange="handleCAChange(this.value)">
               <div id="star-rating-ca" class="star-rating">—</div>
+              <div id="ca-suggestion" style="font-size: 10px; color: var(--text-dim); margin-top: 6px;" aria-live="polite">CA estimate unavailable: open a player's Attributes screen.</div>
+              <button id="apply-ca-suggestion" class="preset-btn" type="button" onclick="applyRecommendedCA()" disabled style="margin-top: 5px;">Apply estimate</button>
             </div>
             <div style="width: 1px; height: 36px; background: var(--border-color);"></div>
             <div class="ca-pa-block">
@@ -2907,6 +2909,9 @@
       activeClub: null,
       activeNation: null,
       activeCompetition: null,
+      liveClubs: {},
+      liveNations: {},
+      liveCompetitions: {},
       syncMode: "auto_follow",
       screenState: "player",
       isOverlayMode: false,
@@ -3247,10 +3252,7 @@
 
       updateAttrDisplay(key, next, true);
 
-      // Recalculate CA recommendation only if CA is exposed
-      if ((state.activePlayer.current_ability || 0) > 0) {
-        updateRecommendedCA();
-      }
+      updateRecommendedCA();
 
     }
 
@@ -3273,11 +3275,7 @@
       state.activePlayer.attributes[key] = num;
       updateAttrDisplay(key, num, commit);
 
-      if (commit && dirtyPlayerFields.has("attr_" + key)) {
-        if ((state.activePlayer.current_ability || 0) > 0) {
-          updateRecommendedCA();
-        }
-      }
+      updateRecommendedCA();
     }
 
     function promptEditAttr(key, name) {
@@ -3342,6 +3340,9 @@
         const data = await res.json();
 
         state.connected = data.connected;
+        state.liveClubs = data.live_clubs || {};
+        state.liveNations = data.live_nations || {};
+        state.liveCompetitions = data.live_competitions || {};
         state.playerWritableFields = data.player_writable_fields ?? null;
         const support = document.getElementById("player-write-support");
         if (support) {
@@ -3436,6 +3437,7 @@
     function displayPlayer(player) {
       if (!player) return;
       const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
+      state.caEstimateBaseline = JSON.parse(JSON.stringify(player));
       if (!isSamePlayer) {
         state.activePlayer = JSON.parse(JSON.stringify(player));
         state.playerDirtyFields.clear();
@@ -3643,12 +3645,140 @@
         state.activePlayer.positions = JSON.parse(JSON.stringify(player.positions));
       }
       renderPositionsTab();
+      updateRecommendedCA();
       refreshPendingActionIndicators();
+    }
+
+    // Live non-player native records are not verified. Keep identity visible, but
+    // never present fixture values or unavailable zeros as game data.
+    function renderVerifiedOverview(kind, record, banner) {
+      const id = kind === "club" ? record.club_id : record.id;
+      const snapshots = kind === "club" ? state.liveClubs : kind === "nation" ? state.liveNations : state.liveCompetitions;
+      const snapshot = snapshots?.[id];
+      const rows = [];
+      const add = (label, value) => {
+        if (value !== null && value !== undefined && value !== "") rows.push([label, String(value)]);
+      };
+      if (snapshot) {
+        if (kind === "club") {
+          add("Stadium", snapshot.stadium_name);
+          add("Capacity", snapshot.stadium_capacity_text);
+          add("Built", snapshot.stadium_year_built);
+          add("Owner", snapshot.stadium_owner);
+          add("Training", snapshot.training_description);
+          add("Youth", snapshot.youth_description);
+          add("Corporate", snapshot.corporate_description);
+          add("Remaining wage budget", snapshot.remaining_wage_budget_text);
+          add("Current wage spending", snapshot.current_wage_spending_text);
+          add("Balance (raw game units)", snapshot.balance_game_units);
+          add("Transfer budget (raw game units)", snapshot.transfer_budget_game_units);
+        } else if (kind === "nation") {
+          add("Continent", snapshot.continent);
+          add("Population", snapshot.population?.toLocaleString());
+          add("Languages", snapshot.spoken_languages);
+          add("Men's federation founded", snapshot.men?.federation_founded);
+          add("Men's ranking", snapshot.men?.fifa_rank);
+          add("Men's points", snapshot.men?.fifa_points?.toFixed(0));
+          add("Men's national stadium", snapshot.men?.national_stadium);
+          add("Women's federation founded", snapshot.women?.federation_founded);
+          add("Women's ranking", snapshot.women?.fifa_rank);
+          add("Women's points", snapshot.women?.fifa_points?.toFixed(0));
+          add("Women's national stadium", snapshot.women?.national_stadium);
+        } else {
+          add("Clubs", snapshot.number_of_teams);
+          add("Season", snapshot.season_name);
+          add("Asia ranking", snapshot.asia_reputation_position);
+          add("Reputation", snapshot.reputation_description);
+          add("Nation ID", snapshot.nation_id);
+          add("Holder team ID", snapshot.holder_team_id);
+        }
+      }
+      banner.replaceChildren();
+      const message = document.createElement("div");
+      message.textContent = snapshot ? "Verified live overview. Editing these fields is unavailable until native records are validated." : "No verified live overview is loaded for this selection. Open its screen in FM26 to read available values. Editing is unavailable.";
+      banner.appendChild(message);
+      if (rows.length) {
+        const list = document.createElement("dl");
+        list.style.cssText = "display:grid;grid-template-columns:max-content 1fr;gap:8px 18px;margin:14px 0 0";
+        for (const [label, value] of rows) {
+          const term = document.createElement("dt"); term.textContent = label;
+          const detail = document.createElement("dd"); detail.textContent = value; detail.style.margin = "0";
+          list.append(term, detail);
+        }
+        banner.appendChild(list);
+      }
+    }
+
+    function displayEntityAvailability(kind, record) {
+      const panel = document.getElementById(`tab-${kind}`);
+      if (!panel) return state.connected;
+      const bannerId = `${kind}-live-unavailable`;
+      let banner = document.getElementById(bannerId);
+      if (!banner) {
+        banner = document.createElement("div");
+        banner.id = bannerId;
+        banner.className = "card";
+        banner.setAttribute("role", "status");
+        banner.style.cssText = "margin:16px 0;padding:20px;border-color:var(--accent-gold);color:var(--text-muted);line-height:1.6";
+        panel.appendChild(banner);
+      }
+      banner.hidden = !state.connected;
+      const header = panel.firstElementChild;
+      for (const child of panel.children) {
+        if (child === header || child === banner) continue;
+        if (state.connected) {
+          if (!child.hasAttribute("data-entity-original-hidden")) {
+            child.dataset.entityOriginalHidden = String(child.hidden);
+            child.dataset.entityOriginalDisplay = child.style.display || "";
+          }
+          child.hidden = true;
+          child.style.display = "none";
+        } else if (child.hasAttribute("data-entity-original-hidden")) {
+          child.hidden = child.dataset.entityOriginalHidden === "true";
+          child.style.display = child.dataset.entityOriginalDisplay;
+          delete child.dataset.entityOriginalHidden;
+          delete child.dataset.entityOriginalDisplay;
+        }
+      }
+      for (const input of panel.querySelectorAll("input, select, button, textarea")) {
+        if (state.connected) {
+          if (!input.hasAttribute("data-entity-original-disabled")) input.dataset.entityOriginalDisabled = String(input.disabled);
+          input.disabled = true;
+        } else if (input.hasAttribute("data-entity-original-disabled")) {
+          input.disabled = input.dataset.entityOriginalDisabled === "true";
+          delete input.dataset.entityOriginalDisabled;
+        }
+      }
+      if (!state.connected) return false;
+      renderVerifiedOverview(kind, record, banner);
+      const text = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+      if (kind === "club") {
+        text("club-title", record.club_name || "Club unavailable");
+        text("club-league-badge", "League unavailable");
+        text("club-rep-num", "Unavailable");
+        text("club-rep-stars", "—");
+        text("save-club-status-indicator", "Live editing unavailable");
+      } else if (kind === "nation") {
+        text("nation-name", record.name || "Nation unavailable");
+        text("nation-code", record.three_letter_code || "—");
+        text("nation-continent", record.continent || "Unavailable");
+        text("nation-flag-avatar", getCountryFlag(record.name));
+        text("nation-rep-num", "Unavailable");
+        text("nation-rep-stars", "—");
+      } else {
+        text("comp-name", record.name || "Competition unavailable");
+        text("comp-short-name", record.short_name || "—");
+        text("comp-nation", record.nation_name || "Unavailable");
+        text("comp-rep-num", "Unavailable");
+        text("comp-rep-stars", "—");
+      }
+      return true;
     }
 
     // Render Club Data
     function displayClub(club) {
       state.activeClub = JSON.parse(JSON.stringify(club));
+      if (displayEntityAvailability("club", club)) return;
 
       const titleEl = document.getElementById("club-title");
       if (titleEl) titleEl.innerText = club.club_name || "Club";
@@ -3784,23 +3914,35 @@
       return map[nat] || "🌐";
     }
 
+    // A baseline-relative aid, not FM's position/foot-weighted CA calculation.
+    function recommendedCA() {
+      const player = state.activePlayer;
+      const baseline = state.caEstimateBaseline;
+      if (!player || !baseline || player.id !== baseline.id ||
+          !Number.isInteger(baseline.current_ability) || baseline.current_ability < 1 || baseline.current_ability > 200) return null;
+      const keys = [...techAttrs, ...mentalAttrs, ...physAttrs, ...gkAttrs].map(([key]) => key);
+      const valid = value => Number.isInteger(value) && value >= 1 && value <= 20;
+      if (!keys.every(key => valid(player.attributes?.[key]) && valid(baseline.attributes?.[key]))) return null;
+      const delta = keys.reduce((sum, key) => sum + player.attributes[key] - baseline.attributes[key], 0);
+      return Math.max(1, Math.min(200, Math.round(baseline.current_ability + delta * 10 / keys.length)));
+    }
+
     function updateRecommendedCA() {
-      if (!state.activePlayer || !state.activePlayer.attributes) return;
-      const attrs = state.activePlayer.attributes;
-      const keys = [
-        "finishing", "dribbling", "passing", "pace", "acceleration",
-        "stamina", "anticipation", "composure", "decisions",
-        "determination", "first_touch", "technique"
-      ];
-      const exposed = keys.filter(k => (parseInt(attrs[k], 10) || 0) > 0);
-      if (exposed.length === 0) return; // Do not fabricate CA if no attributes exposed
-
-      const sum = exposed.reduce((acc, k) => acc + (parseInt(attrs[k], 10) || 0), 0);
-      const rec = Math.min(200, Math.max(1, Math.round((sum / exposed.length) * 10)));
-
-      // A recommendation is not game data or an explicit CA edit.
-      // Updating Passing must never silently add a CA write to the same Save.
+      const rec = recommendedCA();
+      const label = document.getElementById("ca-suggestion");
+      const button = document.getElementById("apply-ca-suggestion");
+      if (label) label.innerText = rec === null
+        ? "CA estimate unavailable: complete attributes and a valid live CA are required."
+        : `Approximate CA: ${rec}. Attribute changes only; FM's position and foot weights are not reproduced.`;
+      if (button) button.disabled = rec === null || rec === state.activePlayer.current_ability;
       return rec;
+    }
+
+    function applyRecommendedCA() {
+      const rec = recommendedCA();
+      if (rec === null || rec === state.activePlayer.current_ability) return;
+      handleCAChange(String(rec));
+      updateRecommendedCA();
     }
 
     const populatePlayerForm = displayPlayer;
@@ -4709,6 +4851,7 @@
     // Nation Details Management
     function displayNation(nation) {
       state.activeNation = JSON.parse(JSON.stringify(nation));
+      if (displayEntityAvailability("nation", nation)) return;
 
       document.getElementById("nation-name").innerText = nation.name || "Nation";
       document.getElementById("nation-code").innerText = nation.three_letter_code || "NAT";
@@ -4883,6 +5026,7 @@
     // Competition Details Management
     function displayCompetition(comp) {
       state.activeCompetition = JSON.parse(JSON.stringify(comp));
+      if (displayEntityAvailability("competition", comp)) return;
 
       document.getElementById("comp-name").innerText = comp.name || "Competition";
       document.getElementById("comp-short-name").innerText = comp.short_name || "COMP";
@@ -5012,15 +5156,17 @@
         const competitions = data.competitions || [];
 
         if (players.length === 0 && clubs.length === 0 && nations.length === 0 && competitions.length === 0) {
-          dropdown.innerHTML = `<div style="padding: 12px; text-align: center; color: var(--text-muted);">No players, clubs, nations, or competitions found</div>`;
+          dropdown.textContent = data.discovery_error || "No players, clubs, nations, or competitions found. Open a player's Attributes screen and use Scan Loaded Players to retry indexing.";
           dropdown.style.display = "block";
           return;
         }
 
         let html = "";
         if (players.length > 0) {
-          html += `<div class="search-section-title">⚽ Players (${players.length})</div>`;
-          html += players.slice(0, 5).map(p => {
+          const totalPlayers = Number.isInteger(data.total_players) ? data.total_players : players.length;
+          const countLabel = totalPlayers > players.length ? `${players.length} shown of ${totalPlayers}; refine your search` : String(totalPlayers);
+          html += `<div class="search-section-title">⚽ Players (${countLabel})</div>`;
+          html += players.map(p => {
             const isLive = isLivePlayer(p);
             const caStr = (p.current_ability || 0) > 0 ? p.current_ability : "—";
             const paStr = (p.potential_ability || 0) > 0 ? p.potential_ability : "—";
@@ -5035,7 +5181,7 @@
                     ${escapeHtml(p.name)}
                     ${isLive ? '<span class="live-badge-sm">LIVE</span>' : ''}
                   </div>
-                  <div class="search-item-meta">${p.position || "MC"} • ${clubStr}</div>
+                  <div class="search-item-meta">${escapeHtml(p.position || "Unknown position")} • ${clubStr}</div>
                 </div>
               </div>
               <span class="search-item-badge">CA ${caStr} / PA ${paStr}</span>

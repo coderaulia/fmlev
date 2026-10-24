@@ -226,3 +226,58 @@ test('all sixty native attributes have editing controls', () => {
     assert.equal(app.run(`allAttrKeys.includes(${JSON.stringify(key)})`), true);
   }
 });
+
+test('CA estimate is relative to baseline and Apply stages an explicit edit', () => {
+  let calls = 0;
+  const app = ui(() => { calls++; });
+  app.run(`
+    const suggestion = { innerText: '' }, applyEstimate = { disabled: true };
+    document.getElementById = id => id === 'ca-suggestion' ? suggestion : id === 'apply-ca-suggestion' ? applyEstimate : null;
+    state.playerDirtyFields.clear();
+    state.activePlayer.current_ability = 90;
+    for (const [key] of [...techAttrs, ...mentalAttrs, ...physAttrs, ...gkAttrs]) state.activePlayer.attributes[key] = 10;
+    state.caEstimateBaseline = JSON.parse(JSON.stringify(state.activePlayer));
+  `);
+  assert.equal(app.run('updateRecommendedCA()'), 90);
+  assert.equal(app.run('applyEstimate.disabled'), true);
+  app.run('for (const key of Object.keys(state.activePlayer.attributes)) state.activePlayer.attributes[key] = 12; updateRecommendedCA()');
+  assert.equal(app.run('recommendedCA()'), 110);
+  assert.match(app.run('suggestion.innerText'), /Approximate CA: 110/);
+  assert.equal(app.run('applyEstimate.disabled'), false);
+  assert.equal(app.run('state.activePlayer.current_ability'), 90);
+  assert.equal(app.run('state.playerDirtyFields.has("current_ability")'), false);
+  app.run('applyRecommendedCA()');
+  assert.equal(app.run('state.activePlayer.current_ability'), 110);
+  assert.equal(app.run('state.playerDirtyFields.has("current_ability")'), true);
+  assert.equal(app.run('applyEstimate.disabled'), true);
+  assert.equal(calls, 0);
+});
+
+test('CA estimate rejects incomplete or wrong-player data and clamps extremes', () => {
+  const app = ui(() => {});
+  assert.equal(app.run('recommendedCA()'), null);
+  app.run(`
+    state.activePlayer.current_ability = 195;
+    for (const [key] of [...techAttrs, ...mentalAttrs, ...physAttrs, ...gkAttrs]) state.activePlayer.attributes[key] = 10;
+    state.caEstimateBaseline = JSON.parse(JSON.stringify(state.activePlayer));
+    for (const key of Object.keys(state.activePlayer.attributes)) state.activePlayer.attributes[key] = 20;
+  `);
+  assert.equal(app.run('recommendedCA()'), 200);
+  app.run('state.caEstimateBaseline.current_ability = 5; for (const key of Object.keys(state.activePlayer.attributes)) state.activePlayer.attributes[key] = 1');
+  assert.equal(app.run('recommendedCA()'), 1);
+  app.run('state.activePlayer.attributes.passing = 0');
+  assert.equal(app.run('recommendedCA()'), null);
+  app.run('state.activePlayer.attributes.passing = 10; state.caEstimateBaseline.id++');
+  assert.equal(app.run('recommendedCA()'), null);
+});
+
+test('search shows every returned player and reports the total match count', async () => {
+  const players = Array.from({ length: 8 }, (_, id) => ({ id, name: `Player ${id}` }));
+  const app = ui(async () => ({ ok: true, json: async () => ({ players, total_players: 125 }) }));
+  app.run("const dropdown = { style: {}, innerHTML: '' }; document.getElementById = () => dropdown;");
+  await app.run('performSearch("Player")');
+  assert.match(app.run('dropdown.innerHTML'), /8 shown of 125/);
+  assert.match(app.run('dropdown.innerHTML'), /Player 7/);
+  assert.match(app.run('dropdown.innerHTML'), /Unknown position/);
+  assert.equal(app.run('(dropdown.innerHTML.match(/class="search-item"/g) || []).length'), 8);
+});

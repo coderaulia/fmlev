@@ -50,6 +50,10 @@
 
 ---
 
+Live write support is currently limited to validated player positions and foot ratings.
+Other entity saves return an explicit unsupported error until their native layouts
+are verified. See [live verification and limitations](LIVE_READ_WRITE.md).
+
 ## 📦 Downloads & Distribution
 
 Get started in seconds! Run the 1-click launcher or install a desktop icon to launch FMLE without ever typing a terminal command.
@@ -124,8 +128,25 @@ This automatically:
 #### Step 2: Daily Use (No Commands Needed!)
 1. Launch **Football Manager 26** in Steam.
 2. Double-click the **FMLE by Vanaila** icon on your Desktop (or open it from your Application Menu / Steam Deck desktop mode).
-3. FMLE automatically launches in the background and pops up your browser at `http://localhost:41789`.
+3. FMLE builds the current code, keeps its terminal open, and opens your browser at `http://localhost:41789`. Ctrl+C stops the server.
 4. Edit your players, club, nation, or competitions on the fly!
+
+Server controls (Linux):
+
+```bash
+./start.sh                  # Start; an existing server is reused, never duplicated
+./start.sh status           # PID, binary build time, and whether it is outdated
+./start.sh restart          # Build first, then replace the server on port 41789
+./start.sh stop             # Stop the server, including older launcher instances
+./start.sh restart --background  # Optional detached mode with a persistent log
+```
+
+Normal starts keep the server in the terminal, including when reusing an existing
+server. Ctrl+C or closing that terminal stops the server. Restart rebuilds the code and
+opens the browser only after the replacement is ready. If the build fails, the
+existing server stays running. Background output goes to
+`${XDG_STATE_HOME:-~/.local/state}/fmlev/server.log`; use `stop` from any terminal
+to terminate it. An unrelated application on the port is never terminated.
 
 > **💡 Note on Linux Yama Ptrace Permissions**:
 > Modern Linux distributions protect processes with Yama LSM. If FMLE indicates that memory access is restricted, run:

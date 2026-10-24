@@ -1,7 +1,7 @@
-use std::io::{IoSlice, IoSliceMut};
+use crate::error::{MemoryError, Result};
 use nix::sys::uio::{process_vm_readv, process_vm_writev, RemoteIoVec};
 use nix::unistd::Pid;
-use crate::error::{MemoryError, Result};
+use std::io::{IoSlice, IoSliceMut};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LinuxMemoryDriver {
@@ -56,7 +56,14 @@ impl LinuxMemoryDriver {
         let slice = unsafe {
             std::slice::from_raw_parts_mut(val.as_mut_ptr() as *mut u8, std::mem::size_of::<T>())
         };
-        self.read_bytes(remote_addr, slice)?;
+        let transferred = self.read_bytes(remote_addr, slice)?;
+        if transferred != slice.len() {
+            return Err(MemoryError::ReadFailed(
+                slice.len(),
+                remote_addr,
+                format!("short read: {transferred} bytes"),
+            ));
+        }
         Ok(unsafe { val.assume_init() })
     }
 
@@ -64,7 +71,14 @@ impl LinuxMemoryDriver {
         let slice = unsafe {
             std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>())
         };
-        self.write_bytes(remote_addr, slice)?;
+        let transferred = self.write_bytes(remote_addr, slice)?;
+        if transferred != slice.len() {
+            return Err(MemoryError::WriteFailed(
+                slice.len(),
+                remote_addr,
+                format!("short write: {transferred} bytes"),
+            ));
+        }
         Ok(())
     }
 
@@ -115,5 +129,56 @@ impl LinuxMemoryDriver {
         new_val: T,
     ) -> Result<Vec<usize>> {
         crate::scanner::filter_addresses(self, addrs, new_val)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A remote iovec crossing into PROT_NONE can transfer its first page only.
+    // Typed operations must reject that prefix rather than report success.
+    #[test]
+    fn typed_transfers_reject_partial_pages() {
+        unsafe {
+            let page = libc::sysconf(libc::_SC_PAGESIZE) as usize;
+            let region = libc::mmap(
+                std::ptr::null_mut(),
+                page * 2,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            );
+            assert_ne!(region, libc::MAP_FAILED);
+            let bytes = region.cast::<u8>();
+            assert_eq!(
+                libc::mprotect(bytes.add(page).cast(), page, libc::PROT_NONE),
+                0
+            );
+            let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+            let boundary = bytes.add(page - 8) as usize;
+            let mut prefix = [0; 16];
+            assert_eq!(driver.read_bytes(boundary, &mut prefix).unwrap(), 8);
+            assert!(matches!(
+                driver.read::<[u8; 16]>(boundary),
+                Err(MemoryError::ReadFailed(..))
+            ));
+            assert!(matches!(
+                driver.write(boundary, &[7u8; 16]),
+                Err(MemoryError::WriteFailed(..))
+            ));
+            assert_eq!(libc::munmap(region, page * 2), 0);
+        }
+    }
+
+    #[test]
+    fn typed_transfers_round_trip() {
+        let mut value = 42u64;
+        let address = std::ptr::addr_of_mut!(value) as usize;
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        assert_eq!(driver.read::<u64>(address).unwrap(), 42);
+        driver.write(address, &73u64).unwrap();
+        assert_eq!(driver.read::<u64>(address).unwrap(), 73);
     }
 }

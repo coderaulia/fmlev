@@ -140,7 +140,7 @@ pub struct FinanceRequest {
 }
 
 fn default_club_ptr() -> usize {
-    0x7ff418300000
+    0
 }
 
 fn default_balance_offset() -> usize {
@@ -217,6 +217,10 @@ pub struct AffiliateActionRequest {
     pub club_id: i32,
     pub affiliate: Option<ClubAffiliate>,
     pub affiliate_id: Option<i32>,
+}
+
+fn api_error(status: StatusCode, error: impl std::fmt::Display) -> (StatusCode, Json<serde_json::Value>) {
+    (status, Json(serde_json::json!({ "status": "error", "message": error.to_string() })))
 }
 
 pub fn create_router(state: ServerState) -> Router {
@@ -313,7 +317,7 @@ async fn get_status(State(state): State<ServerState>) -> impl IntoResponse {
 
 async fn get_context(State(state): State<ServerState>) -> impl IntoResponse {
     let mut w = state.inner.write().await;
-    let _ = w.context_mgr.sync_live_context();
+    let sync_error = w.context_mgr.sync_live_context().err().map(|error| error.to_string());
     let ctx = w.context_mgr.get_context();
     w.is_attached = ctx.attached;
     w.pid = ctx.pid;
@@ -323,6 +327,7 @@ async fn get_context(State(state): State<ServerState>) -> impl IntoResponse {
 
     Json(serde_json::json!({
         "connected": ctx.attached,
+        "sync_error": sync_error,
         "pid": ctx.pid,
         "game_name": "Football Manager 26",
         "screen_state": ctx.active_screen,
@@ -365,29 +370,42 @@ async fn select_context(
     Json(payload): Json<ContextSelectRequest>,
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
+    let targets = [payload.player_id, payload.club_id, payload.nation_id, payload.competition_id]
+        .iter().filter(|target| target.is_some()).count();
+    if (payload.unpin == Some(true) && targets != 0) || (payload.unpin != Some(true) && targets != 1) {
+        return api_error(StatusCode::BAD_REQUEST, "Select exactly one entity, or unpin without an entity");
+    }
     if payload.unpin == Some(true) {
         w.context_mgr.set_sync_mode("auto_follow");
     } else {
         if let Some(pid) = payload.player_id {
-            let _ = w.context_mgr.select_player(pid);
+            if let Err(error) = w.context_mgr.select_player(pid) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(cid) = payload.club_id {
-            let _ = w.context_mgr.select_club(cid);
+            if let Err(error) = w.context_mgr.select_club(cid) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(nid) = payload.nation_id {
-            let _ = w.context_mgr.select_nation(nid);
+            if let Err(error) = w.context_mgr.select_nation(nid) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(comp_id) = payload.competition_id {
-            let _ = w.context_mgr.select_competition(comp_id);
+            if let Err(error) = w.context_mgr.select_competition(comp_id) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             w.context_mgr.set_sync_mode("pinned");
         }
     }
 
     let ctx = w.context_mgr.get_context();
-    Json(serde_json::json!({
+    (StatusCode::OK, Json(serde_json::json!({
         "status": "success",
         "is_pinned": ctx.sync_mode == "pinned",
         "sync_mode": ctx.sync_mode,
@@ -399,7 +417,7 @@ async fn select_context(
         "active_nation": ctx.nation,
         "competition": ctx.competition,
         "active_competition": ctx.competition
-    }))
+    })))
 }
 
 async fn update_player(
@@ -484,7 +502,9 @@ async fn apply_player_preset(
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
     if let Some(pid) = payload.player_id {
-        let _ = w.context_mgr.select_player(pid);
+        if let Err(error) = w.context_mgr.select_player(pid) {
+            return api_error(StatusCode::BAD_REQUEST, error);
+        }
     }
 
     match payload.preset.as_str() {
@@ -492,7 +512,9 @@ async fn apply_player_preset(
             let mut p = w.context_mgr.context.player.clone();
             boost_player_attributes(&mut p.attributes, 2);
             p.current_ability = (p.current_ability as u16 + 10).min(200) as u8;
-            let _ = w.context_mgr.update_player(p);
+            if let Err(error) = w.context_mgr.update_player(p) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -507,7 +529,9 @@ async fn apply_player_preset(
         "free_release" => {
             let mut p = w.context_mgr.context.player.clone();
             p.contract.release_clause = 0;
-            let _ = w.context_mgr.update_player(p);
+            if let Err(error) = w.context_mgr.update_player(p) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -583,11 +607,17 @@ async fn apply_club_preset(
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
     if let Some(cid) = payload.club_id {
-        let _ = w.context_mgr.select_club(cid);
+        if let Err(error) = w.context_mgr.select_club(cid) {
+            return api_error(StatusCode::BAD_REQUEST, error);
+        }
     }
 
     match payload.preset.as_str() {
         "morale_squad" => {
+            if w.context_mgr.session.is_some() {
+                return api_error(StatusCode::NOT_IMPLEMENTED,
+                    "Squad writes require verified native player bindings and are unavailable for this live session");
+            }
             let target_club_id = w.context_mgr.context.club.club_id;
             w.context_mgr.context.player.morale = 100;
             w.context_mgr.context.player.morale_label = "Superb".to_string();
@@ -612,6 +642,10 @@ async fn apply_club_preset(
             )
         }
         "clear_bans" => {
+            if w.context_mgr.session.is_some() {
+                return api_error(StatusCode::NOT_IMPLEMENTED,
+                    "Squad writes require verified native player bindings and are unavailable for this live session");
+            }
             let target_club_id = w.context_mgr.context.club.club_id;
             w.context_mgr.context.player.is_injured = false;
             w.context_mgr.context.player.is_suspended = false;
@@ -633,24 +667,10 @@ async fn apply_club_preset(
                 })),
             )
         }
-        "unlock_ige" => {
-            if let Some(base) = w.game_assembly_base {
-                if let Some(pid) = w.pid {
-                    let driver = LinuxMemoryDriver::new(pid);
-                    let _ = driver.write::<u8>(base + 0x1800, &1);
-                }
-            }
-            let ctx = w.context_mgr.get_context();
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "success",
-                    "message": "Unlocked FM26 Built-In In-Game Editor (IGE) in memory!".to_string(),
-                    "club": ctx.club,
-                    "active_club": ctx.club
-                })),
-            )
-        }
+        "unlock_ige" => api_error(
+            StatusCode::NOT_IMPLEMENTED,
+            "The in-game editor unlock has no verified memory binding and is unavailable",
+        ),
         other => {
             let action_str = match other {
                 "heal_squad" => "heal_squad",
@@ -715,12 +735,16 @@ async fn apply_nation_preset(
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
     if let Some(nid) = payload.nation_id {
-        let _ = w.context_mgr.select_nation(nid);
+        if let Err(error) = w.context_mgr.select_nation(nid) {
+            return api_error(StatusCode::BAD_REQUEST, error);
+        }
     }
 
     match payload.preset.as_str() {
         "golden_generation" => {
-            let _ = w.context_mgr.apply_quick_action("golden_generation");
+            if let Err(error) = w.context_mgr.apply_quick_action("golden_generation") {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -735,7 +759,9 @@ async fn apply_nation_preset(
         "max_youth_rating" => {
             let mut nation = w.context_mgr.context.nation.clone();
             nation.youth_rating = 200;
-            let _ = w.context_mgr.update_nation(nation);
+            if let Err(error) = w.context_mgr.update_nation(nation) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -751,7 +777,9 @@ async fn apply_nation_preset(
             let mut nation = w.context_mgr.context.nation.clone();
             nation.reputation = 10000;
             nation.corruption_index = 0;
-            let _ = w.context_mgr.update_nation(nation);
+            if let Err(error) = w.context_mgr.update_nation(nation) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -769,7 +797,9 @@ async fn apply_nation_preset(
             nation.state_of_development = 2;
             nation.fa_financial_power = 20;
             nation.tax_rate = 15;
-            let _ = w.context_mgr.update_nation(nation);
+            if let Err(error) = w.context_mgr.update_nation(nation) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -836,12 +866,16 @@ async fn apply_competition_preset(
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
     if let Some(cid) = payload.competition_id {
-        let _ = w.context_mgr.select_competition(cid);
+        if let Err(error) = w.context_mgr.select_competition(cid) {
+            return api_error(StatusCode::BAD_REQUEST, error);
+        }
     }
 
     match payload.preset.as_str() {
         "relax_rules" => {
-            let _ = w.context_mgr.apply_quick_action("relax_rules");
+            if let Err(error) = w.context_mgr.apply_quick_action("relax_rules") {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -858,7 +892,9 @@ async fn apply_competition_preset(
             comp.max_substitutes = 5;
             comp.max_bench_size = 12;
             comp.substitution_windows = 3;
-            let _ = w.context_mgr.update_competition(comp);
+            if let Err(error) = w.context_mgr.update_competition(comp) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -874,7 +910,9 @@ async fn apply_competition_preset(
             let mut comp = w.context_mgr.context.competition.clone();
             comp.winner_prize_money = comp.winner_prize_money.max(100_000_000) + 50_000_000;
             comp.tv_rights_pool = comp.tv_rights_pool.max(1_000_000_000) + 1_000_000_000;
-            let _ = w.context_mgr.update_competition(comp);
+            if let Err(error) = w.context_mgr.update_competition(comp) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -889,7 +927,9 @@ async fn apply_competition_preset(
         "max_reputation" => {
             let mut comp = w.context_mgr.context.competition.clone();
             comp.reputation = 10000;
-            let _ = w.context_mgr.update_competition(comp);
+            if let Err(error) = w.context_mgr.update_competition(comp) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let ctx = w.context_mgr.get_context();
             (
                 StatusCode::OK,
@@ -1036,6 +1076,12 @@ async fn attach_process(
     match proc_result {
         Ok(proc) => {
             let pid = proc.pid;
+            if pid <= 0 {
+                return api_error(StatusCode::BAD_REQUEST, "PID must be positive");
+            }
+            if let Err(error) = parse_process_maps(pid) {
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             let bases = find_module_bases(pid).unwrap_or(fmlev_mem::ModuleBases {
                 game_assembly_base: None,
                 unity_player_base: None,
@@ -1050,8 +1096,12 @@ async fn attach_process(
             w.game_assembly_base = bases.game_assembly_base;
             w.unity_player_base = bases.unity_player_base;
             w.fm_exe_base = bases.fm_exe_base;
+            if let Err(error) = w.context_mgr.attach_pid(pid) {
+                w.is_attached = false;
+                w.pid = None;
+                return api_error(StatusCode::BAD_REQUEST, error);
+            }
             w.is_attached = true;
-            let _ = w.context_mgr.try_attach();
 
             info!("Attached to Football Manager 26 PID: {}", pid);
 
@@ -1355,6 +1405,24 @@ async fn read_memory(
     }
 }
 
+fn valid_memory_value(kind: &str, value: &serde_json::Value) -> bool {
+    match kind {
+        "u8" => value.as_u64().is_some_and(|v| u8::try_from(v).is_ok()),
+        "u16" => value.as_u64().is_some_and(|v| u16::try_from(v).is_ok()),
+        "u32" => value.as_u64().is_some_and(|v| u32::try_from(v).is_ok()),
+        "u64" => value.as_u64().is_some(),
+        "i32" => value.as_i64().is_some_and(|v| i32::try_from(v).is_ok()),
+        "i64" => value.as_i64().is_some(),
+        "f32" => value.as_f64().is_some_and(|v| (v as f32).is_finite()),
+        "bytes" => match value {
+            serde_json::Value::Array(values) => !values.is_empty() && values.iter().all(|v| valid_memory_value("u8", v)),
+            serde_json::Value::String(hex) => !hex.trim().is_empty() && hex.split_whitespace().all(|part| u8::from_str_radix(part.trim_start_matches("0x"), 16).is_ok()),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 async fn write_memory(
     State(state): State<ServerState>,
     Json(payload): Json<MemWriteRequest>,
@@ -1380,6 +1448,9 @@ async fn write_memory(
         }
     };
 
+    if !valid_memory_value(&payload.r#type, &payload.value) {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"success": false, "message": "Value is invalid or out of range for the requested type"})));
+    }
     let driver = LinuxMemoryDriver::new(pid);
 
     match payload.r#type.as_str() {
@@ -1452,9 +1523,13 @@ async fn write_memory(
             }
 
             match driver.write_bytes(target_addr, &bytes_to_write) {
-                Ok(written) => (
+                Ok(written) if written == bytes_to_write.len() => (
                     StatusCode::OK,
                     Json(serde_json::json!({ "success": true, "bytes_written": written })),
+                ),
+                Ok(written) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "success": false, "bytes_written": written, "message": "Incomplete memory write" })),
                 ),
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1697,11 +1772,10 @@ async fn heal_action(
     let r = state.inner.read().await;
     if let Some(pid) = r.pid {
         let driver = LinuxMemoryDriver::new(pid);
-        let player_ptr = if payload.player_ptr != 0 {
-            payload.player_ptr
-        } else {
-            0x7ff418290000
-        };
+        if payload.player_ptr == 0 || payload.heal_squad {
+            return api_error(StatusCode::BAD_REQUEST, "An explicit verified player_ptr is required; use the club preset API for squad actions");
+        }
+        let player_ptr = payload.player_ptr;
 
         match SquadActions::heal_player(&driver, player_ptr, payload.condition_offset) {
             Ok(_) => (
@@ -1731,6 +1805,9 @@ async fn finances_action(
     Json(payload): Json<FinanceRequest>,
 ) -> impl IntoResponse {
     let r = state.inner.read().await;
+    if payload.club_ptr == 0 {
+        return api_error(StatusCode::BAD_REQUEST, "An explicit verified club_ptr is required");
+    }
     if let Some(pid) = r.pid {
         let driver = LinuxMemoryDriver::new(pid);
         match SquadActions::update_finances(
@@ -1770,58 +1847,20 @@ async fn godmode_action(
     State(state): State<ServerState>,
     Json(payload): Json<GodModeRequest>,
 ) -> impl IntoResponse {
-    let r = state.inner.read().await;
-    let pid = match r.pid {
-        Some(p) => p,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "status": "not_attached", "message": "Game process not attached" })),
-            )
-        }
+    let mut w = state.inner.write().await;
+    if payload.player_ptr.is_some() {
+        return api_error(StatusCode::BAD_REQUEST, "Select a player through the context API before applying a preset");
+    }
+    let action = match payload.action.as_str() {
+        "max_morale" => "max_morale",
+        "cure_injuries" => "heal_player",
+        "clear_fatigue" | "unlock_debug_menu" => return api_error(
+            StatusCode::NOT_IMPLEMENTED, "This action has no verified memory binding"),
+        _ => return api_error(StatusCode::BAD_REQUEST, "Unknown godmode action"),
     };
-
-    let driver = LinuxMemoryDriver::new(pid);
-    let target_ptr = payload.player_ptr.unwrap_or(0x7ff418290000);
-
-    match payload.action.as_str() {
-        "max_morale" => match SquadActions::boost_morale(&driver, target_ptr, 0x24) {
-            Ok(_) => (
-                StatusCode::OK,
-                Json(serde_json::json!({ "status": "success", "message": "Maximized squad morale to 100 (Superb)" })),
-            ),
-            Err(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
-            ),
-        },
-        "clear_fatigue" => {
-            let _ = driver.write::<u16>(target_ptr + 0x28, &0);
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({ "status": "success", "message": "Cleared squad fatigue accumulation & suspensions" })),
-            )
-        }
-        "cure_injuries" => {
-            let _ = driver.write::<u32>(target_ptr + 0x2c, &0);
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({ "status": "success", "message": "Cured all active injuries" })),
-            )
-        }
-        "unlock_debug_menu" => {
-            if let Some(base) = r.game_assembly_base {
-                let _ = driver.write::<u8>(base + 0x1800, &1);
-            }
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({ "status": "success", "message": "Unlocked FM26 internal QA & Developer Debug Menu" })),
-            )
-        }
-        _ => (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "status": "unknown_action", "message": "Unknown godmode action" })),
-        ),
+    match w.context_mgr.apply_quick_action(action) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"status": "success", "player": w.context_mgr.get_context().player}))),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }
 
@@ -1834,6 +1873,16 @@ async fn get_offsets() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn offline_app_state() -> AppState {
+        AppState {
+            pid: None, exe_path: None, is_proton: false, wine_prefix: None,
+            game_assembly_base: None, unity_player_base: None, fm_exe_base: None,
+            is_attached: false, scan_results: Vec::new(), last_scan_type: String::new(),
+            context_mgr: GameContextManager::new_offline(),
+        }
+    }
+
 
     #[test]
     fn test_parse_hex_or_dec_address() {
@@ -1864,7 +1913,7 @@ mod tests {
 
     #[test]
     fn test_game_context_manager_defaults() {
-        let state = AppState::default();
+        let state = offline_app_state();
         let ctx = state.context_mgr.get_context();
         assert_eq!(ctx.player.name, "Erling Haaland");
         assert_eq!(ctx.player.current_ability, 188);
@@ -1877,7 +1926,7 @@ mod tests {
 
     #[test]
     fn test_context_search_players_and_clubs() {
-        let state = AppState::default();
+        let state = offline_app_state();
         let res = state.context_mgr.search("haaland");
         assert!(!res.players.is_empty());
         assert_eq!(res.players[0].name, "Erling Haaland");
@@ -1890,7 +1939,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_context_endpoint() {
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
         let response = get_context(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1913,7 +1962,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_entities_endpoint() {
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
         let query = SearchQuery {
             q: "Brazil".to_string(),
@@ -1933,7 +1982,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_nation_and_presets() {
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
 
         // 1. Update nation
@@ -1988,7 +2037,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_competition_and_presets() {
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
 
         // 1. Update competition
@@ -2041,7 +2090,7 @@ mod tests {
     #[tokio::test]
     async fn test_club_affiliates_add_and_remove() {
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
 
         let affiliate = ClubAffiliate {
@@ -2090,7 +2139,7 @@ mod tests {
         use tower::ServiceExt;
 
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
         let app = create_router(state);
 
@@ -2169,7 +2218,7 @@ mod tests {
         use tower::ServiceExt;
 
         let state = ServerState {
-            inner: Arc::new(RwLock::new(AppState::default())),
+            inner: Arc::new(RwLock::new(offline_app_state())),
         };
         let app = create_router(state.clone());
 
@@ -2246,4 +2295,93 @@ mod tests {
             assert_eq!(json_val["club"]["club_name"], "Persib");
         }
     }
+    #[tokio::test]
+    async fn failed_selection_and_presets_never_report_success() {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+        let original = state.inner.read().await.context_mgr.context.player.clone();
+        let app = create_router(state.clone());
+        for (route, body) in [
+            ("/api/context/select", serde_json::json!({"player_id": -999})),
+            ("/api/player/preset", serde_json::json!({"player_id": -999, "preset": "boost_all_2"})),
+            ("/api/club/preset", serde_json::json!({"club_id": -999, "preset": "morale_squad"})),
+            ("/api/nation/preset", serde_json::json!({"nation_id": -999, "preset": "golden_generation"})),
+            ("/api/competition/preset", serde_json::json!({"competition_id": -999, "preset": "five_subs"})),
+            ("/api/club/preset", serde_json::json!({"preset": "unlock_ige"})),
+            ("/api/actions/godmode", serde_json::json!({"action": "unlock_debug_menu"})),
+        ] {
+            let response = app.clone().oneshot(Request::post(route)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string())).unwrap()).await.unwrap();
+            assert!(!response.status().is_success(), "{route} must propagate failure");
+            let bytes = axum::body::to_bytes(response.into_body(), 65536).await.unwrap();
+            let data: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(data["status"], "error");
+        }
+        assert_eq!(state.inner.read().await.context_mgr.context.player.attributes, original.attributes);
+    }
+
+    #[tokio::test]
+    async fn live_preset_errors_are_propagated_without_registry_changes() {
+        let mut app = offline_app_state();
+        let session = fmlev_core::LiveSession::with_bases(std::process::id() as i32,
+            fmlev_mem::ModuleBases { game_assembly_base: Some(0x10000), ..Default::default() },
+            fmlev_il2cpp::OffsetsRegistry::default());
+        app.context_mgr.session = Some(session);
+        let original = app.context_mgr.context.nation.youth_rating;
+        let state = ServerState { inner: Arc::new(RwLock::new(app)) };
+        let response = apply_nation_preset(State(state.clone()), Json(NationPresetRequest {
+            preset: "max_youth_rating".into(), nation_id: None,
+        })).await.into_response();
+        assert!(!response.status().is_success());
+        assert_eq!(state.inner.read().await.context_mgr.context.nation.youth_rating, original);
+    }
+
+    #[test]
+    fn memory_write_values_reject_truncation_and_malformed_bytes() {
+        for (kind, value) in [
+            ("u8", serde_json::json!(256)), ("u16", serde_json::json!(-1)),
+            ("i32", serde_json::json!(2147483648_i64)), ("u64", serde_json::json!("123")),
+            ("bytes", serde_json::json!([1, 256])), ("bytes", serde_json::json!("01 ZZ 02")),
+        ] { assert!(!valid_memory_value(kind, &value)); }
+        assert!(valid_memory_value("u8", &serde_json::json!(0)));
+        assert!(valid_memory_value("bytes", &serde_json::json!("00 ff 0x12")));
+    }
+
+    #[tokio::test]
+    async fn memory_routes_round_trip_values_and_reject_invalid_writes() {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        let mut app_state = offline_app_state();
+        app_state.pid = Some(std::process::id() as i32);
+        let app = create_router(ServerState { inner: Arc::new(RwLock::new(app_state)) });
+        let mut buffer = [0u8; 32];
+        let address = format!("0x{:x}", buffer.as_mut_ptr() as usize);
+        for (kind, value) in [
+            ("u8", serde_json::json!(255)), ("u16", serde_json::json!(65535)),
+            ("u32", serde_json::json!(4294967295_u64)), ("u64", serde_json::json!(u64::MAX)),
+            ("i32", serde_json::json!(-123)), ("i64", serde_json::json!(-123456789012_i64)),
+            ("f32", serde_json::json!(1.25)),
+        ] {
+            let body = serde_json::json!({"address": address, "type": kind, "value": value});
+            let response = app.clone().oneshot(Request::post("/api/mem/write")
+                .header("content-type", "application/json").body(Body::from(body.to_string())).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "write {kind}");
+            let body = serde_json::json!({"address": address, "type": kind});
+            let response = app.clone().oneshot(Request::post("/api/mem/read")
+                .header("content-type", "application/json").body(Body::from(body.to_string())).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "read {kind}");
+            let bytes = axum::body::to_bytes(response.into_body(), 65536).await.unwrap();
+            let actual: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(actual["value"], value, "round trip {kind}");
+        }
+        let previous = buffer;
+        let body = serde_json::json!({"address": address, "type": "bytes", "value": "01 ZZ 02"});
+        let response = app.oneshot(Request::post("/api/mem/write")
+            .header("content-type", "application/json").body(Body::from(body.to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(buffer, previous);
+    }
+
 }

@@ -45,7 +45,10 @@ impl SearchResults {
 /// ClubReference, NationReference, and CompReference in memory, and provides user-friendly editing.
 pub struct GameContextManager {
     pub context: ActiveContext,
+    auto_attach: bool,
     pub session: Option<LiveSession>,
+    native_player_records: HashMap<i32, crate::native_player::NativePlayerRecord>,
+    failed_native_fingerprints: HashMap<i32, crate::live_write::NativePlayerFingerprint>,
     pub registry: OffsetsRegistry,
     pub player_registry: HashMap<i32, Player>,
     pub club_registry: HashMap<i32, ClubFinances>,
@@ -75,6 +78,7 @@ impl GameContextManager {
         let registry = OffsetsRegistry::load_from_json(DEFAULT_OFFSETS_JSON)
             .unwrap_or_default();
         let mut manager = Self::new_with_registry(registry);
+        manager.auto_attach = true;
         let _ = manager.try_attach();
         manager
     }
@@ -109,7 +113,10 @@ impl GameContextManager {
 
         Self {
             context,
+            auto_attach: false,
             session: None,
+            native_player_records: HashMap::new(),
+            failed_native_fingerprints: HashMap::new(),
             registry,
             player_registry,
             club_registry,
@@ -136,7 +143,32 @@ impl GameContextManager {
         manager.context.attached = true;
         manager.context.pid = Some(pid);
         manager.session = Some(session);
+        if pid != std::process::id() as i32 { manager.reset_live_state(); }
         manager
+    }
+
+    /// Discard demo data and cached references when attaching to a real game process.
+    fn reset_live_state(&mut self) {
+        self.native_player_records.clear();
+        self.failed_native_fingerprints.clear();
+        self.player_registry.clear();
+        self.club_registry.clear();
+        self.nation_registry.clear();
+        self.competition_registry.clear();
+        self.player_memory_bindings.clear();
+        self.club_memory_bindings.clear();
+        self.nation_memory_bindings.clear();
+        self.competition_memory_bindings.clear();
+        self.user_modified_players.clear();
+        self.user_modified_clubs.clear();
+        self.active_player_addr = None;
+        self.active_club_addr = None;
+        self.active_nation_addr = None;
+        self.active_comp_addr = None;
+        self.context.player = build_template_live_player(0, String::new(), String::new());
+        self.context.club = unknown_clubfinances();
+        self.context.nation = unknown_nationdetails();
+        self.context.competition = unknown_competitiondetails();
     }
 
     /// Attempts to automatically discover and attach to the running `fm.exe` process.
@@ -162,6 +194,7 @@ impl GameContextManager {
         self.context.attached = true;
         self.context.pid = Some(pid);
         self.session = Some(session);
+        if pid != std::process::id() as i32 { self.reset_live_state(); }
         info!("GameContextManager attached to PID {}", pid);
         Ok(())
     }
@@ -240,6 +273,8 @@ impl GameContextManager {
 
     /// Selects a player by ID, populating context and syncing from memory if mapped.
     pub fn select_player(&mut self, id: i32) -> Result<Player> {
+        self.failed_native_fingerprints.remove(&id);
+        self.active_player_addr = self.player_memory_bindings.get(&id).copied();
         let mut player = self
             .player_registry
             .get(&id)
@@ -250,6 +285,7 @@ impl GameContextManager {
             self.active_player_addr = Some(addr);
             if !player.user_modified && !self.user_modified_players.contains(&id) {
                 if let Some(session) = &self.session {
+                    if session.driver.pid() == std::process::id() as i32 {
                     if let Ok(mem_player) = Player::read(&session.driver, addr, &session.registry) {
                         player.condition = mem_player.condition;
                         player.sharpness = mem_player.sharpness;
@@ -260,11 +296,25 @@ impl GameContextManager {
                             player.attributes = mem_player.attributes;
                         }
                     }
+                    }
                 }
             }
         }
 
-        self.context.player = player.clone();
+        if self.session.as_ref().is_some_and(|session| session.driver.pid() != std::process::id() as i32)
+            && !self.native_player_records.contains_key(&id)
+        {
+            // Discovery is read-only and attempted on selection, not every polling tick.
+            // An unopened profile may not yet expose the complete validation fingerprint.
+            let _ = self.verified_native_player(id);
+        }
+        if let (Some(record), Some(session)) = (self.native_player_records.get(&id), self.session.as_ref()) {
+            player.positions = record.read_positions(&session.driver)?;
+            player.position = player.positions.to_position_string();
+        }
+
+        // The selected response and subsequent delta-save baseline must be identical.
+        self.publish_selected_player(&player);
         self.context.active_screen = "player".to_string();
 
         if player.club_id != 0 {
@@ -285,8 +335,14 @@ impl GameContextManager {
         Ok(player)
     }
 
+    fn publish_selected_player(&mut self, player: &Player) {
+        self.player_registry.insert(player.id, player.clone());
+        self.context.player = player.clone();
+    }
+
     /// Selects a club by ID, populating context and syncing from memory if mapped.
     pub fn select_club(&mut self, id: i32) -> Result<ClubFinances> {
+        self.active_club_addr = self.club_memory_bindings.get(&id).copied();
         let mut club = self
             .club_registry
             .get(&id)
@@ -295,7 +351,7 @@ impl GameContextManager {
 
         if let Some(&addr) = self.club_memory_bindings.get(&id) {
             self.active_club_addr = Some(addr);
-            if let Some(session) = &self.session {
+            if let Some(session) = self.session.as_ref().filter(|s| s.driver.pid() == std::process::id() as i32) {
                 if let Ok(mem_club) = ClubFinances::read(&session.driver, addr, &session.registry) {
                     club.balance = mem_club.balance;
                     club.transfer_budget = mem_club.transfer_budget;
@@ -311,6 +367,7 @@ impl GameContextManager {
 
     /// Selects a nation by ID, populating context and syncing from memory if mapped.
     pub fn select_nation(&mut self, id: i32) -> Result<NationDetails> {
+        self.active_nation_addr = self.nation_memory_bindings.get(&id).copied();
         let mut nation = self
             .nation_registry
             .get(&id)
@@ -319,7 +376,7 @@ impl GameContextManager {
 
         if let Some(&addr) = self.nation_memory_bindings.get(&id) {
             self.active_nation_addr = Some(addr);
-            if let Some(session) = &self.session {
+            if let Some(session) = self.session.as_ref().filter(|s| s.driver.pid() == std::process::id() as i32) {
                 if let Ok(mem_nation) = NationDetails::read(&session.driver, addr, &session.registry) {
                     nation.reputation = mem_nation.reputation;
                     nation.youth_rating = mem_nation.youth_rating;
@@ -340,6 +397,7 @@ impl GameContextManager {
 
     /// Selects a competition by ID, populating context and syncing from memory if mapped.
     pub fn select_competition(&mut self, id: i32) -> Result<CompetitionDetails> {
+        self.active_comp_addr = self.competition_memory_bindings.get(&id).copied();
         let mut comp = self
             .competition_registry
             .get(&id)
@@ -348,7 +406,7 @@ impl GameContextManager {
 
         if let Some(&addr) = self.competition_memory_bindings.get(&id) {
             self.active_comp_addr = Some(addr);
-            if let Some(session) = &self.session {
+            if let Some(session) = self.session.as_ref().filter(|s| s.driver.pid() == std::process::id() as i32) {
                 if let Ok(mem_comp) = CompetitionDetails::read(&session.driver, addr, &session.registry) {
                     comp.reputation = mem_comp.reputation;
                     comp.max_substitutes = mem_comp.max_substitutes;
@@ -385,7 +443,7 @@ impl GameContextManager {
         }
 
         let mut matched_players = Vec::new();
-        for p in self.player_registry.values() {
+        for p in self.all_players() {
             if p.name.to_lowercase().contains(&q)
                 || p.nationality.to_lowercase().contains(&q)
                 || p.position.to_lowercase().contains(&q)
@@ -441,74 +499,139 @@ impl GameContextManager {
         }
     }
 
-    /// Updates the active player state and writes to live memory if bound.
+    /// The configured entity offsets describe test records, not FM26's native records.
+    /// Managed PersonReference/ClubReference objects must never be treated as those records.
+    fn ensure_record_writes_supported(&self) -> Result<()> {
+        if let Some(session) = &self.session {
+            if session.driver.pid() != std::process::id() as i32
+                || session.bases.game_assembly_base.is_some()
+            {
+                return Err(CoreError::InvalidValue(
+                    "Live writes are unavailable: the authoritative FM26 native record layout has not been verified. UI binding values are read-only and do not persist simulation edits.".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Updates local state only after the explicitly bound record write succeeds.
     pub fn update_player(&mut self, mut player: Player) -> Result<()> {
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+        {
+            return self.update_live_player_positions(player);
+        }
+        self.ensure_record_writes_supported()?;
         let player_id = player.id;
+        if let Some(session) = &self.session {
+            let addr = self.player_memory_bindings.get(&player_id).copied()
+                .ok_or_else(|| CoreError::InvalidValue(format!("No writable record bound for player {}", player_id)))?;
+            player.write(&session.driver, addr, &session.registry)?;
+        }
         player.user_modified = true;
         self.user_modified_players.insert(player_id);
         self.context.player = player.clone();
-        self.player_registry.insert(player_id, player.clone());
-
-        if let Some(session) = &self.session {
-            let bound_addr = self
-                .active_player_addr
-                .or_else(|| self.player_memory_bindings.get(&player_id).copied());
-            if let Some(addr) = bound_addr {
-                player.write(&session.driver, addr, &session.registry)?;
-            }
-        }
+        self.player_registry.insert(player_id, player);
+        self.active_player_addr = self.player_memory_bindings.get(&player_id).copied();
         Ok(())
     }
 
-    /// Updates the active club finances and writes to live memory if bound.
+    fn verified_native_player(&mut self, id: i32) -> Result<crate::native_player::NativePlayerRecord> {
+        if let Some(record) = self.native_player_records.get(&id) { return Ok(record.clone()); }
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let subsystem = resolve_binding_subsystem(session)
+            .ok_or_else(|| CoreError::InvalidValue("Live player bindings are unavailable; open this player's profile in FM26".into()))?;
+        let fingerprint = crate::live_write::read_person_native_fingerprint(&session.driver, subsystem, id)?;
+        if self.failed_native_fingerprints.get(&id) == Some(&fingerprint) {
+            return Err(CoreError::InvalidValue("Native player could not be verified for these bindings; reopen the profile or reconnect before retrying".into()));
+        }
+        let record = match crate::native_player::NativePlayerRecord::discover(
+            &session.driver, id, fingerprint.unique_id, fingerprint.aptitudes,
+            fingerprint.left_foot, fingerprint.right_foot,
+        ) {
+            Ok(record) => record,
+            Err(error) => {
+                self.failed_native_fingerprints.insert(id, fingerprint);
+                return Err(error);
+            }
+        };
+        self.failed_native_fingerprints.remove(&id);
+        self.native_player_records.insert(id, record.clone());
+        Ok(record)
+    }
+
+    fn update_live_player_positions(&mut self, player: Player) -> Result<()> {
+        self.save_live_player_positions(player, None)
+    }
+
+    fn save_live_player_positions(&mut self, mut player: Player, preset: Option<PlayerPositions>) -> Result<()> {
+        let previous = self.player_registry.get(&player.id)
+            .ok_or(CoreError::PlayerNotFound(player.id))?.clone();
+        if !is_positions_only_edit(&previous, &player) {
+            return Err(CoreError::InvalidValue(
+                "Only positions and foot ratings have a verified native write path. Other player fields cannot be saved to FM26 yet.".into(),
+            ));
+        }
+        let record = self.verified_native_player(player.id)?;
+        let session = self.session.as_ref().unwrap();
+        let mut positions = record.read_positions(&session.driver)?;
+        if let Some(preset) = preset {
+            positions = preset;
+        } else {
+            apply_changed_positions(&previous.positions, &player.positions, &mut positions);
+        }
+        record.write_positions(&session.driver, &positions)?;
+        player.positions = record.read_positions(&session.driver)?;
+        player.position = player.positions.to_position_string();
+        // Native edits remain live: subsequent polling must never freeze the cached values.
+        player.user_modified = false;
+        self.user_modified_players.remove(&player.id);
+        self.player_registry.insert(player.id, player.clone());
+        self.context.player = player;
+        self.active_player_addr = None;
+        Ok(())
+    }
+
     pub fn update_club(&mut self, club: ClubFinances) -> Result<()> {
+        self.ensure_record_writes_supported()?;
         let club_id = club.club_id;
+        if let Some(session) = &self.session {
+            let addr = self.club_memory_bindings.get(&club_id).copied()
+                .ok_or_else(|| CoreError::InvalidValue(format!("No writable record bound for club {}", club_id)))?;
+            club.write(&session.driver, addr, &session.registry)?;
+        }
         self.user_modified_clubs.insert(club_id);
         self.context.club = club.clone();
-        self.club_registry.insert(club_id, club.clone());
-
-        if let Some(session) = &self.session {
-            let bound_addr = self
-                .active_club_addr
-                .or_else(|| self.club_memory_bindings.get(&club_id).copied());
-            if let Some(addr) = bound_addr {
-                club.write(&session.driver, addr, &session.registry)?;
-            }
-        }
+        self.club_registry.insert(club_id, club);
+        self.active_club_addr = self.club_memory_bindings.get(&club_id).copied();
         Ok(())
     }
 
-    /// Updates the active nation details and writes to live memory if bound.
     pub fn update_nation(&mut self, nation: NationDetails) -> Result<()> {
+        self.ensure_record_writes_supported()?;
         let nation_id = nation.id;
-        self.context.nation = nation.clone();
-        self.nation_registry.insert(nation_id, nation.clone());
-
         if let Some(session) = &self.session {
-            let bound_addr = self
-                .active_nation_addr
-                .or_else(|| self.nation_memory_bindings.get(&nation_id).copied());
-            if let Some(addr) = bound_addr {
-                nation.write(&session.driver, addr, &session.registry)?;
-            }
+            let addr = self.nation_memory_bindings.get(&nation_id).copied()
+                .ok_or_else(|| CoreError::InvalidValue(format!("No writable record bound for nation {}", nation_id)))?;
+            nation.write(&session.driver, addr, &session.registry)?;
         }
+        self.context.nation = nation.clone();
+        self.nation_registry.insert(nation_id, nation);
+        self.active_nation_addr = self.nation_memory_bindings.get(&nation_id).copied();
         Ok(())
     }
 
-    /// Updates the active competition details and writes to live memory if bound.
     pub fn update_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
+        self.ensure_record_writes_supported()?;
         let comp_id = comp.id;
-        self.context.competition = comp.clone();
-        self.competition_registry.insert(comp_id, comp.clone());
-
         if let Some(session) = &self.session {
-            let bound_addr = self
-                .active_comp_addr
-                .or_else(|| self.competition_memory_bindings.get(&comp_id).copied());
-            if let Some(addr) = bound_addr {
-                comp.write(&session.driver, addr, &session.registry)?;
-            }
+            let addr = self.competition_memory_bindings.get(&comp_id).copied()
+                .ok_or_else(|| CoreError::InvalidValue(format!("No writable record bound for competition {}", comp_id)))?;
+            comp.write(&session.driver, addr, &session.registry)?;
         }
+        self.context.competition = comp.clone();
+        self.competition_registry.insert(comp_id, comp);
+        self.active_comp_addr = self.competition_memory_bindings.get(&comp_id).copied();
         Ok(())
     }
 
@@ -569,6 +692,51 @@ impl GameContextManager {
     /// - `"max_facilities"`: Sets training, youth facilities, recruitment, coaching to 20.
     pub fn apply_quick_action(&mut self, action_name: &str) -> Result<()> {
         let normalized = action_name.trim().to_lowercase().replace([' ', '-'], "_");
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(),
+                "all_positions_20" | "all_positions" | "total_football"
+                | "both_feet_20" | "either_foot" | "both_feet"
+                | "pure_striker" | "universal_winger" | "midfield_maestro"
+                | "complete_defender" | "goalkeeper")
+        {
+            // Reuse the preset calculations in an isolated offline proposal.
+            // The native path writes only its advertised positions/feet fields.
+            let record = self.verified_native_player(self.context.player.id)?;
+            let native_positions = record.read_positions(&self.session.as_ref().unwrap().driver)?;
+            let mut proposal = Self::new_offline();
+            proposal.context.player = self.context.player.clone();
+            proposal.context.player.positions = native_positions;
+            proposal.apply_quick_action_inner(&normalized)?;
+            let mut requested = self.context.player.clone();
+            requested.positions = proposal.context.player.positions;
+            requested.position = requested.positions.to_position_string();
+            let positions = requested.positions.clone();
+            return self.save_live_player_positions(requested, Some(positions));
+        }
+        self.ensure_record_writes_supported()?;
+        let saved_context = self.context.clone();
+        let saved_players = self.player_registry.clone();
+        let saved_clubs = self.club_registry.clone();
+        let saved_nations = self.nation_registry.clone();
+        let saved_competitions = self.competition_registry.clone();
+        let saved_modified_players = self.user_modified_players.clone();
+        let saved_modified_clubs = self.user_modified_clubs.clone();
+        let result = self.apply_quick_action_inner(action_name);
+        if result.is_err() {
+            self.context = saved_context;
+            self.player_registry = saved_players;
+            self.club_registry = saved_clubs;
+            self.nation_registry = saved_nations;
+            self.competition_registry = saved_competitions;
+            self.user_modified_players = saved_modified_players;
+            self.user_modified_clubs = saved_modified_clubs;
+        }
+        result
+    }
+
+    fn apply_quick_action_inner(&mut self, action_name: &str) -> Result<()> {
+        let normalized = action_name.trim().to_lowercase().replace([' ', '-'], "_");
         let is_player_action = matches!(
             normalized.as_str(),
             "heal_player" | "heal" | "max_morale" | "morale" | "boost_morale" | "wonderkid"
@@ -592,6 +760,21 @@ impl GameContextManager {
             self.user_modified_clubs.insert(self.context.club.club_id);
         }
 
+        if self.session.is_some() {
+            let bound = if is_player_action {
+                self.player_memory_bindings.contains_key(&self.context.player.id)
+            } else if is_club_action {
+                self.club_memory_bindings.contains_key(&self.context.club.club_id)
+            } else if matches!(normalized.as_str(), "golden_generation" | "nation_golden_generation") {
+                self.nation_memory_bindings.contains_key(&self.context.nation.id)
+            } else if matches!(normalized.as_str(), "relax_rules" | "competition_relax_rules") {
+                self.competition_memory_bindings.contains_key(&self.context.competition.id)
+            } else { true };
+            if !bound {
+                return Err(CoreError::InvalidValue("No writable record bound for this action".to_string()));
+            }
+        }
+
         match normalized.as_str() {
             "heal_player" | "heal" => {
                 self.context.player.condition = 10000;
@@ -605,7 +788,7 @@ impl GameContextManager {
                         .active_player_addr
                         .or_else(|| self.player_memory_bindings.get(&self.context.player.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = session.heal_player(addr, None);
+                        session.heal_player(addr, None)?;
                     }
                 }
                 info!("Applied quick action: heal_player (Player ID: {})", self.context.player.id);
@@ -622,7 +805,7 @@ impl GameContextManager {
                         .active_player_addr
                         .or_else(|| self.player_memory_bindings.get(&self.context.player.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = session.boost_morale(addr, None);
+                        session.boost_morale(addr, None)?;
                     }
                 }
                 info!("Applied quick action: max_morale (Player ID: {})", self.context.player.id);
@@ -648,7 +831,7 @@ impl GameContextManager {
                         .active_player_addr
                         .or_else(|| self.player_memory_bindings.get(&self.context.player.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.player.write(&session.driver, addr, &session.registry);
+                        self.context.player.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: wonderkid (Player ID: {})", self.context.player.id);
@@ -681,7 +864,7 @@ impl GameContextManager {
                         .active_player_addr
                         .or_else(|| self.player_memory_bindings.get(&self.context.player.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.player.write(&session.driver, addr, &session.registry);
+                        self.context.player.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: max_attributes (Player ID: {})", self.context.player.id);
@@ -700,7 +883,7 @@ impl GameContextManager {
                         .active_player_addr
                         .or_else(|| self.player_memory_bindings.get(&self.context.player.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.player.write(&session.driver, addr, &session.registry);
+                        self.context.player.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: extend_contract (Player ID: {})", self.context.player.id);
@@ -725,7 +908,7 @@ impl GameContextManager {
                     for (pid, &addr) in &self.player_memory_bindings {
                         if let Some(player) = self.player_registry.get(pid) {
                             if target_club_id == 0 || player.club_id == target_club_id {
-                                let _ = session.heal_player(addr, None);
+                                session.heal_player(addr, None)?;
                             }
                         }
                     }
@@ -744,7 +927,7 @@ impl GameContextManager {
                         .active_club_addr
                         .or_else(|| self.club_memory_bindings.get(&self.context.club.club_id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.club.write(&session.driver, addr, &session.registry);
+                        self.context.club.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: boost_budget_50m for club ID {}", self.context.club.club_id);
@@ -762,7 +945,7 @@ impl GameContextManager {
                         .active_club_addr
                         .or_else(|| self.club_memory_bindings.get(&self.context.club.club_id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.club.write(&session.driver, addr, &session.registry);
+                        self.context.club.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: sugar_daddy for club ID {}", self.context.club.club_id);
@@ -782,7 +965,7 @@ impl GameContextManager {
                         .active_club_addr
                         .or_else(|| self.club_memory_bindings.get(&self.context.club.club_id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.club.write(&session.driver, addr, &session.registry);
+                        self.context.club.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: wipe_debt for club ID {}", self.context.club.club_id);
@@ -797,7 +980,7 @@ impl GameContextManager {
                         .active_club_addr
                         .or_else(|| self.club_memory_bindings.get(&self.context.club.club_id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.club.write(&session.driver, addr, &session.registry);
+                        self.context.club.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: max_facilities for club ID {}", self.context.club.club_id);
@@ -812,7 +995,7 @@ impl GameContextManager {
                         .active_nation_addr
                         .or_else(|| self.nation_memory_bindings.get(&self.context.nation.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.nation.write(&session.driver, addr, &session.registry);
+                        self.context.nation.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: golden_generation for nation ID {}", self.context.nation.id);
@@ -827,7 +1010,7 @@ impl GameContextManager {
                         .active_comp_addr
                         .or_else(|| self.competition_memory_bindings.get(&self.context.competition.id).copied());
                     if let Some(addr) = bound_addr {
-                        let _ = self.context.competition.write(&session.driver, addr, &session.registry);
+                        self.context.competition.write(&session.driver, addr, &session.registry)?;
                     }
                 }
                 info!("Applied quick action: relax_rules for competition ID {}", self.context.competition.id);
@@ -913,6 +1096,7 @@ impl GameContextManager {
     /// in-game screen/context changes and syncs bound memory references.
     pub fn sync_live_context(&mut self) -> Result<()> {
         if self.session.is_none() {
+            if !self.auto_attach { return Ok(()); }
             let _ = self.try_attach();
             if self.session.is_none() {
                 return Ok(());
@@ -1068,14 +1252,14 @@ impl GameContextManager {
         }
 
         // 4. Memory read active player if bound
-        let mem_player_opt = if let Some(addr) = self.active_player_addr {
+        let mem_player_opt = if let Some(addr) = self.active_player_addr.filter(|_| session.driver.pid() == std::process::id() as i32) {
             Player::read(&session.driver, addr, &session.registry).ok()
         } else {
             None
         };
 
         // 5. Memory read active club if bound
-        let mem_club_opt = if let Some(addr) = self.active_club_addr {
+        let mem_club_opt = if let Some(addr) = self.active_club_addr.filter(|_| session.driver.pid() == std::process::id() as i32) {
             ClubFinances::read(&session.driver, addr, &session.registry).ok()
         } else {
             None
@@ -1083,9 +1267,18 @@ impl GameContextManager {
 
         // Now session borrow is finished! Merge any live discovered players from FM26 BindingSubsystem:
         let mut first_live_id: Option<i32> = None;
+        let mut active_profile_live_id: Option<i32> = None;
         for lp in live_discovered_players {
+            if lp.club_id > 0 && !lp.club_name.is_empty() {
+                let club = self.club_registry.entry(lp.club_id).or_insert_with(unknown_clubfinances);
+                club.club_id = lp.club_id;
+                club.club_name = lp.club_name.clone();
+            }
             if first_live_id.is_none() {
                 first_live_id = Some(lp.id);
+            }
+            if active_profile_live_id.is_none() && lp.attributes != PlayerAttributes::default() {
+                active_profile_live_id = Some(lp.id);
             }
             self.player_registry.entry(lp.id).and_modify(|existing| {
                 if existing.user_modified || self.user_modified_players.contains(&lp.id) {
@@ -1096,7 +1289,14 @@ impl GameContextManager {
                 }
                 if !lp.position.is_empty() {
                     existing.position = lp.position.clone();
+                }
+                if lp.positions != PlayerPositions::default() {
+                    existing.positions = lp.positions.clone();
+                } else if !lp.position.is_empty() && existing.positions == PlayerPositions::default() {
                     existing.positions = PlayerPositions::from_position_string(&lp.position);
+                }
+                if lp.age > 0 {
+                    existing.age = lp.age;
                 }
                 if lp.condition > 0 {
                     existing.condition = lp.condition;
@@ -1104,9 +1304,10 @@ impl GameContextManager {
                 if lp.sharpness > 0 {
                     existing.sharpness = lp.sharpness;
                 }
-                if lp.attributes != PlayerAttributes::default() {
-                    existing.attributes = lp.attributes.clone();
+                if lp.morale > 0 {
+                    existing.morale = lp.morale;
                 }
+                merge_player_attributes(&mut existing.attributes, &lp.attributes);
                 if lp.current_ability > 0 {
                     existing.current_ability = lp.current_ability;
                 }
@@ -1116,10 +1317,16 @@ impl GameContextManager {
                 if !lp.club_name.is_empty() {
                     existing.club_name = lp.club_name.clone();
                 }
+                if lp.club_id > 0 {
+                    existing.club_id = lp.club_id;
+                }
                 if !lp.nationality.is_empty() {
                     existing.nationality = lp.nationality.clone();
                 }
             }).or_insert(lp);
+        }
+        if active_profile_live_id.is_some() {
+            first_live_id = active_profile_live_id;
         }
 
         // Apply state updates to self:
@@ -1129,10 +1336,7 @@ impl GameContextManager {
             }
             if let Some(pid) = panel_history_person_id {
                 if !self.player_registry.contains_key(&pid) {
-                    let mut p = build_template_live_player(pid, format!("Player #{}", pid), "M (C)".to_string());
-                    if p.club_name.is_empty() {
-                        p.club_name = self.context.club.club_name.clone();
-                    }
+                    let p = build_template_live_player(pid, format!("Player #{}", pid), String::new());
                     self.player_registry.insert(pid, p);
                 }
                 if self.context.player.id != pid {
@@ -1156,7 +1360,7 @@ impl GameContextManager {
                 }
             } else if let Some(live_id) = first_live_id {
                 // If still on default offline player 101 and live FM26 squad players exist, switch to live squad player!
-                if self.context.player.id == 101
+                if (self.context.player.id == 0 || self.context.player.id == 101)
                     && !self.context.player.user_modified
                     && !self.user_modified_players.contains(&101)
                     && self.context.player.id != live_id
@@ -1169,15 +1373,31 @@ impl GameContextManager {
         // Keep active player in sync with registry if not user-modified
         if !self.context.player.user_modified && !self.user_modified_players.contains(&self.context.player.id) {
             if let Some(reg_player) = self.player_registry.get(&self.context.player.id) {
-                if reg_player.attributes != PlayerAttributes::default() {
-                    self.context.player.attributes = reg_player.attributes.clone();
+                if !reg_player.name.is_empty() && !reg_player.name.starts_with("Player #") {
+                    self.context.player.name = reg_player.name.clone();
                 }
+                if reg_player.age > 0 {
+                    self.context.player.age = reg_player.age;
+                }
+                if reg_player.condition > 0 {
+                    self.context.player.condition = reg_player.condition;
+                }
+                if reg_player.sharpness > 0 {
+                    self.context.player.sharpness = reg_player.sharpness;
+                }
+                if reg_player.morale > 0 {
+                    self.context.player.morale = reg_player.morale;
+                }
+                merge_player_attributes(&mut self.context.player.attributes, &reg_player.attributes);
                 if !reg_player.position.is_empty() {
                     self.context.player.position = reg_player.position.clone();
                     self.context.player.positions = reg_player.positions.clone();
                 }
                 if !reg_player.club_name.is_empty() {
                     self.context.player.club_name = reg_player.club_name.clone();
+                }
+                if reg_player.club_id > 0 {
+                    self.context.player.club_id = reg_player.club_id;
                 }
                 if !reg_player.nationality.is_empty() {
                     self.context.player.nationality = reg_player.nationality.clone();
@@ -1214,12 +1434,53 @@ impl GameContextManager {
             }
         }
 
+        if self.context.player.id > 0
+            && self.session.as_ref().is_some_and(|session| session.driver.pid() != std::process::id() as i32)
+            && !self.native_player_records.contains_key(&self.context.player.id)
+        {
+            // Retry when a newly opened profile gains a complete/changed fingerprint.
+            // Failed complete fingerprints suppress repeated full process scans.
+            let _ = self.verified_native_player(self.context.player.id);
+        }
+        if let Some(record) = self.native_player_records.get(&self.context.player.id) {
+            match record.read_positions(&self.session.as_ref().unwrap().driver) {
+                Ok(positions) => {
+                    self.context.player.position = positions.to_position_string();
+                    self.context.player.positions = positions;
+                    self.player_registry.insert(self.context.player.id, self.context.player.clone());
+                }
+                Err(error) => {
+                    self.native_player_records.remove(&self.context.player.id);
+                    self.context.player.positions = PlayerPositions::unknown();
+                    self.context.player.position.clear();
+                    self.player_registry.insert(self.context.player.id, self.context.player.clone());
+                    return Err(error);
+                }
+            }
+        }
+
         Ok(())
     }
 
     /// Returns a list of all registered players.
     pub fn all_players(&self) -> Vec<Player> {
         let mut players: Vec<Player> = self.player_registry.values().cloned().collect();
+        if let Some(session) = &self.session {
+            for player in &mut players {
+                if let Some(record) = self.native_player_records.get(&player.id) {
+                    match record.read_positions(&session.driver) {
+                        Ok(positions) => {
+                            player.position = positions.to_position_string();
+                            player.positions = positions;
+                        }
+                        Err(_) => {
+                            player.positions = PlayerPositions::unknown();
+                            player.position.clear();
+                        }
+                    }
+                }
+            }
+        }
         players.sort_by_key(|p| p.id);
         players
     }
@@ -2435,135 +2696,312 @@ fn build_default_registries() -> (
     (players, clubs, nations, competitions)
 }
 
-fn build_template_live_player(id: i32, name: String, position: String) -> Player {
-    let seed = (id.unsigned_abs() % 7) as u8;
-    let base_attr = 12 + (seed % 4);
-    let pos_str = if position.is_empty() {
-        if id == 73 || name.to_lowercase().contains("zulkifli") || name.to_lowercase().contains("lukmansyah") {
-            "D (R)".to_string()
-        } else {
-            "M (C)".to_string()
-        }
-    } else {
-        position
-    };
-    let positions = PlayerPositions::from_position_string(&pos_str);
+/// Apply the user's changed fields to fresh authoritative values, preserving untouched native ratings.
+fn apply_changed_positions(previous: &PlayerPositions, requested: &PlayerPositions, native: &mut PlayerPositions) {
+    macro_rules! patch {
+        ($($field:ident),+ $(,)?) => { $(if requested.$field != previous.$field { native.$field = requested.$field; })+ };
+    }
+    patch!(gk, dl, dc, dr, wbl, wbr, dm, ml, mc, mr, aml, amc, amr, st, left_foot, right_foot);
+}
 
-    let (club_id, club_name, nationality, age) = if id == 73 || name.to_lowercase().contains("zulkifli") || name.to_lowercase().contains("lukmansyah") {
-        (7001, "Persib".to_string(), "Indonesia".to_string(), 19)
-    } else {
-        (0, "Persib".to_string(), "Indonesia".to_string(), 23 + (seed % 6))
-    };
+fn is_positions_only_edit(previous: &Player, requested: &Player) -> bool {
+    let mut comparable = requested.clone();
+    comparable.positions = previous.positions.clone();
+    comparable.position = previous.position.clone();
+    comparable.user_modified = previous.user_modified;
+    comparable == *previous
+}
+
+fn resolve_binding_subsystem(session: &LiveSession) -> Option<usize> {
+    let base = session.bases.game_assembly_base?;
+    let singleton = session.registry.get_singleton("GameSubsystems").ok()?;
+    let fields = fmlev_il2cpp::read_static_singleton(&session.driver, base, singleton).ok()?;
+    let list = session.driver.read_ptr(fields).ok()?;
+    let items = session.driver.read_ptr(list + 0x10).ok()?;
+    let count = session.driver.read::<i32>(list + 0x18).ok()?;
+    if !(12..=1024).contains(&count) { return None; }
+    let subsystem = session.driver.read_ptr(items + 0x20 + 11 * 8).ok()?;
+    (subsystem > 0x10000).then_some(subsystem)
+}
+
+fn unknown_clubfinances() -> ClubFinances {
+    ClubFinances {
+        club_id: 0,
+        club_name: String::new(),
+        balance: 0,
+        transfer_budget: 0,
+        wage_budget: 0,
+        league_name: String::new(),
+        reputation: 0,
+        wage_used: 0,
+        training_facilities: 0,
+        youth_facilities: 0,
+        youth_recruitment: 0,
+        junior_coaching: 0,
+        data_analysis_facilities: 0,
+        corporate_facilities: 0,
+        stadium_name: String::new(),
+        stadium_capacity: 0,
+        stadium_expansion_cap: 0,
+        sugar_daddy_type: String::new(),
+        board_patience: 0,
+        fan_confidence: 0,
+        board_confidence: 0,
+        transfer_retention_pct: 0,
+        max_wage_allowance: 0,
+        affiliates: Vec::new(),
+    }
+}
+
+fn unknown_nationdetails() -> NationDetails {
+    NationDetails {
+        id: 0,
+        name: String::new(),
+        three_letter_code: String::new(),
+        continent: String::new(),
+        reputation: 0,
+        youth_rating: 0,
+        economic_factor: 0,
+        state_of_development: 0,
+        fa_financial_power: 0,
+        game_importance: 0,
+        tax_rate: 0,
+        corruption_index: 0,
+        youth_facilities_avg: 0,
+        youth_coaching_avg: 0,
+        youth_recruitment_avg: 0,
+    }
+}
+
+fn unknown_competitiondetails() -> CompetitionDetails {
+    CompetitionDetails {
+        id: 0,
+        name: String::new(),
+        short_name: String::new(),
+        nation_name: String::new(),
+        nation_id: 0,
+        reputation: 0,
+        max_substitutes: 0,
+        max_bench_size: 0,
+        substitution_windows: 0,
+        var_active: false,
+        max_squad_size: 0,
+        max_foreign_players: 0,
+        min_homegrown_club: 0,
+        min_homegrown_nation: 0,
+        winner_prize_money: 0,
+        tv_rights_pool: 0,
+        yellow_cards_for_ban: 0,
+    }
+}
+
+fn build_template_live_player(id: i32, name: String, position: String) -> Player {
+    let pos_str = position;
+    let positions = PlayerPositions::unknown();
 
     Player {
         id,
         name,
-        club_id,
-        club_name,
-        age,
-        nationality,
+        club_id: 0,
+        club_name: String::new(),
+        age: 0,
+        nationality: String::new(),
         position: pos_str,
         positions,
-        current_ability: 135 + seed * 4,
-        potential_ability: 155 + seed * 5,
-        condition: 10000,
-        sharpness: 9500,
-        morale: 90,
-        morale_label: "Superb".to_string(),
+        current_ability: 0,
+        potential_ability: 0,
+        condition: 0,
+        sharpness: 0,
+        morale: 0,
+        morale_label: String::new(),
         is_injured: false,
         is_suspended: false,
         contract: PlayerContract {
-            wage_per_week: 25_000,
-            expiry_year: 2028,
+            wage_per_week: 0,
+            expiry_year: 0,
             release_clause: 0,
-            squad_status: "Regular Starter".to_string(),
-            happiness: "Delighted".to_string(),
+            squad_status: String::new(),
+            happiness: String::new(),
         },
-        attributes: PlayerAttributes {
-            corners: base_attr,
-            crossing: base_attr + 1,
-            dribbling: base_attr + 1,
-            finishing: base_attr,
-            first_touch: base_attr + 2,
-            free_kicks: base_attr,
-            heading: base_attr,
-            long_shots: base_attr,
-            passing: base_attr + 2,
-            penalty_taking: base_attr,
-            tackling: base_attr,
-            technique: base_attr + 2,
-            aggression: base_attr,
-            anticipation: base_attr + 1,
-            bravery: base_attr + 1,
-            composure: base_attr + 1,
-            concentration: base_attr,
-            decisions: base_attr + 1,
-            determination: 15,
-            flair: base_attr + 1,
-            leadership: base_attr,
-            off_the_ball: base_attr + 1,
-            positioning: base_attr,
-            teamwork: base_attr + 2,
-            vision: base_attr + 1,
-            work_rate: base_attr + 2,
-            acceleration: base_attr + 1,
-            agility: base_attr + 1,
-            balance: base_attr + 1,
-            jumping_reach: base_attr,
-            natural_fitness: 15,
-            pace: base_attr + 1,
-            stamina: 15,
-            strength: base_attr,
-            consistency: 14,
-            important_matches: 14,
-            injury_proneness: 6,
-            versatility: 14,
-            adaptability: 14,
-            ambition: 15,
-            loyalty: 15,
-            pressure: 14,
-            professionalism: 15,
-            sportsmanship: 14,
-            temperament: 15,
-            ..Default::default()
-        },
+        attributes: PlayerAttributes::default(),
         user_modified: false,
     }
 }
 
-fn extract_binding_number(driver: &fmlev_mem::LinuxMemoryDriver, val_raw: usize) -> Option<u32> {
-    if val_raw <= 0x10000 {
-        return Some(val_raw as u32);
+/// Merges non-zero attribute fields from `src` into `dst`.
+fn merge_player_attributes(dst: &mut PlayerAttributes, src: &PlayerAttributes) {
+    macro_rules! merge_field {
+        ($($field:ident),+ $(,)?) => {
+            $(
+                if src.$field > 0 {
+                    dst.$field = src.$field;
+                }
+            )+
+        };
     }
-    if let Ok(s) = fmlev_il2cpp::Il2CppString::read(driver, val_raw) {
-        let clean = s.trim();
-        if let Ok(n) = clean.parse::<u32>() {
-            return Some(n);
-        }
-        if let Some(first) = clean.split(|c: char| !c.is_numeric()).find(|p| !p.is_empty()) {
-            if let Ok(n) = first.parse::<u32>() {
-                return Some(n);
-            }
-        }
-    }
-    if let Ok(boxed_val) = driver.read::<i32>(val_raw + 0x10) {
-        if boxed_val >= 0 && boxed_val <= 100_000 {
-            return Some(boxed_val as u32);
-        }
-    }
-    if let Ok(boxed_u8) = driver.read::<u8>(val_raw + 0x10) {
-        if boxed_u8 > 0 {
-            return Some(boxed_u8 as u32);
-        }
-    }
-    None
+    merge_field!(
+        corners, crossing, dribbling, finishing, first_touch, free_kicks,
+        heading, long_shots, passing, penalty_taking, tackling, technique,
+        aggression, anticipation, bravery, composure, concentration, decisions,
+        determination, flair, leadership, off_the_ball, positioning, teamwork,
+        vision, work_rate,
+        acceleration, agility, balance, jumping_reach, natural_fitness, pace,
+        stamina, strength,
+        consistency, important_matches, injury_proneness, versatility,
+        adaptability, ambition, loyalty, pressure, professionalism,
+        sportsmanship, temperament,
+        aerial_reach, command_of_area, communication, eccentricity, handling,
+        kicking, one_on_ones, reflexes, rushing_out, throwing,
+    );
 }
 
-fn extract_binding_string(driver: &fmlev_mem::LinuxMemoryDriver, val_raw: usize) -> Option<String> {
-    if val_raw <= 0x10000 {
+
+/// Decoded representation of a managed TypedValue payload.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DecodedTypedValue {
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+    Bool(bool),
+    String(String),
+    Object(usize),
+    Reference { ptr: usize, ref_type: i32, m_index: i32 },
+}
+
+fn read_il2cpp_class_name(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    obj: usize,
+) -> Option<(String, String)> {
+    if obj <= 0x10000 || obj >= 0x7fff_ffff_ffff {
         return None;
     }
-    if let Ok(raw_s) = fmlev_il2cpp::Il2CppString::read(driver, val_raw) {
+    let klass = driver.read_ptr(obj).ok()?;
+    if klass <= 0x10000 || klass >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let name_ptr = driver.read_ptr(klass + 0x10).ok()?;
+    if name_ptr <= 0x10000 || name_ptr >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let name = fmlev_il2cpp::types::read_cstring(driver, name_ptr, 128).ok()?;
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_graphic()) {
+        return None;
+    }
+    let ns_ptr = driver.read_ptr(klass + 0x18).unwrap_or(0);
+    let ns = if ns_ptr > 0x10000 && ns_ptr < 0x7fff_ffff_ffff {
+        fmlev_il2cpp::types::read_cstring(driver, ns_ptr, 128).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    Some((name, ns))
+}
+
+/// Decodes a live `SI.Core.TypedValue` object at `val_tv`:
+/// - `SI.Core.NumericTypedValue`: inline `DynamicNumber` (`Union` 8 bytes at `+0x18`, `NumberKind` `i32` at `+0x20`: `0 = SignedWhole`, `1 = UnsignedWhole`, `2 = FloatingPoint`)
+/// - `SI.Core.ReferenceTypedValue`: managed object pointer at `+0x18` (`System.String`, `FM.UI.*Reference`, `SI.Bindable.DynamicReference`, etc.)
+/// - `SI.Core.TypedValue<T>`: inline primitive at `+0x18`
+pub fn read_typed_value(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+) -> Option<DecodedTypedValue> {
+    if val_tv <= 0x10000 || val_tv >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let mut raw = [0u8; 16];
+    driver.read_bytes(val_tv + 0x18, &mut raw).ok()?;
+    let raw_u64 = u64::from_ne_bytes(raw[0..8].try_into().ok()?);
+    let kind_i32 = i32::from_ne_bytes(raw[8..12].try_into().ok()?);
+
+    match read_il2cpp_class_name(driver, val_tv) {
+        Some((cls_name, _)) if cls_name == "NumericTypedValue" => match kind_i32 {
+            0 => Some(DecodedTypedValue::Signed(
+                crate::live_write::read_numeric_binding_integer(driver, val_tv).unwrap_or(raw_u64 as i64)
+            )),
+            1 => Some(DecodedTypedValue::Unsigned(raw_u64)),
+            2 => Some(DecodedTypedValue::Float(f64::from_bits(raw_u64))),
+            _ => None,
+        },
+        Some((cls_name, _)) if cls_name == "ReferenceTypedValue" => {
+            let ptr = raw_u64 as usize;
+            if ptr <= 0x10000 || ptr >= 0x7fff_ffff_ffff {
+                return None;
+            }
+            if let Some((t_name, t_ns)) = read_il2cpp_class_name(driver, ptr) {
+                if t_name == "String" && t_ns == "System" {
+                    let s = fmlev_il2cpp::Il2CppString::read(driver, ptr).ok()?;
+                    return Some(DecodedTypedValue::String(s));
+                }
+                if t_name.ends_with("Reference") && t_ns != "SI.Bindable" {
+                    let m_index = driver.read::<i32>(ptr + 0x20).unwrap_or(0);
+                    let ref_type = driver.read::<i32>(ptr + 0x24).unwrap_or(0);
+                    return Some(DecodedTypedValue::Reference {
+                        ptr,
+                        ref_type,
+                        m_index,
+                    });
+                }
+                if t_ns == "System" {
+                    if let Ok(boxed_val) = driver.read::<i32>(ptr + 0x10) {
+                        return Some(DecodedTypedValue::Signed(boxed_val as i64));
+                    }
+                }
+            }
+            Some(DecodedTypedValue::Object(ptr))
+        }
+        Some((cls_name, _)) if cls_name.starts_with("TypedValue") => {
+            Some(DecodedTypedValue::Signed(raw_u64 as i64))
+        }
+        _ => match kind_i32 {
+            0 => Some(DecodedTypedValue::Signed(raw_u64 as i64)),
+            1 => Some(DecodedTypedValue::Unsigned(raw_u64)),
+            2 => Some(DecodedTypedValue::Float(f64::from_bits(raw_u64))),
+            _ => None,
+        },
+    }
+}
+
+fn extract_binding_number(driver: &fmlev_mem::LinuxMemoryDriver, val_tv: usize) -> Option<u32> {
+    match read_typed_value(driver, val_tv)? {
+        DecodedTypedValue::Signed(v) => {
+            if v >= 0 && v <= u32::MAX as i64 {
+                Some(v as u32)
+            } else {
+                None
+            }
+        }
+        DecodedTypedValue::Unsigned(v) => {
+            if v <= u32::MAX as u64 {
+                Some(v as u32)
+            } else {
+                None
+            }
+        }
+        DecodedTypedValue::Float(f) => {
+            if f.is_finite() && f >= 0.0 && f <= u32::MAX as f64 {
+                Some(f.round() as u32)
+            } else {
+                None
+            }
+        }
+        DecodedTypedValue::Bool(b) => Some(u32::from(b)),
+        DecodedTypedValue::String(s) => {
+            let clean = s.trim();
+            if let Ok(n) = clean.parse::<u32>() {
+                return Some(n);
+            }
+            if let Some(first) = clean.split(|c: char| !c.is_numeric()).find(|p| !p.is_empty()) {
+                if let Ok(n) = first.parse::<u32>() {
+                    return Some(n);
+                }
+            }
+            None
+        }
+        DecodedTypedValue::Reference { .. } | DecodedTypedValue::Object(_) => None,
+    }
+}
+
+fn extract_binding_string(driver: &fmlev_mem::LinuxMemoryDriver, val_tv: usize) -> Option<String> {
+    if let Some(DecodedTypedValue::String(raw_s)) = read_typed_value(driver, val_tv) {
         let (full, short) = decode_fm_link_name(&raw_s);
         let s = if !full.is_empty() { full } else { short };
         let trimmed = s.trim().to_string();
@@ -2572,6 +3010,439 @@ fn extract_binding_string(driver: &fmlev_mem::LinuxMemoryDriver, val_raw: usize)
         }
     }
     None
+}
+
+fn extract_binding_display_string(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+) -> Option<String> {
+    if let Some(DecodedTypedValue::String(raw_s)) = read_typed_value(driver, val_tv) {
+        let (full, short) = decode_fm_link_name(&raw_s);
+        let s = if !short.is_empty() { short } else { full };
+        let trimmed = s.trim().to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+    None
+}
+
+fn extract_binding_ref(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+) -> Option<(i32, i32)> {
+    match read_typed_value(driver, val_tv)? {
+        DecodedTypedValue::Reference {
+            ref_type, m_index, ..
+        } if m_index > 0 => Some((ref_type, m_index)),
+        DecodedTypedValue::Object(ptr) if ptr > 0x10000 => {
+            let m_index = driver.read::<i32>(ptr + 0x20).unwrap_or(0);
+            let ref_type = driver.read::<i32>(ptr + 0x24).unwrap_or(0);
+            if m_index > 0 && ref_type > 0 {
+                Some((ref_type, m_index))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn apply_attribute_by_name(attrs: &mut PlayerAttributes, name: &str, raw_val: u32) {
+    if raw_val == 0 || raw_val > 20 {
+        return;
+    }
+    let val = raw_val as u8;
+    let norm = name
+        .trim()
+        .to_lowercase()
+        .strip_prefix("attribute")
+        .unwrap_or(&name.trim().to_lowercase())
+        .replace([' ', '_', '-', '(', ')'], "");
+
+    match norm.as_str() {
+        // Technical & Set Pieces
+        "corners" | "cornertaking" => attrs.corners = val,
+        "crossing" => attrs.crossing = val,
+        "dribbling" => attrs.dribbling = val,
+        "finishing" => attrs.finishing = val,
+        "firsttouch" => attrs.first_touch = val,
+        "freekicks" | "freekicktaking" => attrs.free_kicks = val,
+        "heading" => attrs.heading = val,
+        "longshots" => attrs.long_shots = val,
+        "passing" => attrs.passing = val,
+        "penaltytaking" | "penalties" => attrs.penalty_taking = val,
+        "tackling" => attrs.tackling = val,
+        "technique" => attrs.technique = val,
+
+        // Mental
+        "aggression" => attrs.aggression = val,
+        "anticipation" => attrs.anticipation = val,
+        "bravery" => attrs.bravery = val,
+        "composure" => attrs.composure = val,
+        "concentration" => attrs.concentration = val,
+        "decisions" => attrs.decisions = val,
+        "determination" => attrs.determination = val,
+        "flair" => attrs.flair = val,
+        "leadership" => attrs.leadership = val,
+        "offtheball" => attrs.off_the_ball = val,
+        "positioning" => attrs.positioning = val,
+        "teamwork" => attrs.teamwork = val,
+        "vision" => attrs.vision = val,
+        "workrate" => attrs.work_rate = val,
+
+        // Physical
+        "acceleration" => attrs.acceleration = val,
+        "agility" => attrs.agility = val,
+        "balance" => attrs.balance = val,
+        "jumpingreach" | "jumping" => attrs.jumping_reach = val,
+        "naturalfitness" => attrs.natural_fitness = val,
+        "pace" => attrs.pace = val,
+        "stamina" => attrs.stamina = val,
+        "strength" => attrs.strength = val,
+
+        // Goalkeeping
+        "aerialreach" => attrs.aerial_reach = val,
+        "commandofarea" => attrs.command_of_area = val,
+        "communication" => attrs.communication = val,
+        "eccentricity" => attrs.eccentricity = val,
+        "handling" => attrs.handling = val,
+        "kicking" => attrs.kicking = val,
+        "oneonones" => attrs.one_on_ones = val,
+        "reflexes" => attrs.reflexes = val,
+        "rushingout" | "rushingouttendency" => attrs.rushing_out = val,
+        "throwing" => attrs.throwing = val,
+
+        // Hidden
+        "consistency" => attrs.consistency = val,
+        "importantmatches" => attrs.important_matches = val,
+        "injuryproneness" => attrs.injury_proneness = val,
+        "versatility" => attrs.versatility = val,
+        "adaptability" => attrs.adaptability = val,
+        "ambition" => attrs.ambition = val,
+        "loyalty" => attrs.loyalty = val,
+        "pressure" => attrs.pressure = val,
+        "professionalism" => attrs.professionalism = val,
+        "sportsmanship" => attrs.sportsmanship = val,
+        "temperament" => attrs.temperament = val,
+        _ => {}
+    }
+}
+
+fn read_object_lookup_unid(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+) -> Option<u32> {
+    if val_tv <= 0x10000 || val_tv >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let dyn_ref = driver.read_ptr(val_tv + 0x18).ok()?;
+    if dyn_ref <= 0x10000 || dyn_ref >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let entries = driver.read_ptr(dyn_ref + 0x18).ok()?;
+    if entries <= 0x10000 || entries >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let count = driver
+        .read::<i32>(dyn_ref + 0x20)
+        .unwrap_or(1)
+        .clamp(1, 8) as usize;
+    for k in 0..count {
+        let entry_addr = entries + 0x20 + k * 24;
+        let key = driver.read::<u32>(entry_addr + 0x08).unwrap_or(0);
+        if key == 0x756e6964 {
+            let num_tv = driver.read_ptr(entry_addr + 0x10).unwrap_or(0);
+            if let Some(unid) = extract_binding_number(driver, num_tv) {
+                if unid > 0 {
+                    return Some(unid);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn fm_nation_name_from_unid(unid: u32) -> Option<&'static str> {
+    match unid {
+        113 => Some("Indonesia"),
+        115 => Some("Iraq"),
+        116 => Some("Japan"),
+        757 => Some("Belgium"),
+        761 => Some("Croatia"),
+        765 => Some("England"),
+        769 => Some("France"),
+        771 => Some("Germany"),
+        776 => Some("Italy"),
+        784 => Some("Netherlands"),
+        786 => Some("Norway"),
+        788 => Some("Portugal"),
+        796 => Some("Spain"),
+        801 => Some("Wales"),
+        1435 => Some("Australia"),
+        1649 => Some("Argentina"),
+        1651 => Some("Brazil"),
+        _ => None,
+    }
+}
+
+fn read_type_info_name(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    type_info_dyn_ref: usize,
+) -> Option<String> {
+    if type_info_dyn_ref <= 0x10000 || type_info_dyn_ref >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let ti_entries = driver.read_ptr(type_info_dyn_ref + 0x18).ok()?;
+    if ti_entries <= 0x10000 || ti_entries >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let count = driver
+        .read::<i32>(type_info_dyn_ref + 0x20)
+        .unwrap_or(6)
+        .clamp(1, 16) as usize;
+    for k in 0..count {
+        let entry_addr = ti_entries + 0x20 + k * 24;
+        let key = driver.read::<u32>(entry_addr + 0x08).unwrap_or(0);
+        if key == 0x6e616d65 {
+            let name_tv = driver.read_ptr(entry_addr + 0x10).unwrap_or(0);
+            if let Some(s) = extract_binding_string(driver, name_tv) {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+fn read_attribute_values_number(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    values_dyn_ref: usize,
+) -> Option<u32> {
+    if values_dyn_ref <= 0x10000 || values_dyn_ref >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let val_entries = driver.read_ptr(values_dyn_ref + 0x18).ok()?;
+    if val_entries <= 0x10000 || val_entries >= 0x7fff_ffff_ffff {
+        return None;
+    }
+    let count = driver
+        .read::<i32>(values_dyn_ref + 0x20)
+        .unwrap_or(4)
+        .clamp(1, 16) as usize;
+    for k in 0..count {
+        let entry_addr = val_entries + 0x20 + k * 24;
+        let key = driver.read::<u32>(entry_addr + 0x08).unwrap_or(0);
+        if key == 0x7074766c || key == 0x44667a45 {
+            let num_tv = driver.read_ptr(entry_addr + 0x10).unwrap_or(0);
+            if let Some(n) = extract_binding_number(driver, num_tv) {
+                if (1..=20).contains(&n) {
+                    return Some(n);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_open_profile_attribute_list(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    list_tv: usize,
+    dyn_ref_props: &HashMap<(usize, String), usize>,
+    attrs: &mut PlayerAttributes,
+) {
+    if list_tv <= 0x10000 || list_tv >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let list_ptr = driver.read_ptr(list_tv + 0x18).unwrap_or(0);
+    if list_ptr <= 0x10000 || list_ptr >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let items_ptr = driver.read_ptr(list_ptr + 0x10).unwrap_or(0);
+    let size = driver.read::<i32>(list_ptr + 0x18).unwrap_or(0);
+    if items_ptr <= 0x10000 || size <= 0 {
+        return;
+    }
+
+    let clamped = (size as usize).min(32);
+    for i in 0..clamped {
+        let elem_tv = driver.read_ptr(items_ptr + 0x20 + i * 8).unwrap_or(0);
+        if elem_tv <= 0x10000 {
+            continue;
+        }
+        let row_dyn_ref = driver.read_ptr(elem_tv + 0x18).unwrap_or(0);
+        if row_dyn_ref <= 0x10000 {
+            continue;
+        }
+
+        let mut attr_name: Option<String> = None;
+        let mut attr_val: Option<u32> = None;
+
+        // Path A: Direct row_dyn_ref Dictionary<uint, TypedValue> entries at row_dyn_ref + 0x18
+        let row_entries = driver.read_ptr(row_dyn_ref + 0x18).unwrap_or(0);
+        let row_count = driver
+            .read::<i32>(row_dyn_ref + 0x20)
+            .unwrap_or(2)
+            .clamp(1, 8) as usize;
+        if row_entries > 0x10000 && row_entries < 0x7fff_ffff_ffff {
+            for r in 0..row_count {
+                let child_tv = driver
+                    .read_ptr(row_entries + 0x20 + r * 24 + 0x10)
+                    .unwrap_or(0);
+                let child_dyn_ref = if child_tv > 0x10000 {
+                    driver.read_ptr(child_tv + 0x18).unwrap_or(0)
+                } else {
+                    0
+                };
+                if child_dyn_ref > 0x10000 {
+                    if attr_name.is_none() {
+                        attr_name = read_type_info_name(driver, child_dyn_ref);
+                    }
+                    if attr_val.is_none() {
+                        attr_val = read_attribute_values_number(driver, child_dyn_ref);
+                    }
+                }
+            }
+        }
+
+        // Path B: Fallback to m_ctx mappings for (row_dyn_ref, "AttributeTypeInfo") & (row_dyn_ref, "AttributeValues")
+        if attr_name.is_none() {
+            if let Some(&ti_tv) = dyn_ref_props.get(&(row_dyn_ref, "AttributeTypeInfo".to_string()))
+            {
+                let ti_dyn_ref = driver.read_ptr(ti_tv + 0x18).unwrap_or(0);
+                attr_name = read_type_info_name(driver, ti_dyn_ref);
+            }
+        }
+        if attr_val.is_none() {
+            if let Some(&av_tv) = dyn_ref_props.get(&(row_dyn_ref, "AttributeValues".to_string())) {
+                let av_dyn_ref = driver.read_ptr(av_tv + 0x18).unwrap_or(0);
+                attr_val = read_attribute_values_number(driver, av_dyn_ref);
+            }
+        }
+
+        if let (Some(name), Some(val)) = (attr_name, attr_val) {
+            apply_attribute_by_name(attrs, &name, val);
+        }
+    }
+}
+
+fn extract_footedness(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+    pos: &mut PlayerPositions,
+) {
+    if val_tv <= 0x10000 || val_tv >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let dyn_ref = driver.read_ptr(val_tv + 0x18).unwrap_or(0);
+    if dyn_ref <= 0x10000 || dyn_ref >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let entries = driver.read_ptr(dyn_ref + 0x18).unwrap_or(0);
+    let count = driver
+        .read::<i32>(dyn_ref + 0x20)
+        .unwrap_or(10)
+        .clamp(1, 16) as usize;
+    if entries <= 0x10000 || entries >= 0x7fff_ffff_ffff {
+        return;
+    }
+
+    for k in 0..count {
+        let ea = entries + 0x20 + k * 24;
+        if driver.read::<i32>(ea).unwrap_or(-1) < 0 { continue; }
+        let key = driver.read::<u32>(ea + 0x08).unwrap_or(0);
+        let num_tv = driver.read_ptr(ea + 0x10).unwrap_or(0);
+        if let Some(n) = extract_binding_number(driver, num_tv).filter(|n| (1..=20).contains(n)) {
+            if key == 0x32342020 {
+                // "24  " -> LeftFootedness
+                pos.left_foot = n as u8;
+            } else if key == 0x32332020 {
+                // "23  " -> RightFootedness
+                pos.right_foot = n as u8;
+            }
+        }
+    }
+}
+
+fn extract_position_aptitude_list(
+    driver: &fmlev_mem::LinuxMemoryDriver,
+    val_tv: usize,
+    pos: &mut PlayerPositions,
+) {
+    if val_tv <= 0x10000 || val_tv >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let list_ptr = driver.read_ptr(val_tv + 0x18).unwrap_or(0);
+    if list_ptr <= 0x10000 || list_ptr >= 0x7fff_ffff_ffff {
+        return;
+    }
+    let items = driver.read_ptr(list_ptr + 0x10).unwrap_or(0);
+    let size = driver
+        .read::<i32>(list_ptr + 0x18)
+        .unwrap_or(0)
+        .clamp(0, 32) as usize;
+    if items <= 0x10000 || items >= 0x7fff_ffff_ffff {
+        return;
+    }
+
+    for i in 0..size {
+        let etv = driver.read_ptr(items + 0x20 + i * 8).unwrap_or(0);
+        let row_dyn = if etv > 0x10000 {
+            driver.read_ptr(etv + 0x18).unwrap_or(0)
+        } else {
+            0
+        };
+        if row_dyn <= 0x10000 {
+            continue;
+        }
+        let re = driver.read_ptr(row_dyn + 0x18).unwrap_or(0);
+        let rc = driver
+            .read::<i32>(row_dyn + 0x20)
+            .unwrap_or(3)
+            .clamp(1, 8) as usize;
+        if re <= 0x10000 {
+            continue;
+        }
+
+        let mut mask = 0u64;
+        let mut rating = 0u8;
+        for k in 0..rc {
+            let ea = re + 0x20 + k * 24;
+            if driver.read::<i32>(ea).unwrap_or(-1) < 0 { continue; }
+            let key = driver.read::<u32>(ea + 0x08).unwrap_or(0);
+            let num_tv = driver.read_ptr(ea + 0x10).unwrap_or(0);
+            if key == 0x506f7369 {
+                // "Posi"
+                if let Some(m) = extract_binding_number(driver, num_tv) {
+                    mask = m as u64;
+                }
+            } else if key == 0x7074766c {
+                // "ptvl"
+                if let Some(r) = extract_binding_number(driver, num_tv).filter(|r| (1..=20).contains(r)) {
+                    rating = r as u8;
+                }
+            }
+        }
+
+        if rating > 0 {
+            match mask {
+                1 => pos.gk = rating,
+                4 => pos.dr = rating,
+                8 => pos.dl = rating,
+                16 => pos.dc = rating,
+                32 => pos.wbr = rating,
+                64 => pos.wbl = rating,
+                128 => pos.dm = rating,
+                256 => pos.mr = rating,
+                512 => pos.ml = rating,
+                1024 => pos.mc = rating,
+                2048 => pos.amr = rating,
+                4096 => pos.aml = rating,
+                8192 => pos.amc = rating,
+                16384 => pos.st = rating,
+                _ => {}
+            }
+        }
+    }
 }
 
 /// Extracts live bound players from FM26's `SI.Bindable.BindingSubsystem` in memory.
@@ -2591,7 +3462,7 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         return Vec::new();
     }
 
-    let max_entries = (count as usize).min(3500);
+    let max_entries = (count as usize).min(50_000);
     let mut raw_entries = vec![0u8; max_entries * 56];
     if driver.read_bytes(entries + 0x20, &mut raw_entries).is_err() {
         return Vec::new();
@@ -2610,16 +3481,40 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         morale: u8,
         current_ability: u8,
         potential_ability: u8,
+        club_ref: Option<i32>,
+        team_ref: Option<i32>,
+        report_team_ref: Option<i32>,
+        nation_ref: Option<i32>,
+        attr_list_tvs: Vec<usize>,
+        pos_list_tv: Option<usize>,
+        foot_tv: Option<usize>,
         attributes: Option<PlayerAttributes>,
     }
 
     let mut map: HashMap<i32, PartialPerson> = HashMap::new();
+    let mut ref_names: HashMap<(i32, i32), String> = HashMap::new();
+    let mut team_to_club: HashMap<i32, i32> = HashMap::new();
+    let mut club_to_team: HashMap<i32, i32> = HashMap::new();
+    let mut dyn_ref_props: HashMap<(usize, String), usize> = HashMap::new();
 
     for i in 0..max_entries {
         let base_off = i * 56;
-        let src_tv = usize::from_ne_bytes(raw_entries[base_off + 8..base_off + 16].try_into().unwrap_or([0; 8]));
-        let prop_ptr = usize::from_ne_bytes(raw_entries[base_off + 16..base_off + 24].try_into().unwrap_or([0; 8]));
-        let data_key = (u64::from_ne_bytes(raw_entries[base_off + 40..base_off + 48].try_into().unwrap_or([0; 8])) & 0xFFFF_FFFF) as usize;
+        if i32::from_ne_bytes(raw_entries[base_off..base_off + 4].try_into().unwrap()) < 0 { continue; }
+        let src_tv = usize::from_ne_bytes(
+            raw_entries[base_off + 8..base_off + 16]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let prop_ptr = usize::from_ne_bytes(
+            raw_entries[base_off + 16..base_off + 24]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let data_key = (u64::from_ne_bytes(
+            raw_entries[base_off + 40..base_off + 48]
+                .try_into()
+                .unwrap_or([0; 8]),
+        ) & 0xFFFF_FFFF) as usize;
 
         if src_tv <= 0x10000 || prop_ptr <= 0x10000 || data_key >= (data_size as usize) {
             continue;
@@ -2632,9 +3527,6 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
 
         let m_idx = driver.read::<i32>(ref_obj + 0x20).unwrap_or(0);
         let t_typ = driver.read::<i32>(ref_obj + 0x24).unwrap_or(0);
-        if t_typ != 1 || m_idx <= 0 {
-            continue;
-        }
 
         let p_str_ptr = driver.read_ptr(prop_ptr + 0x10).unwrap_or(0);
         let prop_name = fmlev_il2cpp::Il2CppString::read(driver, p_str_ptr)
@@ -2648,62 +3540,177 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         }
 
         let d_obj = driver.read_ptr(data_items + 0x20 + data_key * 8).unwrap_or(0);
-        let val_tv = if d_obj > 0x10000 { driver.read_ptr(d_obj + 0x30).unwrap_or(0) } else { 0 };
-        let val_raw = if val_tv > 0x10000 { driver.read_ptr(val_tv + 0x18).unwrap_or(0) } else { 0 };
+        let val_tv = if d_obj > 0x10000 {
+            driver.read_ptr(d_obj + 0x30).unwrap_or(0)
+        } else {
+            0
+        };
+        if val_tv <= 0x10000 {
+            continue;
+        }
+
+        // Record DynamicReference (t_typ == -1) AttributeTypeInfo / AttributeValues mappings
+        if t_typ == -1 {
+            if matches!(prop_name.as_str(), "AttributeTypeInfo" | "AttributeValues") {
+                dyn_ref_props.insert((ref_obj, prop_name), val_tv);
+            }
+            continue;
+        }
+
+        // Collect reference names and Team -> Club chains for Club (3), Nation (10), Team (24), Comp (25)
+        if matches!(t_typ, 3 | 10 | 24 | 25) && m_idx > 0 {
+            match prop_name.as_str() {
+                "Name" | "FullName" | "ClubName" | "TeamName" | "NationName" => {
+                    if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                        ref_names.insert((t_typ, m_idx), s);
+                    }
+                }
+                "ThreeLetterName" | "ShortName" => {
+                    if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                        ref_names.entry((t_typ, m_idx)).or_insert(s);
+                    }
+                }
+                "ObjectLookupData" if t_typ == 10 => {
+                    if let Some(unid) = read_object_lookup_unid(driver, val_tv) {
+                        if let Some(nation_name) = fm_nation_name_from_unid(unid) {
+                            ref_names
+                                .entry((10, m_idx))
+                                .or_insert_with(|| nation_name.to_string());
+                        }
+                    }
+                }
+                "Club" | "ClubForObjectLookupData" if t_typ == 24 => {
+                    if let Some((target_type, target_idx)) = extract_binding_ref(driver, val_tv) {
+                        if target_type == 3 && target_idx > 0 {
+                            team_to_club.insert(m_idx, target_idx);
+                            club_to_team.entry(target_idx).or_insert(m_idx);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+
+        if t_typ != 1 || m_idx <= 0 {
+            continue;
+        }
 
         let entry = map.entry(m_idx).or_default();
         match prop_name.as_str() {
-            "InitialSurname" | "ShirtName" | "Name" | "FullName" => {
-                if let Some(s) = extract_binding_string(driver, val_raw) {
+            "Name" | "FullName" => {
+                if let Some(s) = extract_binding_string(driver, val_tv) {
+                    if entry.name.is_empty()
+                        || entry.name.contains(". ")
+                        || s.len() > entry.name.len()
+                    {
+                        entry.name = s;
+                    }
+                }
+            }
+            "InitialSurname" | "ShirtName" => {
+                if let Some(s) = extract_binding_string(driver, val_tv) {
+                    if entry.short_name.is_empty() {
+                        entry.short_name = s.clone();
+                    }
                     if entry.name.is_empty() {
                         entry.name = s;
                     }
                 }
             }
-            "ClubName" | "Club" | "TeamName" | "PlayerClub" | "PlayerClubName" | "ContractClub" => {
-                if let Some(s) = extract_binding_string(driver, val_raw) {
+            "Club" => {
+                if let Some((target_type, target_idx)) = extract_binding_ref(driver, val_tv) {
+                    if target_type == 3 {
+                        entry.club_ref = Some(target_idx);
+                    } else if target_type == 24 {
+                        entry.team_ref = Some(target_idx);
+                    }
+                } else if let Some(s) = extract_binding_display_string(driver, val_tv) {
                     if entry.club_name.is_empty() {
                         entry.club_name = s;
                     }
                 }
             }
-            "Nationality" | "Nation" | "PlayerNationality" | "NationName" => {
-                if let Some(s) = extract_binding_string(driver, val_raw) {
+            "Team" => {
+                if let Some((target_type, target_idx)) = extract_binding_ref(driver, val_tv) {
+                    if target_type == 24 {
+                        entry.team_ref = Some(target_idx);
+                    } else if target_type == 3 {
+                        entry.club_ref = Some(target_idx);
+                    }
+                } else if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                    if entry.club_name.is_empty() {
+                        entry.club_name = s;
+                    }
+                }
+            }
+            "ReportTeam" => {
+                if let Some((target_type, target_idx)) = extract_binding_ref(driver, val_tv) {
+                    if target_type == 24 {
+                        entry.report_team_ref = Some(target_idx);
+                    }
+                }
+            }
+            "ClubName" | "TeamName" | "PlayerClub" | "PlayerClubName" | "ContractClub" => {
+                if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                    if entry.club_name.is_empty() {
+                        entry.club_name = s;
+                    }
+                }
+            }
+            "Nation" => {
+                if let Some((target_type, target_idx)) = extract_binding_ref(driver, val_tv) {
+                    if target_type == 10 {
+                        entry.nation_ref = Some(target_idx);
+                    }
+                } else if let Some(s) = extract_binding_display_string(driver, val_tv) {
                     if entry.nationality.is_empty() {
                         entry.nationality = s;
                     }
                 }
             }
-            "PositionCombinedString" | "BestPositionShortString" | "Position" | "PositionString" => {
-                if let Some(s) = extract_binding_string(driver, val_raw) {
+            "Nationality" | "PlayerNationality" | "NationName" => {
+                if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                    if entry.nationality.is_empty() {
+                        entry.nationality = s;
+                    }
+                }
+            }
+            "PositionCombinedString" => {
+                if let Some(s) = extract_binding_display_string(driver, val_tv) {
+                    entry.position = s;
+                }
+            }
+            "BestPositionShortString" | "Position" | "PositionString" => {
+                if let Some(s) = extract_binding_display_string(driver, val_tv) {
                     if entry.position.is_empty() {
                         entry.position = s;
                     }
                 }
             }
             "Age" | "PlayerAge" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    if n >= 15 && n <= 55 {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
+                    if (14..=65).contains(&n) {
                         entry.age = n as u8;
                     }
                 }
             }
             "PlayerCurrentAbility" | "CurrentAbility" | "CA" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    if n > 0 && n <= 200 {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
+                    if (1..=200).contains(&n) {
                         entry.current_ability = n as u8;
                     }
                 }
             }
             "PlayerPotentialAbility" | "PotentialAbility" | "PA" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    if n > 0 && n <= 200 {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
+                    if (1..=200).contains(&n) {
                         entry.potential_ability = n as u8;
                     }
                 }
             }
             "Condition" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
                     if n > 0 && n <= 100 {
                         entry.condition = (n as u16) * 100;
                     } else if n > 100 && n <= 10000 {
@@ -2712,7 +3719,7 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
                 }
             }
             "Sharpness" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
                     if n > 0 && n <= 100 {
                         entry.sharpness = (n as u16) * 100;
                     } else if n > 100 && n <= 10000 {
@@ -2720,8 +3727,8 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
                     }
                 }
             }
-            "Morale" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
+            "Morale" | "HierarchyOverallHappinessLevel" => {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
                     if n > 0 && n <= 25 {
                         entry.morale = ((n as u8) * 5).min(100);
                     } else if n > 25 && n <= 100 {
@@ -2729,240 +3736,58 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
                     }
                 }
             }
-            // Attributes
-            "AttributeCrossing" | "Crossing" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).crossing = (n as u8).clamp(1, 20);
+            "AttributesMental"
+            | "AttributesPhysical"
+            | "AttributesSetPieces"
+            | "AttributesTechnical"
+            | "AttributesGoalkeeping" => {
+                entry.attr_list_tvs.push(val_tv);
+            }
+            "PositionAptitudeList" => {
+                entry.pos_list_tv = Some(val_tv);
+            }
+            "Footedness" => {
+                entry.foot_tv = Some(val_tv);
+            }
+            other => {
+                if let Some(n) = extract_binding_number(driver, val_tv) {
+                    if (1..=20).contains(&n) {
+                        let attrs = entry.attributes.get_or_insert_with(PlayerAttributes::default);
+                        apply_attribute_by_name(attrs, other, n);
+                    }
                 }
             }
-            "AttributeDribbling" | "Dribbling" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).dribbling = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeFinishing" | "Finishing" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).finishing = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeFirstTouch" | "FirstTouch" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).first_touch = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeFreeKicks" | "FreeKicks" | "FreeKickTaking" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).free_kicks = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeHeading" | "Heading" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).heading = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeLongShots" | "LongShots" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).long_shots = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeMarking" | "Marking" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    let u = (n as u8).clamp(1, 20);
-                    let attrs = entry.attributes.get_or_insert_with(PlayerAttributes::default);
-                    attrs.positioning = attrs.positioning.max(u);
-                }
-            }
-            "AttributePassing" | "Passing" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).passing = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributePenaltyTaking" | "PenaltyTaking" | "Penalties" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).penalty_taking = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeTackling" | "Tackling" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).tackling = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeTechnique" | "Technique" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).technique = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeCorners" | "Corners" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).corners = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeAggression" | "Aggression" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).aggression = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeAnticipation" | "Anticipation" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).anticipation = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeBravery" | "Bravery" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).bravery = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeComposure" | "Composure" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).composure = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeConcentration" | "Concentration" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).concentration = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeDecisions" | "Decisions" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).decisions = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeDetermination" | "Determination" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).determination = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeFlair" | "Flair" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).flair = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeLeadership" | "Leadership" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).leadership = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeOffTheBall" | "OffTheBall" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).off_the_ball = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributePositioning" | "Positioning" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).positioning = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeTeamwork" | "Teamwork" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).teamwork = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeVision" | "Vision" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).vision = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeWorkRate" | "WorkRate" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).work_rate = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeAcceleration" | "Acceleration" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).acceleration = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeAgility" | "Agility" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).agility = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeBalance" | "Balance" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).balance = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeJumpingReach" | "JumpingReach" | "Jumping" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).jumping_reach = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeNaturalFitness" | "NaturalFitness" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).natural_fitness = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributePace" | "Pace" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).pace = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeStamina" | "Stamina" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).stamina = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeStrength" | "Strength" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).strength = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeAerialReach" | "AerialReach" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).aerial_reach = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeCommandOfArea" | "CommandOfArea" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).command_of_area = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeCommunication" | "Communication" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).communication = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeEccentricity" | "Eccentricity" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).eccentricity = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeHandling" | "Handling" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).handling = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeKicking" | "Kicking" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).kicking = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeOneOnOnes" | "OneOnOnes" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).one_on_ones = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeReflexes" | "Reflexes" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).reflexes = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeRushingOut" | "RushingOut" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).rushing_out = (n as u8).clamp(1, 20);
-                }
-            }
-            "AttributeThrowing" | "Throwing" => {
-                if let Some(n) = extract_binding_number(driver, val_raw) {
-                    entry.attributes.get_or_insert_with(PlayerAttributes::default).throwing = (n as u8).clamp(1, 20);
-                }
-            }
-            _ => {}
         }
     }
 
+    let resolve_team_or_club_name = |team_idx: Option<i32>, club_idx: Option<i32>| -> Option<String> {
+        if let Some(c_idx) = club_idx {
+            if let Some(name) = ref_names.get(&(3, c_idx)) {
+                return Some(name.clone());
+            }
+        }
+        if let Some(t_idx) = team_idx {
+            if let Some(name) = ref_names.get(&(24, t_idx)) {
+                return Some(name.clone());
+            }
+            if let Some(&c_idx) = team_to_club.get(&t_idx) {
+                if let Some(name) = ref_names.get(&(3, c_idx)) {
+                    return Some(name.clone());
+                }
+            }
+        }
+        if let Some(c_idx) = club_idx {
+            if let Some(&t_idx) = club_to_team.get(&c_idx) {
+                if let Some(name) = ref_names.get(&(24, t_idx)) {
+                    return Some(name.clone());
+                }
+            }
+        }
+        None
+    };
+
     let mut out = Vec::new();
-    for (id, p) in map {
+    for (id, mut p) in map {
         let display_name = if !p.name.is_empty() {
             p.name
         } else if !p.short_name.is_empty() {
@@ -2970,7 +3795,49 @@ fn extract_live_bound_players(driver: &fmlev_mem::LinuxMemoryDriver, b_sub: usiz
         } else {
             continue;
         };
+
+        if p.nationality.is_empty() {
+            if let Some(n_idx) = p.nation_ref {
+                if let Some(n_name) = ref_names.get(&(10, n_idx)) {
+                    p.nationality = n_name.clone();
+                }
+            }
+        }
+
+        if p.club_name.is_empty() {
+            if let Some(c_name) = resolve_team_or_club_name(p.team_ref, p.club_ref)
+                .or_else(|| resolve_team_or_club_name(p.report_team_ref, None))
+            {
+                p.club_name = c_name;
+            }
+        }
+
+        if !p.attr_list_tvs.is_empty() {
+            let attrs = p.attributes.get_or_insert_with(PlayerAttributes::default);
+            for list_tv in &p.attr_list_tvs {
+                extract_open_profile_attribute_list(driver, *list_tv, &dyn_ref_props, attrs);
+            }
+        }
+
+        let mut live_pos: Option<PlayerPositions> = None;
+        if let Some(pos_tv) = p.pos_list_tv {
+            let mut pos = PlayerPositions::unknown();
+            extract_position_aptitude_list(driver, pos_tv, &mut pos);
+            live_pos = Some(pos);
+        }
+        if let Some(foot_tv) = p.foot_tv {
+            let pos = live_pos.get_or_insert_with(PlayerPositions::unknown);
+            extract_footedness(driver, foot_tv, pos);
+        }
+
         let mut player = build_template_live_player(id, display_name, p.position.clone());
+        player.club_id = p.club_ref
+            .or_else(|| p.team_ref.and_then(|team| team_to_club.get(&team).copied()))
+            .or_else(|| p.report_team_ref.and_then(|team| team_to_club.get(&team).copied()))
+            .unwrap_or(0);
+        if let Some(pos) = live_pos {
+            player.positions = pos;
+        }
         if !p.club_name.is_empty() {
             player.club_name = p.club_name;
         }
@@ -3063,6 +3930,201 @@ fn decode_base64_simple(input: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_native_read_becomes_the_immediate_delta_save_baseline() {
+        let mut manager = GameContextManager::new_offline();
+        let mut selected = manager.player_registry[&101].clone();
+        selected.positions.wbl = 20; // Stale UI binding before the native selection read.
+        manager.player_registry.insert(selected.id, selected.clone());
+        selected.positions.wbl = 18; // Verified native selection read.
+        selected.position = selected.positions.to_position_string();
+        manager.publish_selected_player(&selected);
+        assert_eq!(manager.context.player.positions.wbl, 18);
+        assert_eq!(manager.player_registry[&selected.id], selected);
+
+        // The user edits immediately, before polling has a chance to update the registry.
+        let mut requested = manager.context.player.positions.clone();
+        requested.wbl = 20;
+        let mut native = selected.positions.clone();
+        apply_changed_positions(&manager.player_registry[&selected.id].positions, &requested, &mut native);
+        assert_eq!(native.wbl, 20);
+    }
+
+    #[test]
+    fn native_position_delta_preserves_untouched_values_from_stale_ui_bindings() {
+        let mut previous = PlayerPositions::default();
+        previous.wbl = 20;
+        previous.dl = 1;
+        let mut requested = previous.clone();
+        requested.dl = 15;
+        requested.wbr = 14;
+        requested.left_foot = 15;
+        let mut native = previous.clone();
+        native.wbl = 18; // The old UI binding cache incorrectly displayed 20.
+        apply_changed_positions(&previous, &requested, &mut native);
+        assert_eq!((native.dl, native.wbr, native.left_foot), (15, 14, 15));
+        assert_eq!(native.wbl, 18);
+        assert_eq!(native.right_foot, previous.right_foot);
+    }
+
+    #[test]
+    fn native_edit_gate_allows_only_positions_and_derived_label() {
+        let previous = build_template_live_player(65304, "Zulkifli Lukmansyah".into(), "D (R)".into());
+        let mut requested = previous.clone();
+        requested.positions.dl = 15;
+        requested.positions.wbr = 14;
+        requested.positions.left_foot = 15;
+        requested.position = "D (RL)".into();
+        requested.user_modified = true;
+        assert!(is_positions_only_edit(&previous, &requested));
+        let mut json = serde_json::to_value(&requested).unwrap();
+        for (field, value) in [
+            ("id", serde_json::json!(38141)),
+            ("name", serde_json::json!("Another player")),
+            ("current_ability", serde_json::json!(199)),
+            ("potential_ability", serde_json::json!(200)),
+            ("condition", serde_json::json!(10000)),
+            ("age", serde_json::json!(18)),
+            ("club_id", serde_json::json!(7001)),
+            ("is_injured", serde_json::json!(true)),
+            ("attributes", serde_json::json!({"finishing":20})),
+            ("contract", serde_json::json!({"wage_per_week":75000})),
+        ] {
+            let original = json[field].clone();
+            json[field] = value;
+            let unsupported: Player = serde_json::from_value(json.clone()).unwrap();
+            assert!(!is_positions_only_edit(&previous, &unsupported), "field {field}");
+            json[field] = original;
+        }
+    }
+
+    #[test]
+    fn footedness_read_skips_removed_slots_and_out_of_range_ratings() {
+        let driver = fmlev_mem::LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut left = [0u8; 40];
+        let mut right = [0u8; 40];
+        left[0x18..0x20].copy_from_slice(&264i64.to_ne_bytes());
+        right[0x18..0x20].copy_from_slice(&20i64.to_ne_bytes());
+        let mut entries = [0u8; 0x20 + 2 * 24];
+        entries[0x28..0x2c].copy_from_slice(&0x32342020u32.to_ne_bytes());
+        entries[0x30..0x38].copy_from_slice(&(left.as_ptr() as usize).to_ne_bytes());
+        entries[0x38..0x3c].copy_from_slice(&(-1i32).to_ne_bytes());
+        entries[0x40..0x44].copy_from_slice(&0x32332020u32.to_ne_bytes());
+        entries[0x48..0x50].copy_from_slice(&(right.as_ptr() as usize).to_ne_bytes());
+        let mut dynamic_ref = [0u8; 40];
+        dynamic_ref[0x18..0x20].copy_from_slice(&(entries.as_ptr() as usize).to_ne_bytes());
+        dynamic_ref[0x20..0x24].copy_from_slice(&2i32.to_ne_bytes());
+        let mut typed_value = [0u8; 40];
+        typed_value[0x18..0x20].copy_from_slice(&(dynamic_ref.as_ptr() as usize).to_ne_bytes());
+        let mut positions = PlayerPositions::unknown();
+        extract_footedness(&driver, typed_value.as_ptr() as usize, &mut positions);
+        assert_eq!(positions.left_foot, 0);
+        assert_eq!(positions.right_foot, 0);
+        left[0x18..0x20].copy_from_slice(&8i64.to_ne_bytes());
+        entries[0x38..0x3c].copy_from_slice(&0i32.to_ne_bytes());
+        extract_footedness(&driver, typed_value.as_ptr() as usize, &mut positions);
+        assert_eq!(positions.left_foot, 8);
+        assert_eq!(positions.right_foot, 20);
+    }
+
+    #[test]
+    fn offline_context_does_not_attach_during_polling() {
+        let mut manager = GameContextManager::new_offline();
+        manager.sync_live_context().unwrap();
+        assert!(manager.session.is_none());
+        assert!(!manager.context.attached);
+    }
+
+    #[test]
+    fn unsupported_live_updates_leave_every_entity_unchanged() {
+        let session = LiveSession::with_bases(
+            std::process::id() as i32,
+            fmlev_mem::ModuleBases { game_assembly_base: Some(1), ..Default::default() },
+            OffsetsRegistry::default(),
+        );
+        let mut manager = GameContextManager::with_session(session);
+        let before = manager.get_context();
+        let mut player = before.player.clone();
+        player.positions.dl = 15;
+        assert!(manager.update_player(player).is_err());
+        assert!(manager.update_club(before.club.clone()).is_err());
+        assert!(manager.update_nation(before.nation.clone()).is_err());
+        assert!(manager.update_competition(before.competition.clone()).is_err());
+        for action in ["heal_player", "all_positions", "both_feet", "max_facilities", "golden_generation", "relax_rules"] {
+            assert!(manager.apply_quick_action(action).is_err());
+        }
+        assert_eq!(manager.get_context(), before);
+        assert!(manager.user_modified_players.is_empty());
+        assert!(manager.user_modified_clubs.is_empty());
+    }
+
+    #[test]
+    fn failed_record_write_does_not_poison_cache_or_modified_flags() {
+        let session = LiveSession::new(std::process::id() as i32, OffsetsRegistry::default()).unwrap();
+        let mut manager = GameContextManager::with_session(session);
+        manager.bind_player_address(101, 1);
+        let before = manager.get_context();
+        let mut changed = before.player.clone();
+        changed.condition = 123;
+        assert!(manager.update_player(changed).is_err());
+        assert_eq!(manager.get_context(), before);
+        assert!(manager.user_modified_players.is_empty());
+        assert!(manager.apply_quick_action("heal_player").is_err());
+        assert_eq!(manager.get_context(), before);
+        assert!(manager.user_modified_players.is_empty());
+    }
+
+    #[test]
+    fn update_uses_requested_entity_binding_and_requires_one() {
+        let session = LiveSession::new(std::process::id() as i32, OffsetsRegistry::default()).unwrap();
+        let mut manager = GameContextManager::with_session(session);
+        let mut active = [0u8; 128];
+        let mut target = [0u8; 128];
+        manager.bind_player_address(101, active.as_mut_ptr() as usize);
+        let mut player = manager.player_registry[&102].clone();
+        player.condition = 4321;
+        assert!(manager.update_player(player.clone()).is_err());
+        assert!(active.iter().all(|v| *v == 0));
+        manager.bind_player_address(102, target.as_mut_ptr() as usize);
+        manager.update_player(player).unwrap();
+        assert_eq!(u16::from_ne_bytes(target[0x10..0x12].try_into().unwrap()), 4321);
+        assert!(active.iter().all(|v| *v == 0));
+        manager.select_player(103).unwrap();
+        assert_eq!(manager.active_player_addr, None);
+    }
+
+    #[test]
+    fn attaching_real_session_removes_demo_entities_and_values() {
+        let session = LiveSession::with_bases(-1, fmlev_mem::ModuleBases::default(), OffsetsRegistry::default());
+        let manager = GameContextManager::with_session(session);
+        assert!(manager.player_registry.is_empty());
+        assert!(manager.club_registry.is_empty());
+        assert!(manager.nation_registry.is_empty());
+        assert!(manager.competition_registry.is_empty());
+        assert_eq!(manager.context.player.id, 0);
+        assert_eq!(manager.context.club.club_id, 0);
+        assert_eq!(manager.context.nation.id, 0);
+        assert_eq!(manager.context.competition.id, 0);
+        assert_eq!(manager.context.player.condition, 0);
+        assert_eq!(manager.context.player.contract.wage_per_week, 0);
+        assert_eq!(manager.context.player.positions, PlayerPositions::unknown());
+    }
+
+    #[test]
+    fn live_position_label_does_not_fabricate_numeric_ratings() {
+        let player = build_template_live_player(65304, "Zulkifli Lukmansyah".into(), "D (R)".into());
+        assert_eq!(player.position, "D (R)");
+        assert_eq!(player.positions, PlayerPositions::unknown());
+        assert_eq!(player.condition, 0);
+        assert_eq!(player.sharpness, 0);
+        assert_eq!(player.morale, 0);
+        assert!(player.morale_label.is_empty());
+        assert_eq!(player.contract.wage_per_week, 0);
+        assert_eq!(player.contract.expiry_year, 0);
+        assert!(player.contract.squad_status.is_empty());
+        assert!(player.contract.happiness.is_empty());
+    }
 
     #[test]
     fn test_context_manager_offline_init() {
@@ -3426,5 +4488,65 @@ mod tests {
             assert_eq!(manager.context().player.attributes.finishing, 20);
             assert!(manager.context().player.user_modified);
         }
+    }
+
+    #[test]
+    fn test_build_template_live_player_has_no_synthetic_defaults() {
+        let p = build_template_live_player(38141, "Layvin Kurzawa".to_string(), "D/WB (L)".to_string());
+        assert_eq!(p.id, 38141);
+        assert_eq!(p.name, "Layvin Kurzawa");
+        assert_eq!(p.position, "D/WB (L)");
+        assert_eq!(p.club_id, 0);
+        assert_eq!(p.club_name, "");
+        assert_eq!(p.nationality, "");
+        assert_eq!(p.age, 0);
+        assert_eq!(p.current_ability, 0);
+        assert_eq!(p.potential_ability, 0);
+        assert_eq!(p.attributes, PlayerAttributes::default());
+    }
+
+    #[test]
+    fn test_merge_player_attributes_and_apply_attribute_by_name() {
+        let mut dst = PlayerAttributes::default();
+        dst.finishing = 15;
+        dst.vision = 10;
+
+        let mut src = PlayerAttributes::default();
+        apply_attribute_by_name(&mut src, "Vision", 12);
+        apply_attribute_by_name(&mut src, "Natural Fitness", 10);
+        apply_attribute_by_name(&mut src, "Free Kick Taking", 13);
+        apply_attribute_by_name(&mut src, "Off The Ball", 15);
+
+        merge_player_attributes(&mut dst, &src);
+        assert_eq!(dst.finishing, 15); // preserved because src.finishing == 0
+        assert_eq!(dst.vision, 12); // updated from src
+        assert_eq!(dst.natural_fitness, 10);
+        assert_eq!(dst.free_kicks, 13);
+        assert_eq!(dst.off_the_ball, 15);
+    }
+
+    #[test]
+    fn test_read_typed_value_and_extract_binding_number() {
+        let my_pid = std::process::id() as i32;
+        let driver = fmlev_mem::LinuxMemoryDriver::new(my_pid);
+
+        // Simulate NumericTypedValue in memory: +0x18 = union (8 bytes), +0x20 = NumberKind (i32)
+        let mut fake_tv = [0u8; 40];
+        let tv_addr = fake_tv.as_mut_ptr() as usize;
+
+        // 1. SignedWhole = 85010869 (UniqueId > 0x10000)
+        fake_tv[0x18..0x20].copy_from_slice(&85010869i64.to_ne_bytes());
+        fake_tv[0x20..0x24].copy_from_slice(&0i32.to_ne_bytes());
+        assert_eq!(extract_binding_number(&driver, tv_addr), Some(85010869));
+
+        // 2. SignedWhole = 32 (Age)
+        fake_tv[0x18..0x20].copy_from_slice(&32i64.to_ne_bytes());
+        fake_tv[0x20..0x24].copy_from_slice(&0i32.to_ne_bytes());
+        assert_eq!(extract_binding_number(&driver, tv_addr), Some(32));
+
+        // 3. FloatingPoint = 14.0
+        fake_tv[0x18..0x20].copy_from_slice(&14.0f64.to_ne_bytes());
+        fake_tv[0x20..0x24].copy_from_slice(&2i32.to_ne_bytes());
+        assert_eq!(extract_binding_number(&driver, tv_addr), Some(14));
     }
 }

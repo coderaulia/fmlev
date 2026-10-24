@@ -41,7 +41,7 @@ echo -e "${BOLD}100% Free & Open-Source • Built with ❤️ for the Indonesian
 echo "----------------------------------------------------------------------------------"
 
 # ── 1. Desktop shortcut creation argument check ────────────────────────────────
-if [[ "$1" == "--desktop" || "$1" == "-d" ]]; then
+if [[ "${1:-}" == "--desktop" || "${1:-}" == "-d" ]]; then
   echo -e "${BLUE}ℹ Creating Application Menu & Desktop launcher...${RESET}"
   DESKTOP_DIR="${XDG_DESKTOP_DIR:-$HOME/Desktop}"
   APPS_DIR="$HOME/.local/share/applications"
@@ -82,6 +82,15 @@ Keywords=FM;Football Manager;Editor;Scout;Vanaila;"
   fi
   echo ""
   exit 0
+fi
+
+# Lifecycle commands do not need Rust setup or memory-permission checks.
+case "${1:-start}" in
+  start|restart|stop|status|--background|--help|-h) ;;
+  *) echo "Usage: $0 [start|restart|stop|status] [--background] | --desktop" >&2; exit 2 ;;
+esac
+if [[ "${1:-}" == "stop" || "${1:-}" == "status" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  exec python3 "$APP_DIR/tools/server_control.py" "$@"
 fi
 
 # ── 2. Distro & OS Detection ──────────────────────────────────────────────────
@@ -138,36 +147,9 @@ check_yama_ptrace() {
 
 check_yama_ptrace
 
-# ── 5. Auto-Browser Launcher in Background ────────────────────────────────────
-open_browser_when_ready() {
-  local target_url="http://localhost:41789"
-  local attempts=0
-  local max_attempts=50
-
-  while [ $attempts -lt $max_attempts ]; do
-    sleep 0.4
-    if curl -s -o /dev/null -w "%{http_code}" "$target_url" 2>/dev/null | grep -q "200"; then
-      echo -e "\n${BOLD}${GREEN}🚀 FMLE by Vanaila is LIVE at ${target_url}!${RESET}"
-      echo -e "${CYAN}Opening live web interface in your default browser...${RESET}\n"
-      if command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$target_url" >/dev/null 2>&1 || true
-      elif command -v open >/dev/null 2>&1; then
-        open "$target_url" >/dev/null 2>&1 || true
-      elif command -v sensible-browser >/dev/null 2>&1; then
-        sensible-browser "$target_url" >/dev/null 2>&1 || true
-      fi
-      break
-    fi
-    attempts=$((attempts + 1))
-  done
-}
-
-open_browser_when_ready &
-
-# ── 6. Start FMLE Daemon & Live UI ────────────────────────────────────────────
-echo -e "\n${BOLD}${GREEN}Starting FMLE by Vanaila daemon on port 41789...${RESET}"
-echo -e "${CYAN}Dashboard URL: ${BOLD}http://localhost:41789${RESET}"
-echo -e "${YELLOW}Press Ctrl+C at any time to stop the server.${RESET}\n"
-
-# Run optimized release build or build if needed
-exec cargo run -p fmlev-cli --release -- serve --port 41789
+# ── 5. Build, own the listener, and keep the terminal attached ─────────────────
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "Server lifecycle commands currently require Linux." >&2
+  exit 1
+fi
+exec python3 "$APP_DIR/tools/server_control.py" "$@"

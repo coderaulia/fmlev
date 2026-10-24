@@ -77,6 +77,15 @@ impl Default for PlayerPositions {
 }
 
 impl PlayerPositions {
+    /// Zero marks a live rating that has not been read from FM26.
+    pub fn unknown() -> Self {
+        Self {
+            gk: 0, dl: 0, dc: 0, dr: 0, wbl: 0, wbr: 0, dm: 0,
+            ml: 0, mc: 0, mr: 0, aml: 0, amc: 0, amr: 0, st: 0,
+            left_foot: 0, right_foot: 0,
+        }
+    }
+
     /// Parses an FM position string like `"AM (R), ST (C)"` or `"D/WB (L)"` or `"DM, M (C)"` into 1-20 ratings.
     pub fn from_position_string(pos_str: &str) -> Self {
         let mut p = Self {
@@ -232,13 +241,21 @@ impl PlayerPositions {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Player {
     pub id: i32,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub club_id: i32,
+    #[serde(default)]
     pub current_ability: u8,   // 1 - 200
+    #[serde(default)]
     pub potential_ability: u8, // 1 - 200
+    #[serde(default)]
     pub condition: u16,        // 0 - 10000 (100.00%)
+    #[serde(default)]
     pub sharpness: u16,        // 0 - 10000 (100.00%)
+    #[serde(default)]
     pub morale: u8,            // 0 - 100
+    #[serde(default)]
     pub attributes: PlayerAttributes,
 
     #[serde(default)]
@@ -328,9 +345,9 @@ impl Player {
         if let Ok(pa_offset) = registry.get_field_offset("PlayerAttributes", "potential_ability") {
             driver.write(addr + pa_offset, &self.potential_ability)?;
         }
-        let _ = driver.write(addr + 0x10, &self.condition);
-        let _ = driver.write(addr + 0x12, &self.sharpness);
-        let _ = driver.write(addr + 0x14, &self.morale);
+        driver.write(addr + 0x10, &self.condition)?;
+        driver.write(addr + 0x12, &self.sharpness)?;
+        driver.write(addr + 0x14, &self.morale)?;
 
         self.attributes.write(driver, addr, registry)?;
         Ok(())
@@ -764,22 +781,22 @@ impl ClubFinances {
         driver.write(addr + wage_off, &self.wage_budget)?;
 
         if let Ok(off) = registry.get_field_offset("ClubReference", "training_facilities") {
-            let _ = driver.write(addr + off, &self.training_facilities);
+            driver.write(addr + off, &self.training_facilities)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "youth_facilities") {
-            let _ = driver.write(addr + off, &self.youth_facilities);
+            driver.write(addr + off, &self.youth_facilities)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "youth_recruitment") {
-            let _ = driver.write(addr + off, &self.youth_recruitment);
+            driver.write(addr + off, &self.youth_recruitment)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "junior_coaching") {
-            let _ = driver.write(addr + off, &self.junior_coaching);
+            driver.write(addr + off, &self.junior_coaching)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "data_analysis") {
-            let _ = driver.write(addr + off, &self.data_analysis_facilities);
+            driver.write(addr + off, &self.data_analysis_facilities)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "corporate_facilities") {
-            let _ = driver.write(addr + off, &self.corporate_facilities);
+            driver.write(addr + off, &self.corporate_facilities)?;
         }
 
         let sd_raw: u8 = match self.sugar_daddy_type.as_str() {
@@ -789,28 +806,28 @@ impl ClubFinances {
             _ => 0,
         };
         if let Ok(off) = registry.get_field_offset("ClubReference", "sugar_daddy_type") {
-            let _ = driver.write(addr + off, &sd_raw);
+            driver.write(addr + off, &sd_raw)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "board_patience") {
-            let _ = driver.write(addr + off, &self.board_patience);
+            driver.write(addr + off, &self.board_patience)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "fan_confidence") {
-            let _ = driver.write(addr + off, &self.fan_confidence);
+            driver.write(addr + off, &self.fan_confidence)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "board_confidence") {
-            let _ = driver.write(addr + off, &self.board_confidence);
+            driver.write(addr + off, &self.board_confidence)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "transfer_retention_pct") {
-            let _ = driver.write(addr + off, &self.transfer_retention_pct);
+            driver.write(addr + off, &self.transfer_retention_pct)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "max_wage_allowance") {
-            let _ = driver.write(addr + off, &self.max_wage_allowance);
+            driver.write(addr + off, &self.max_wage_allowance)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "stadium_capacity") {
-            let _ = driver.write(addr + off, &self.stadium_capacity);
+            driver.write(addr + off, &self.stadium_capacity)?;
         }
         if let Ok(off) = registry.get_field_offset("ClubReference", "stadium_expansion_cap") {
-            let _ = driver.write(addr + off, &self.stadium_expansion_cap);
+            driver.write(addr + off, &self.stadium_expansion_cap)?;
         }
 
         Ok(())
@@ -972,28 +989,28 @@ impl NationDetails {
 
     pub fn write(&self, driver: &LinuxMemoryDriver, addr: usize, registry: &OffsetsRegistry) -> Result<()> {
         if let Ok(off) = registry.get_field_offset("NationReference", "reputation") {
-            let _ = driver.write(addr + off, &self.reputation);
+            driver.write(addr + off, &self.reputation)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "youth_rating") {
-            let _ = driver.write(addr + off, &self.youth_rating);
+            driver.write(addr + off, &self.youth_rating)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "economic_factor") {
-            let _ = driver.write(addr + off, &self.economic_factor);
+            driver.write(addr + off, &self.economic_factor)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "state_of_development") {
-            let _ = driver.write(addr + off, &self.state_of_development);
+            driver.write(addr + off, &self.state_of_development)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "fa_financial_power") {
-            let _ = driver.write(addr + off, &self.fa_financial_power);
+            driver.write(addr + off, &self.fa_financial_power)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "game_importance") {
-            let _ = driver.write(addr + off, &self.game_importance);
+            driver.write(addr + off, &self.game_importance)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "tax_rate") {
-            let _ = driver.write(addr + off, &self.tax_rate);
+            driver.write(addr + off, &self.tax_rate)?;
         }
         if let Ok(off) = registry.get_field_offset("NationReference", "corruption_index") {
-            let _ = driver.write(addr + off, &self.corruption_index);
+            driver.write(addr + off, &self.corruption_index)?;
         }
         Ok(())
     }
@@ -1171,41 +1188,41 @@ impl CompetitionDetails {
 
     pub fn write(&self, driver: &LinuxMemoryDriver, addr: usize, registry: &OffsetsRegistry) -> Result<()> {
         if let Ok(off) = registry.get_field_offset("CompReference", "reputation") {
-            let _ = driver.write(addr + off, &self.reputation);
+            driver.write(addr + off, &self.reputation)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "max_substitutes") {
-            let _ = driver.write(addr + off, &self.max_substitutes);
+            driver.write(addr + off, &self.max_substitutes)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "max_bench_size") {
-            let _ = driver.write(addr + off, &self.max_bench_size);
+            driver.write(addr + off, &self.max_bench_size)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "substitution_windows") {
-            let _ = driver.write(addr + off, &self.substitution_windows);
+            driver.write(addr + off, &self.substitution_windows)?;
         }
         let var_val: u8 = if self.var_active { 1 } else { 0 };
         if let Ok(off) = registry.get_field_offset("CompReference", "var_active") {
-            let _ = driver.write(addr + off, &var_val);
+            driver.write(addr + off, &var_val)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "max_squad_size") {
-            let _ = driver.write(addr + off, &self.max_squad_size);
+            driver.write(addr + off, &self.max_squad_size)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "max_foreign_players") {
-            let _ = driver.write(addr + off, &self.max_foreign_players);
+            driver.write(addr + off, &self.max_foreign_players)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "min_homegrown_club") {
-            let _ = driver.write(addr + off, &self.min_homegrown_club);
+            driver.write(addr + off, &self.min_homegrown_club)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "min_homegrown_nation") {
-            let _ = driver.write(addr + off, &self.min_homegrown_nation);
+            driver.write(addr + off, &self.min_homegrown_nation)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "winner_prize_money") {
-            let _ = driver.write(addr + off, &self.winner_prize_money);
+            driver.write(addr + off, &self.winner_prize_money)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "tv_rights_pool") {
-            let _ = driver.write(addr + off, &self.tv_rights_pool);
+            driver.write(addr + off, &self.tv_rights_pool)?;
         }
         if let Ok(off) = registry.get_field_offset("CompReference", "yellow_cards_for_ban") {
-            let _ = driver.write(addr + off, &self.yellow_cards_for_ban);
+            driver.write(addr + off, &self.yellow_cards_for_ban)?;
         }
         Ok(())
     }

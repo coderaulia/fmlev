@@ -506,6 +506,50 @@
       border: 1px solid var(--border-color);
     }
 
+    .badge-muted {
+      background: rgba(100, 116, 139, 0.12);
+      color: var(--text-dim);
+      border: 1px dashed rgba(100, 116, 139, 0.35);
+      font-style: italic;
+    }
+
+    .badge-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.25);
+      vertical-align: middle;
+    }
+
+    .live-badge-sm {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      font-size: 9px;
+      font-weight: 800;
+      padding: 0 4px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .synced-ago-text {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 500;
+      vertical-align: middle;
+      margin-left: 2px;
+    }
+
     .badge-morale {
       background: rgba(245, 158, 11, 0.2);
       color: #fbbf24;
@@ -718,16 +762,27 @@
     }
 
     .attr-val-box {
-      width: 28px;
+      width: 32px;
       height: 24px;
       border-radius: 4px;
       text-align: center;
       font-weight: 800;
       font-size: 12px;
       line-height: 24px;
-      cursor: pointer;
+      cursor: text;
       border: 1px solid transparent;
-      user-select: none;
+      outline: none;
+      padding: 0;
+    }
+
+    .attr-val-box:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 6px rgba(6, 182, 212, 0.35);
+    }
+
+    .attr-val-box::placeholder {
+      color: var(--text-dim);
+      opacity: 1;
     }
 
     /* Color Tiers for FM Attributes */
@@ -756,7 +811,14 @@
       color: #fca5a5;
     }
 
-    /* Action Bar (Apply & Auto-Apply) */
+    .tier-unexposed {
+      background: rgba(100, 116, 139, 0.1);
+      border-color: rgba(100, 116, 139, 0.25);
+      color: var(--text-dim);
+      cursor: help;
+    }
+
+    /* Manual Save Action Bar */
     .action-control-bar {
       display: flex;
       align-items: center;
@@ -1514,6 +1576,8 @@
           <div>
             <div class="player-name-row">
               <span id="player-name" class="player-name-display">Loading Player...</span>
+              <span id="player-live-badge" class="badge-live" style="display: none;" title="Live player active from FM26 game memory">LIVE</span>
+              <span id="player-synced-ago" class="synced-ago-text" style="display: none;">Synced just now</span>
               <button class="btn" style="padding: 2px 6px; font-size: 11px;" onclick="promptEditName()" title="Edit Player Name">✏️</button>
             </div>
             <div class="player-meta-row">
@@ -1548,14 +1612,14 @@
           <div class="ca-pa-container">
             <div class="ca-pa-block">
               <div class="ca-pa-label">CA (Ability)</div>
-              <input id="input-ca" type="number" min="1" max="200" class="ca-pa-val-input ca-color" value="188" onchange="handleCAChange(this.value)">
-              <div id="star-rating-ca" class="star-rating">★★★★★</div>
+              <input id="input-ca" type="text" inputmode="numeric" class="ca-pa-val-input ca-color" value="—" placeholder="—" onfocus="if(this.value==='—')this.value=''" oninput="handleCAInput(this.value)" onblur="handleCAChange(this.value)" onchange="handleCAChange(this.value)">
+              <div id="star-rating-ca" class="star-rating">—</div>
             </div>
             <div style="width: 1px; height: 36px; background: var(--border-color);"></div>
             <div class="ca-pa-block">
               <div class="ca-pa-label">PA (Potential)</div>
-              <input id="input-pa" type="number" min="1" max="200" class="ca-pa-val-input pa-color" value="195" onchange="handlePAChange(this.value)">
-              <div id="star-rating-pa" class="star-rating">★★★★★</div>
+              <input id="input-pa" type="text" inputmode="numeric" class="ca-pa-val-input pa-color" value="—" placeholder="—" onfocus="if(this.value==='—')this.value=''" oninput="handlePAInput(this.value)" onblur="handlePAChange(this.value)" onchange="handlePAChange(this.value)">
+              <div id="star-rating-pa" class="star-rating">—</div>
             </div>
           </div>
         </div>
@@ -1664,20 +1728,16 @@
         </div>
       </div>
 
-      <!-- Action & Auto-Apply Control Bar -->
+      <!-- Manual Save Control Bar -->
       <div class="action-control-bar">
         <div class="toggle-wrapper">
-          <label class="switch">
-            <input id="auto-apply-toggle" type="checkbox" checked onchange="toggleAutoApply(this.checked)">
-            <span class="slider"></span>
-          </label>
-          <span>⚡ Instant Auto-Apply (saves immediately to live game on change)</span>
+          <span>💾 Manual save — click Save to apply your edits</span>
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center;">
           <span id="last-saved-time" style="font-size: 11px; color: var(--text-dim);">All changes synced</span>
           <button class="btn btn-emerald" style="padding: 8px 18px;" onclick="applyPlayerChanges()">
-            💾 Apply Changes to FM26
+            💾 Save Changes to FM26
           </button>
         </div>
       </div>
@@ -1864,7 +1924,7 @@
             <!-- Quick Action & Save Bar -->
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px 16px;">
               <div style="font-size: 12px; color: var(--text-muted);">
-                <span>⚡ Auto-Apply updates FM26 instantly on click/slide</span>
+                <span>💾 Position and foot changes are pending until you click Save</span>
               </div>
               <button class="btn btn-emerald" style="padding: 8px 20px;" onclick="savePositionsToGame()">
                 💾 Save Positions to FM26
@@ -1899,7 +1959,7 @@
               <span id="currency-symbol-label">USD ($)</span>
             </label>
             <div style="display: flex; gap: 8px;">
-              <input id="contract-wage" type="number" class="form-control" value="400000" onchange="autoSaveContract()">
+              <input id="contract-wage" type="number" class="form-control" value="400000" onchange="autoSaveContract('wage_per_week')">
               <button class="btn" onclick="adjustWage(50000)">+50k</button>
               <button class="btn" onclick="adjustWage(-50000)">-50k</button>
             </div>
@@ -1908,7 +1968,7 @@
           <!-- Expiry Year -->
           <div class="form-group">
             <label class="form-label">Contract Expiry Year</label>
-            <select id="contract-expiry" class="form-control" onchange="autoSaveContract()">
+            <select id="contract-expiry" class="form-control" onchange="autoSaveContract('expiry_year')">
               <option value="2026">2026</option>
               <option value="2027">2027</option>
               <option value="2028">2028</option>
@@ -1926,15 +1986,15 @@
           <div class="form-group">
             <label class="form-label">
               <span>Release Clause</span>
-              <span style="font-size: 10px; color: var(--accent-cyan); cursor: pointer;" onclick="document.getElementById('contract-release').value = 0; autoSaveContract();">Set to $0 (Free)</span>
+              <span style="font-size: 10px; color: var(--accent-cyan); cursor: pointer;" onclick="document.getElementById('contract-release').value = 0; autoSaveContract('release_clause');">Set to $0 (Free)</span>
             </label>
-            <input id="contract-release" type="number" class="form-control" value="200000000" onchange="autoSaveContract()">
+            <input id="contract-release" type="number" class="form-control" value="200000000" onchange="autoSaveContract('release_clause')">
           </div>
 
           <!-- Squad Status -->
           <div class="form-group">
             <label class="form-label">Squad Status</label>
-            <select id="contract-status" class="form-control" onchange="autoSaveContract()">
+            <select id="contract-status" class="form-control" onchange="autoSaveContract('squad_status')">
               <option value="Star Player">Star Player</option>
               <option value="Important Player">Important Player</option>
               <option value="Regular Starter">Regular Starter</option>
@@ -1948,7 +2008,7 @@
           <!-- Player Happiness / Morale -->
           <div class="form-group">
             <label class="form-label">Player Happiness</label>
-            <select id="contract-happiness" class="form-control" onchange="autoSaveContract()">
+            <select id="contract-happiness" class="form-control" onchange="autoSaveContract('happiness')">
               <option value="Delighted">Delighted (Ecstatic)</option>
               <option value="Happy">Happy</option>
               <option value="Content">Content</option>
@@ -2825,12 +2885,19 @@
   <div id="toast-container"></div>
 
   <script>
+    function numberInput(value, fallback = 0) {
+      const parsed = Number.parseInt(value, 10);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
     // Global Application State
+    const dirtyPlayerFields = new Set();
+
     let state = {
       connected: false,
       pid: null,
       isPinned: false,
-      autoApply: true,
+      autoApply: false,
       activePlayer: null,
       activeClub: null,
       activeNation: null,
@@ -2838,13 +2905,136 @@
       syncMode: "auto_follow",
       screenState: "player",
       isOverlayMode: false,
-      saveTimeout: null,
       playerDirty: false,
+      playerDirtyFields: dirtyPlayerFields,
+      lastContextSyncTime: null,
       clubDirty: false,
       nationDirty: false,
       competitionDirty: false,
       lastSavedTime: null,
     };
+
+    // Pending requests are bound to entity identity and survive read-only polling.
+    const pendingActions = new Map();
+    const savingEntities = new Set();
+    const entityControls = {
+      player: { active: "activePlayer", id: "id", dirty: () => state.playerDirtyFields.size > 0,
+        write: () => writePlayerChanges(), display: player => displayPlayer(player) },
+      club: { active: "activeClub", id: "club_id", dirty: () => state.clubDirty,
+        write: () => writeClubChanges(), display: club => displayClub(club) },
+      nation: { active: "activeNation", id: "id", dirty: () => state.nationDirty,
+        write: () => writeNationChanges(), display: nation => displayNation(nation) },
+      competition: { active: "activeCompetition", id: "id", dirty: () => state.competitionDirty,
+        write: () => writeCompetitionChanges(), display: competition => displayCompetition(competition) },
+    };
+
+    function refreshPendingActionIndicators() {
+      const selectors = {
+        player: '[onclick="applyPlayerChanges()"], [onclick="savePositionsToGame()"], [onclick="saveContractToGame()"]',
+        club: '[onclick="saveClubToGame()"]', nation: '[onclick="saveNationToGame()"]',
+        competition: '[onclick="saveCompetitionToGame()"]'
+      };
+      for (const [kind, selector] of Object.entries(selectors)) {
+        const control = entityControls[kind];
+        const entity = state[control.active];
+        const actions = entity ? (pendingActions.get(`${kind}:${entity[control.id]}`) || []) : [];
+        for (const button of document.querySelectorAll?.(selector) || []) {
+          if (!button.dataset.saveLabel) button.dataset.saveLabel = button.textContent.trim();
+          button.textContent = button.dataset.saveLabel + (actions.length ? ` (${actions.length} pending actions)` : "");
+          button.title = actions.length ? `Save manual edits first, then: ${actions.map(action => action.label).join(", ")}` : "Save pending edits";
+        }
+      }
+    }
+
+    function queuePendingAction(kind, url, body, label) {
+      const control = entityControls[kind];
+      const entity = state[control.active];
+      if (!entity) return false;
+      const key = `${kind}:${entity[control.id]}`;
+      const queue = pendingActions.get(key) || [];
+      queue.push({ url, body: JSON.parse(JSON.stringify(body)), label });
+      pendingActions.set(key, queue);
+      refreshPendingActionIndicators();
+      showToast(`${label} pending for ${entity.name || entity.club_name || kind}. Click Save on its tab. Manual edits save first, then pending actions.`, "info");
+      return true;
+    }
+
+    function queuePreset(kind, preset) {
+      const control = entityControls[kind];
+      const entity = state[control.active];
+      if (!entity) return false;
+      return queuePendingAction(kind, `/api/${kind}/preset`, {
+        preset, [`${kind}_id`]: entity[control.id]
+      }, `Preset '${preset}'`);
+    }
+
+    async function saveEntityChanges(kind) {
+      const control = entityControls[kind];
+      const entity = state[control.active];
+      if (!entity) return false;
+      const id = entity[control.id];
+      const key = `${kind}:${id}`;
+      if (savingEntities.has(key)) return false;
+      savingEntities.add(key);
+      // Only actions present when Save was clicked are authorized by this click.
+      const actions = [...(pendingActions.get(key) || [])];
+      try {
+        if (control.dirty() && !await control.write()) return false;
+        // Edits made while the save was in flight remain pending.
+        if (state[control.active]?.[control.id] === id && control.dirty()) return false;
+        for (const action of actions) {
+          const res = await fetch(action.url, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(action.body)
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || "Pending action failed");
+          const queue = pendingActions.get(key) || [];
+          const at = queue.indexOf(action);
+          if (at >= 0) queue.splice(at, 1);
+          if (queue.length === 0) pendingActions.delete(key);
+          const acknowledged = data[kind] || data[`active_${kind}`];
+          if (acknowledged && state[control.active]?.[control.id] === id && !control.dirty()) {
+            control.display(acknowledged);
+          }
+          showToast(data.message || `${action.label} saved.`, "success");
+        }
+        return true;
+      } catch (error) {
+        showToast(`Save failed: ${error.message}. Remaining actions are pending.`, "error");
+        return false;
+      } finally {
+        savingEntities.delete(key);
+        refreshPendingActionIndicators();
+      }
+    }
+
+    async function applyPlayerChanges() { return saveEntityChanges("player"); }
+    async function saveClubToGame() { return saveEntityChanges("club"); }
+    async function saveNationToGame() { return saveEntityChanges("nation"); }
+    async function saveCompetitionToGame() { return saveEntityChanges("competition"); }
+
+    // Offline demo IDs configured in fmlev demo context
+    const OFFLINE_DEMO_PLAYER_IDS = new Set([101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 73]);
+
+    function isLivePlayer(player) {
+      if (!player || player.id === undefined || player.id === null) return false;
+      if (player.is_live === true || player.source === "live") return true;
+      return !OFFLINE_DEMO_PLAYER_IDS.has(Number(player.id));
+    }
+
+    function updateSyncedAgoDisplay() {
+      const el = document.getElementById("player-synced-ago");
+      if (!el) return;
+      if (!state.lastContextSyncTime) {
+        el.style.display = "none";
+        return;
+      }
+      const secs = Math.max(0, Math.floor((Date.now() - state.lastContextSyncTime) / 1000));
+      el.style.display = "inline";
+      el.innerText = `Synced ${secs}s ago`;
+      el.title = `Last polled context from FM26 at ${new Date(state.lastContextSyncTime).toLocaleTimeString()}`;
+    }
 
     const techAttrs = [
       ["corners", "Corners"],
@@ -2941,9 +3131,10 @@
       buildAttributeLists();
       fetchContext();
 
-      // Poll every 1 second when unpinned and not editing
+      // Poll every 1 second when unpinned; displayPlayer protects focused inputs and dirtyPlayerFields
       setInterval(() => {
-        if (!state.isPinned && !isInputFocused()) {
+        updateSyncedAgoDisplay();
+        if (!state.isPinned) {
           fetchContext();
         }
       }, 1000);
@@ -2985,6 +3176,14 @@
       if (btn) btn.classList.add("active");
     }
 
+    const allAttrKeys = [
+      ...techAttrs,
+      ...mentalAttrs,
+      ...physAttrs,
+      ...hiddenAttrs,
+      ...gkAttrs
+    ].map(([k]) => k);
+
     // Render Attribute Tables
     function buildAttributeLists() {
       renderAttrGroup("list-technical", techAttrs);
@@ -3003,7 +3202,7 @@
           <span class="attr-name">${name}</span>
           <div class="attr-controls">
             <button class="attr-stepper" onclick="stepAttr('${key}', -1)">−</button>
-            <div id="attr-val-${key}" class="attr-val-box tier-avg" onclick="promptEditAttr('${key}', '${name}')">15</div>
+            <input id="attr-val-${key}" type="text" inputmode="numeric" class="attr-val-box tier-unexposed" value="" placeholder="—" title="Not exposed by game binding yet — open this player's Attributes screen in FM26" oninput="handleAttrInput('${key}', this.value, false)" onchange="handleAttrInput('${key}', this.value, true)" onblur="handleAttrInput('${key}', this.value, true)">
             <button class="attr-stepper" onclick="stepAttr('${key}', 1)">+</button>
           </div>
         </div>
@@ -3011,50 +3210,90 @@
     }
 
     function getTierClass(val) {
-      if (val >= 16) return "tier-elite";
-      if (val >= 11) return "tier-good";
-      if (val >= 6) return "tier-avg";
+      const num = parseInt(val, 10) || 0;
+      if (num <= 0) return "tier-unexposed";
+      if (num >= 16) return "tier-elite";
+      if (num >= 11) return "tier-good";
+      if (num >= 6) return "tier-avg";
       return "tier-low";
     }
 
     function stepAttr(key, delta) {
-      if (!state.activePlayer || !state.activePlayer.attributes) return;
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.attributes) state.activePlayer.attributes = {};
+      dirtyPlayerFields.add("attr_" + key);
       markUnsaved();
-      const current = state.activePlayer.attributes[key] || 10;
-      const next = Math.max(1, Math.min(20, current + delta));
+      const current = parseInt(state.activePlayer.attributes[key], 10) || 0;
+      let next;
+      if (current <= 0) {
+        next = delta > 0 ? 1 : 0;
+      } else {
+        next = Math.max(0, Math.min(20, current + delta));
+      }
       state.activePlayer.attributes[key] = next;
 
-      updateAttrDisplay(key, next);
+      updateAttrDisplay(key, next, true);
 
-      // Recalculate CA recommendation
-      updateRecommendedCA();
-
-      if (state.autoApply) {
-        debouncedSavePlayer();
+      // Recalculate CA recommendation only if CA is exposed
+      if ((state.activePlayer.current_ability || 0) > 0) {
+        updateRecommendedCA();
       }
+
     }
 
-    function promptEditAttr(key, name) {
-      const current = state.activePlayer?.attributes?.[key] || 15;
-      const input = prompt(`Enter ${name} (1 - 20):`, current);
-      if (input !== null) {
-        const val = parseInt(input);
-        if (!isNaN(val)) {
-          markUnsaved();
-          const clamped = Math.max(1, Math.min(20, val));
-          state.activePlayer.attributes[key] = clamped;
-          updateAttrDisplay(key, clamped);
+    function handleAttrInput(key, rawVal, commit) {
+      if (!state.activePlayer) return;
+      if (!state.activePlayer.attributes) state.activePlayer.attributes = {};
+      const trimmed = String(rawVal || "").trim();
+      const parsed = parseInt(trimmed, 10);
+      let num = 0;
+      if (trimmed !== "" && trimmed !== "—" && !isNaN(parsed) && parsed > 0) {
+        num = Math.max(1, Math.min(20, parsed));
+      }
+
+      const prev = parseInt(state.activePlayer.attributes[key], 10) || 0;
+      if (!commit || num !== prev || dirtyPlayerFields.has("attr_" + key)) {
+        dirtyPlayerFields.add("attr_" + key);
+        markUnsaved();
+      }
+
+      state.activePlayer.attributes[key] = num;
+      updateAttrDisplay(key, num, commit);
+
+      if (commit && dirtyPlayerFields.has("attr_" + key)) {
+        if ((state.activePlayer.current_ability || 0) > 0) {
           updateRecommendedCA();
-          if (state.autoApply) debouncedSavePlayer();
         }
       }
     }
 
-    function updateAttrDisplay(key, val) {
+    function promptEditAttr(key, name) {
+      const el = document.getElementById("attr-val-" + key);
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+
+    function updateAttrDisplay(key, val, forceValue = true) {
       const el = document.getElementById("attr-val-" + key);
       if (!el) return;
-      el.innerText = val;
-      el.className = `attr-val-box ${getTierClass(val)}`;
+      const num = parseInt(val, 10) || 0;
+      if (num <= 0) {
+        if (forceValue || document.activeElement !== el) {
+          el.value = "";
+        }
+        el.placeholder = "—";
+        el.className = "attr-val-box tier-unexposed";
+        el.title = "Not exposed by game binding yet — open this player's Attributes screen in FM26";
+      } else {
+        if (forceValue || document.activeElement !== el) {
+          el.value = String(num);
+        }
+        el.placeholder = "—";
+        el.className = `attr-val-box ${getTierClass(num)}`;
+        el.title = "Type a value (1-20) or use - / + steppers";
+      }
     }
 
     // Toggle Hidden Attributes section
@@ -3082,14 +3321,20 @@
         state.isPinned = data.is_pinned;
         state.syncMode = data.sync_mode;
         state.screenState = data.screen_state;
+        state.lastContextSyncTime = Date.now();
 
         updateSyncUI();
+        updateSyncedAgoDisplay();
 
         if (data.active_player || data.player) {
           const player = data.active_player || data.player;
           const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
-          // Prevent edit reversion: Never overwrite if user has unsaved edits or input focus on same player
-          if (!isSamePlayer || (!state.playerDirty && !isInputFocused())) {
+          if (!isSamePlayer) {
+            state.playerDirtyFields.clear();
+            state.playerDirty = false;
+            displayPlayer(player);
+          } else {
+            // Same player: displayPlayer protects any dirty fields or focused inputs
             displayPlayer(player);
           }
         }
@@ -3131,9 +3376,11 @@
 
       if (state.connected) {
         pill.className = "sync-indicator synced";
+        const agoSecs = state.lastContextSyncTime ? Math.max(0, Math.floor((Date.now() - state.lastContextSyncTime) / 1000)) : 0;
+        const syncAgoStr = `Synced ${agoSecs}s ago`;
         text.innerText = state.isPinned
-          ? "🟢 Synced • 📌 Pinned"
-          : "🟢 Synced with FM26 • Auto-Following Game Screen";
+          ? `🟢 ${syncAgoStr} • 📌 Pinned`
+          : `🟢 ${syncAgoStr} • Auto-Following FM26`;
         if (diagConn) diagConn.innerText = `Connected (PID: ${state.pid})`;
       } else {
         pill.className = "sync-indicator unsynced";
@@ -3154,31 +3401,122 @@
 
     // Render Player Data
     function displayPlayer(player) {
-      state.activePlayer = JSON.parse(JSON.stringify(player));
+      if (!player) return;
+      const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
+      if (!isSamePlayer) {
+        state.activePlayer = JSON.parse(JSON.stringify(player));
+        state.playerDirtyFields.clear();
+        state.playerDirty = false;
+      } else {
+        if (!state.activePlayer) state.activePlayer = {};
+        for (const [k, v] of Object.entries(player)) {
+          if (k === "attributes" || k === "contract" || k === "positions") continue;
+          if (!state.playerDirtyFields.has(k)) {
+            state.activePlayer[k] = v;
+          }
+        }
+      }
 
-      document.getElementById("player-name").innerText = player.name || "Unknown Player";
-      document.getElementById("contract-player-name").innerText = `${player.name} — Contract`;
-      document.getElementById("player-age").innerText = `${player.age || 24} yrs`;
-      document.getElementById("player-nat").innerText = `${getCountryFlag(player.nationality)} ${player.nationality || "Unknown"}`;
-      document.getElementById("player-pos").innerText = player.position || "MC";
-      document.getElementById("player-club").innerText = player.club_name || "Free Agent";
-      document.getElementById("contract-club-name").innerText = player.club_name || "Free Agent";
+      // Live Badge & Sync Indicator
+      const isLive = isLivePlayer(player);
+      const liveBadge = document.getElementById("player-live-badge");
+      if (liveBadge) liveBadge.style.display = isLive ? "inline-flex" : "none";
+      updateSyncedAgoDisplay();
 
-      // Sync quick editor inputs if not actively focused
+      // Name
       const editName = document.getElementById("edit-player-name");
-      if (editName && document.activeElement !== editName) editName.value = player.name || "";
-      const editAge = document.getElementById("edit-player-age");
-      if (editAge && document.activeElement !== editAge) editAge.value = player.age || 24;
-      const editNat = document.getElementById("edit-player-nat");
-      if (editNat && document.activeElement !== editNat) editNat.value = player.nationality || "";
-      const editClub = document.getElementById("edit-player-club");
-      if (editClub && document.activeElement !== editClub) editClub.value = player.club_name || "";
-      const editPos = document.getElementById("edit-player-pos");
-      if (editPos && document.activeElement !== editPos) editPos.value = player.position || "MC";
+      const isNameDirty = state.playerDirtyFields.has("name") || (editName && document.activeElement === editName);
+      if (!isNameDirty) {
+        state.activePlayer.name = player.name || "";
+        const dispName = player.name || "Unknown Player";
+        document.getElementById("player-name").innerText = dispName;
+        const cPlayerName = document.getElementById("contract-player-name");
+        if (cPlayerName) cPlayerName.innerText = `${dispName} — Contract`;
+        if (editName) editName.value = player.name || "";
+        const godPlayerTarget = document.getElementById("god-player-target");
+        if (godPlayerTarget) godPlayerTarget.innerText = `Target: ${dispName}`;
+      }
 
-      // Update God Mode Target Badge
-      const godPlayerTarget = document.getElementById("god-player-target");
-      if (godPlayerTarget) godPlayerTarget.innerText = `Target: ${player.name || "Active Player"}`;
+      // Age: 0 -> "—"
+      const editAge = document.getElementById("edit-player-age");
+      const isAgeDirty = state.playerDirtyFields.has("age") || (editAge && document.activeElement === editAge);
+      if (!isAgeDirty) {
+        const ageNum = parseInt(player.age, 10) || 0;
+        state.activePlayer.age = ageNum;
+        const ageEl = document.getElementById("player-age");
+        if (ageEl) {
+          if (ageNum > 0) {
+            ageEl.innerText = `${ageNum} yrs`;
+            ageEl.className = "pill-badge badge-nat";
+          } else {
+            ageEl.innerText = "—";
+            ageEl.className = "pill-badge badge-muted";
+          }
+        }
+        if (editAge) {
+          editAge.value = ageNum > 0 ? ageNum : "";
+          editAge.placeholder = ageNum > 0 ? "Age" : "—";
+        }
+      }
+
+      // Nationality: empty -> "Unknown (live)" muted styling
+      const editNat = document.getElementById("edit-player-nat");
+      const isNatDirty = state.playerDirtyFields.has("nationality") || (editNat && document.activeElement === editNat);
+      if (!isNatDirty) {
+        const natStr = (player.nationality || "").trim();
+        state.activePlayer.nationality = natStr;
+        const natEl = document.getElementById("player-nat");
+        if (natEl) {
+          if (natStr) {
+            natEl.innerText = `${getCountryFlag(natStr)} ${natStr}`;
+            natEl.className = "pill-badge badge-nat";
+          } else {
+            natEl.innerText = "Unknown (live)";
+            natEl.className = "pill-badge badge-muted";
+          }
+        }
+        if (editNat) {
+          editNat.value = natStr;
+          editNat.placeholder = natStr ? "Nationality" : "Unknown (live)";
+        }
+      }
+
+      // Position
+      const editPos = document.getElementById("edit-player-pos");
+      const isPosDirty = state.playerDirtyFields.has("position") || (editPos && document.activeElement === editPos);
+      if (!isPosDirty) {
+        const posStr = player.position || "MC";
+        state.activePlayer.position = posStr;
+        const posEl = document.getElementById("player-pos");
+        if (posEl) posEl.innerText = posStr;
+        if (editPos) editPos.value = posStr;
+      }
+
+      // Club: empty -> "Unknown (live)" muted styling
+      const editClub = document.getElementById("edit-player-club");
+      const isClubDirty = state.playerDirtyFields.has("club_name") || (editClub && document.activeElement === editClub);
+      if (!isClubDirty) {
+        const clubStr = (player.club_name || "").trim();
+        state.activePlayer.club_name = clubStr;
+        const clubEl = document.getElementById("player-club");
+        const cClubName = document.getElementById("contract-club-name");
+        const pClubName = document.getElementById("pos-club-name");
+        if (clubEl) {
+          if (clubStr) {
+            clubEl.innerText = clubStr;
+            clubEl.className = "pill-badge badge-club";
+          } else {
+            clubEl.innerText = "Unknown (live)";
+            clubEl.className = "pill-badge badge-muted";
+          }
+        }
+        if (cClubName) cClubName.innerText = clubStr || "Unknown (live)";
+        if (pClubName) pClubName.innerText = clubStr || "Unknown (live)";
+        if (editClub) {
+          editClub.value = clubStr;
+          editClub.placeholder = clubStr ? "Club Name (e.g. Persib)" : "Unknown (live)";
+        }
+      }
 
       // Morale & Fitness
       const morale = player.morale_label || (player.morale >= 90 ? "Superb" : "Good");
@@ -3195,39 +3533,84 @@
       }
 
       // Condition & Sharpness
-      const condPct = Math.round((player.condition || 10000) / 100);
-      const sharpPct = Math.round((player.sharpness || 10000) / 100);
+      const condPct = Math.round((player.condition ?? 0) / 100);
+      const sharpPct = Math.round((player.sharpness ?? 0) / 100);
       document.getElementById("disp-condition-pct").innerText = `${condPct}%`;
       document.getElementById("disp-sharpness-pct").innerText = `${sharpPct}%`;
       document.getElementById("fill-condition").style.width = `${condPct}%`;
       document.getElementById("fill-sharpness").style.width = `${sharpPct}%`;
 
-      // CA / PA
-      const ca = player.current_ability || 150;
-      const pa = player.potential_ability || 170;
-      document.getElementById("input-ca").value = ca;
-      document.getElementById("input-pa").value = pa;
-      document.getElementById("star-rating-ca").innerText = getStarString(ca);
-      document.getElementById("star-rating-pa").innerText = getStarString(pa);
+      // CA / PA: 0 -> "—"
+      const inputCa = document.getElementById("input-ca");
+      const isCaDirty = state.playerDirtyFields.has("current_ability") || (inputCa && document.activeElement === inputCa);
+      if (!isCaDirty) {
+        const ca = parseInt(player.current_ability, 10) || 0;
+        state.activePlayer.current_ability = ca;
+        if (inputCa) inputCa.value = ca > 0 ? ca : "—";
+        const starCa = document.getElementById("star-rating-ca");
+        if (starCa) starCa.innerText = ca > 0 ? getStarString(ca) : "—";
+      }
 
-      // Attributes
-      if (player.attributes) {
-        for (const [key, val] of Object.entries(player.attributes)) {
-          updateAttrDisplay(key, val);
+      const inputPa = document.getElementById("input-pa");
+      const isPaDirty = state.playerDirtyFields.has("potential_ability") || (inputPa && document.activeElement === inputPa);
+      if (!isPaDirty) {
+        const pa = parseInt(player.potential_ability, 10) || 0;
+        state.activePlayer.potential_ability = pa;
+        if (inputPa) inputPa.value = pa > 0 ? pa : "—";
+        const starPa = document.getElementById("star-rating-pa");
+        if (starPa) starPa.innerText = pa > 0 ? getStarString(pa) : "—";
+      }
+
+      // Attributes: 0 -> "—" (unexposed)
+      if (!state.activePlayer.attributes) state.activePlayer.attributes = {};
+      for (const key of allAttrKeys) {
+        const attrDirtyKey = "attr_" + key;
+        const attrEl = document.getElementById("attr-val-" + key);
+        const isAttrFocused = attrEl && document.activeElement === attrEl;
+        if (!dirtyPlayerFields.has(attrDirtyKey) && !isAttrFocused) {
+          const rawVal = player.attributes ? player.attributes[key] : 0;
+          const val = parseInt(rawVal, 10) || 0;
+          state.activePlayer.attributes[key] = val;
+          updateAttrDisplay(key, val, true);
         }
       }
 
       // Contract tab inputs
       if (player.contract) {
-        document.getElementById("contract-wage").value = player.contract.wage_per_week || 50000;
-        document.getElementById("contract-expiry").value = player.contract.expiry_year || 2028;
-        document.getElementById("contract-release").value = player.contract.release_clause || 0;
-        document.getElementById("contract-status").value = player.contract.squad_status || "Regular Starter";
-        document.getElementById("contract-happiness").value = player.contract.happiness || "Content";
+        if (!state.activePlayer.contract) state.activePlayer.contract = {};
+        const cWage = document.getElementById("contract-wage");
+        if (cWage && document.activeElement !== cWage && !state.playerDirtyFields.has("contract.wage_per_week")) {
+          cWage.value = player.contract.wage_per_week ?? 0;
+          state.activePlayer.contract.wage_per_week = player.contract.wage_per_week ?? 0;
+        }
+        const cExp = document.getElementById("contract-expiry");
+        if (cExp && document.activeElement !== cExp && !state.playerDirtyFields.has("contract.expiry_year")) {
+          cExp.value = player.contract.expiry_year ?? 0;
+          state.activePlayer.contract.expiry_year = player.contract.expiry_year ?? 0;
+        }
+        const cRel = document.getElementById("contract-release");
+        if (cRel && document.activeElement !== cRel && !state.playerDirtyFields.has("contract.release_clause")) {
+          cRel.value = player.contract.release_clause || 0;
+          state.activePlayer.contract.release_clause = player.contract.release_clause || 0;
+        }
+        const cStat = document.getElementById("contract-status");
+        if (cStat && document.activeElement !== cStat && !state.playerDirtyFields.has("contract.squad_status")) {
+          cStat.value = player.contract.squad_status || "Regular Starter";
+          state.activePlayer.contract.squad_status = player.contract.squad_status || "Regular Starter";
+        }
+        const cHap = document.getElementById("contract-happiness");
+        if (cHap && document.activeElement !== cHap && !state.playerDirtyFields.has("contract.happiness")) {
+          cHap.value = player.contract.happiness || "Content";
+          state.activePlayer.contract.happiness = player.contract.happiness || "Content";
+        }
       }
 
       // Positions & Foot ability tab
+      if (player.positions && !state.playerDirtyFields.has("positions")) {
+        state.activePlayer.positions = JSON.parse(JSON.stringify(player.positions));
+      }
       renderPositionsTab();
+      refreshPendingActionIndicators();
     }
 
     // Render Club Data
@@ -3309,6 +3692,7 @@
       if (godClubTarget) godClubTarget.innerText = `Target: ${club.club_name || "Active Club"}`;
       const godSquadTarget = document.getElementById("god-squad-target");
       if (godSquadTarget) godSquadTarget.innerText = `Target: ${club.club_name || "Club"} 1st Team`;
+      refreshPendingActionIndicators();
     }
 
     function setFacVal(sliderId, dispId, val) {
@@ -3330,7 +3714,9 @@
     }
 
     function getStarString(ability) {
-      const stars = Math.min(5, Math.max(1, Math.round(ability / 40)));
+      const val = parseInt(ability, 10) || 0;
+      if (val <= 0) return "—";
+      const stars = Math.min(5, Math.max(1, Math.round(val / 40)));
       return "★".repeat(stars) + "☆".repeat(5 - stars);
     }
 
@@ -3368,36 +3754,104 @@
     function updateRecommendedCA() {
       if (!state.activePlayer || !state.activePlayer.attributes) return;
       const attrs = state.activePlayer.attributes;
-      const sum = (attrs.finishing || 10) + (attrs.dribbling || 10) + (attrs.passing || 10)
-        + (attrs.pace || 10) + (attrs.acceleration || 10) + (attrs.stamina || 10)
-        + (attrs.anticipation || 10) + (attrs.composure || 10) + (attrs.decisions || 10)
-        + (attrs.determination || 10) + (attrs.first_touch || 10) + (attrs.technique || 10);
-      const rec = Math.min(200, Math.max(1, Math.round((sum / 12) * 10)));
-      document.getElementById("input-ca").value = rec;
-      state.activePlayer.current_ability = rec;
-      document.getElementById("star-rating-ca").innerText = getStarString(rec);
+      const keys = [
+        "finishing", "dribbling", "passing", "pace", "acceleration",
+        "stamina", "anticipation", "composure", "decisions",
+        "determination", "first_touch", "technique"
+      ];
+      const exposed = keys.filter(k => (parseInt(attrs[k], 10) || 0) > 0);
+      if (exposed.length === 0) return; // Do not fabricate CA if no attributes exposed
+
+      const sum = exposed.reduce((acc, k) => acc + (parseInt(attrs[k], 10) || 0), 0);
+      const rec = Math.min(200, Math.max(1, Math.round((sum / exposed.length) * 10)));
+
+      // Only update CA recommendation if CA is already exposed (> 0) or user is editing CA
+      if ((state.activePlayer.current_ability || 0) > 0 || state.playerDirtyFields.has("current_ability")) {
+        const inputCa = document.getElementById("input-ca");
+        if (inputCa) inputCa.value = rec;
+        state.activePlayer.current_ability = rec;
+        const starEl = document.getElementById("star-rating-ca");
+        if (starEl) starEl.innerText = getStarString(rec);
+      }
+    }
+
+    const populatePlayerForm = displayPlayer;
+
+    function handleCAInput(val) {
+      dirtyPlayerFields.add("current_ability");
+      markUnsaved();
+      const trimmed = String(val || "").trim();
+      const num = parseInt(trimmed, 10);
+      const starCa = document.getElementById("star-rating-ca");
+      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
+        const clamped = Math.max(1, Math.min(200, num));
+        if (state.activePlayer) state.activePlayer.current_ability = clamped;
+        if (starCa) starCa.innerText = getStarString(clamped);
+      } else {
+        if (state.activePlayer) state.activePlayer.current_ability = 0;
+        if (starCa) starCa.innerText = "—";
+      }
     }
 
     function handleCAChange(val) {
+      const inputCa = document.getElementById("input-ca");
+      const starCa = document.getElementById("star-rating-ca");
+      const trimmed = String(val || "").trim();
+      const num = parseInt(trimmed, 10);
+      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
+        dirtyPlayerFields.add("current_ability");
+        markUnsaved();
+        const clamped = Math.max(1, Math.min(200, num));
+        if (state.activePlayer) state.activePlayer.current_ability = clamped;
+        if (inputCa) inputCa.value = clamped;
+        if (starCa) starCa.innerText = getStarString(clamped);
+      } else {
+                if (state.activePlayer) state.activePlayer.current_ability = 0;
+        if (inputCa) inputCa.value = "—";
+        if (starCa) starCa.innerText = "—";
+      }
+    }
+
+    function handlePAInput(val) {
+      dirtyPlayerFields.add("potential_ability");
       markUnsaved();
-      const v = Math.max(1, Math.min(200, parseInt(val) || 100));
-      if (state.activePlayer) state.activePlayer.current_ability = v;
-      document.getElementById("star-rating-ca").innerText = getStarString(v);
-      if (state.autoApply) debouncedSavePlayer();
+      const trimmed = String(val || "").trim();
+      const num = parseInt(trimmed, 10);
+      const starPa = document.getElementById("star-rating-pa");
+      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
+        const clamped = Math.max(1, Math.min(200, num));
+        if (state.activePlayer) state.activePlayer.potential_ability = clamped;
+        if (starPa) starPa.innerText = getStarString(clamped);
+      } else {
+        if (state.activePlayer) state.activePlayer.potential_ability = 0;
+        if (starPa) starPa.innerText = "—";
+      }
     }
 
     function handlePAChange(val) {
-      markUnsaved();
-      const v = Math.max(1, Math.min(200, parseInt(val) || 150));
-      if (state.activePlayer) state.activePlayer.potential_ability = v;
-      document.getElementById("star-rating-pa").innerText = getStarString(v);
-      if (state.autoApply) debouncedSavePlayer();
+      const inputPa = document.getElementById("input-pa");
+      const starPa = document.getElementById("star-rating-pa");
+      const trimmed = String(val || "").trim();
+      const num = parseInt(trimmed, 10);
+      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
+        dirtyPlayerFields.add("potential_ability");
+        markUnsaved();
+        const clamped = Math.max(1, Math.min(200, num));
+        if (state.activePlayer) state.activePlayer.potential_ability = clamped;
+        if (inputPa) inputPa.value = clamped;
+        if (starPa) starPa.innerText = getStarString(clamped);
+      } else {
+                if (state.activePlayer) state.activePlayer.potential_ability = 0;
+        if (inputPa) inputPa.value = "—";
+        if (starPa) starPa.innerText = "—";
+      }
     }
 
     function promptEditName() {
       if (!state.activePlayer) return;
-      const newName = prompt("Edit Player Name:", state.activePlayer.name);
+      const newName = prompt("Edit Player Name:", state.activePlayer.name || "");
       if (newName && newName.trim()) {
+        state.playerDirtyFields.add("name");
         handlePlayerFieldChange("name", newName.trim());
       }
     }
@@ -3410,11 +3864,11 @@
       const badge = document.getElementById("save-status-indicator");
       if (badge) {
         badge.className = "pill-badge badge-fit";
-        badge.innerText = `✅ Saved to FM26 (Persisted)! [${timeStr}]`;
+        badge.innerText = `✅ Saved [${timeStr}]`;
       }
       const label = document.getElementById("last-saved-time");
       if (label) {
-        label.innerText = `✅ Persisted at [${timeStr}]`;
+        label.innerText = `✅ Saved at [${timeStr}]`;
         label.style.color = "var(--accent-emerald)";
       }
     }
@@ -3435,13 +3889,22 @@
 
     function handlePlayerFieldChange(field, val) {
       if (!state.activePlayer) return;
+      state.playerDirtyFields.add(field);
       markUnsaved();
 
       if (field === "age") {
-        const num = parseInt(val) || 20;
+        const num = parseInt(val, 10) || 0;
         state.activePlayer.age = num;
         const el = document.getElementById("player-age");
-        if (el) el.innerText = `${num} yrs`;
+        if (el) {
+          if (num > 0) {
+            el.innerText = `${num} yrs`;
+            el.className = "pill-badge badge-nat";
+          } else {
+            el.innerText = "—";
+            el.className = "pill-badge badge-muted";
+          }
+        }
       } else if (field === "name") {
         state.activePlayer.name = val;
         const el = document.getElementById("player-name");
@@ -3453,17 +3916,35 @@
         const godTarget = document.getElementById("god-player-target");
         if (godTarget) godTarget.innerText = `Target: ${val}`;
       } else if (field === "nationality") {
-        state.activePlayer.nationality = val;
+        const str = (val || "").trim();
+        state.activePlayer.nationality = str;
         const el = document.getElementById("player-nat");
-        if (el) el.innerText = `${getCountryFlag(val)} ${val}`;
+        if (el) {
+          if (str) {
+            el.innerText = `${getCountryFlag(str)} ${str}`;
+            el.className = "pill-badge badge-nat";
+          } else {
+            el.innerText = "Unknown (live)";
+            el.className = "pill-badge badge-muted";
+          }
+        }
       } else if (field === "club_name") {
-        state.activePlayer.club_name = val;
+        const str = (val || "").trim();
+        state.activePlayer.club_name = str;
         const el = document.getElementById("player-club");
-        if (el) el.innerText = val || "Free Agent";
+        if (el) {
+          if (str) {
+            el.innerText = str;
+            el.className = "pill-badge badge-club";
+          } else {
+            el.innerText = "Unknown (live)";
+            el.className = "pill-badge badge-muted";
+          }
+        }
         const cEl = document.getElementById("contract-club-name");
-        if (cEl) cEl.innerText = val || "Free Agent";
+        if (cEl) cEl.innerText = str || "Unknown (live)";
         const posEl = document.getElementById("pos-club-name");
-        if (posEl) posEl.innerText = val || "Free Agent";
+        if (posEl) posEl.innerText = str || "Unknown (live)";
       } else if (field === "position") {
         state.activePlayer.position = val;
         const el = document.getElementById("player-pos");
@@ -3472,9 +3953,6 @@
         if (posBadge) posBadge.innerText = val;
       }
 
-      if (state.autoApply) {
-        debouncedSavePlayer();
-      }
     }
 
     async function jumpToPlayerClub() {
@@ -3483,8 +3961,8 @@
         return;
       }
       const clubName = state.activePlayer.club_name;
-      if (!clubName || clubName === "Free Agent") {
-        showToast("Player is currently a Free Agent without a club", "info");
+      if (!clubName || clubName === "Free Agent" || clubName === "Unknown (live)") {
+        showToast("Player club is not exposed or player is Free Agent", "info");
         return;
       }
 
@@ -3553,11 +4031,12 @@
           })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Selection failed");
         state.isPinned = data.is_pinned;
         updateSyncUI();
         showToast(state.isPinned ? "📌 Player pinned (game screen auto-follow paused)" : "👁️ Auto-following FM26 game screen", "info");
       } catch (e) {
-        showToast("Error updating pin state", "error");
+        showToast("Error updating pin state: " + e.message, "error");
       }
     }
 
@@ -3578,56 +4057,93 @@
       }
     }
 
-    // Auto-Apply Toggle
-    function toggleAutoApply(val) {
-      state.autoApply = val;
-      showToast(val ? "⚡ Instant Auto-Apply Enabled" : "Manual Save Mode Enabled", "info");
+    // Compatibility for older controls: edits always require an explicit Save.
+    function toggleAutoApply() {
+      state.autoApply = false;
     }
 
     function debouncedSavePlayer() {
-      clearTimeout(state.saveTimeout);
-      const label = document.getElementById("last-saved-time");
-      if (label) label.innerText = "Saving changes...";
-      state.saveTimeout = setTimeout(() => {
-        applyPlayerChanges();
-      }, 300);
+      markUnsaved();
     }
 
     // Apply Player Changes to Backend & Memory
-    async function applyPlayerChanges() {
-      if (!state.activePlayer) return;
+    async function writePlayerChanges() {
+      if (!state.activePlayer) return false;
+      // All player Save buttons include contract edits without replacing unedited fields.
+      const contractInputs = {
+        wage_per_week: "contract-wage", expiry_year: "contract-expiry",
+        release_clause: "contract-release", squad_status: "contract-status", happiness: "contract-happiness"
+      };
+      for (const [field, inputId] of Object.entries(contractInputs)) {
+        if (!state.playerDirtyFields.has(`contract.${field}`) && !state.playerDirtyFields.has("contract")) continue;
+        const input = document.getElementById(inputId);
+        if (!input) continue;
+        if (!state.activePlayer.contract) state.activePlayer.contract = {};
+        state.activePlayer.contract[field] = ["squad_status", "happiness"].includes(field)
+          ? input.value : numberInput(input.value, 0);
+      }
+
+      // Ensure 0/empty values stay 0 rather than fake defaults or NaN
+      const ageVal = parseInt(state.activePlayer.age, 10);
+      state.activePlayer.age = (!isNaN(ageVal) && ageVal > 0) ? ageVal : 0;
+
+      const caVal = parseInt(state.activePlayer.current_ability, 10);
+      state.activePlayer.current_ability = (!isNaN(caVal) && caVal > 0) ? Math.min(200, caVal) : 0;
+
+      const paVal = parseInt(state.activePlayer.potential_ability, 10);
+      state.activePlayer.potential_ability = (!isNaN(paVal) && paVal > 0) ? Math.min(200, paVal) : 0;
+
+      if (!state.activePlayer.attributes) state.activePlayer.attributes = {};
+      for (const key of allAttrKeys) {
+        const raw = state.activePlayer.attributes[key];
+        const v = parseInt(raw, 10);
+        state.activePlayer.attributes[key] = (!isNaN(v) && v >= 1 && v <= 20) ? v : 0;
+      }
+
+      const submittedPlayer = JSON.stringify(state.activePlayer);
+      const submittedId = state.activePlayer.id;
       try {
         const res = await fetch("/api/player/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(state.activePlayer)
+          body: submittedPlayer
         });
         const data = await res.json();
         if (res.ok) {
-          const now = new Date().toLocaleTimeString();
-          markSaved(now);
-          showToast(`Saved ${state.activePlayer.name} to FM26 (Persisted)!`, "success");
+          // An older request must not erase edits made while it was in flight.
+          if (state.activePlayer.id === submittedId && JSON.stringify(state.activePlayer) === submittedPlayer) {
+            state.playerDirtyFields.clear();
+            if (data.player || data.active_player) displayPlayer(data.player || data.active_player);
+            markSaved(new Date().toLocaleTimeString());
+          }
+          showToast(data.message || "Player saved.", "success");
+          return true;
         } else {
           showToast(data.message || "Failed to save player", "error");
         }
       } catch (e) {
         showToast("Save error: " + e.message, "error");
       }
+      return false;
     }
+
+    const savePlayer = applyPlayerChanges;
 
     // God Mode Actions
     async function applyGodModeAll() {
-      showToast("⚡ Activating Ultimate God Mode across all entities...", "info");
-      await applyPlayerPreset("goat");
-      await applyBothFeetGodMode();
-      await applyClubPreset("heal_squad");
-      await applyClubPreset("morale_squad");
-      await applyClubPreset("sugar_daddy");
-      await applyClubPreset("max_facilities");
-      await applyInvincibleBoard();
-      await applyNationPreset("golden_generation");
-      await applyCompetitionPreset("relax_rules");
-      showToast("🌟 Ultimate God Mode successfully activated!", "success");
+      showToast("Preparing pending presets across all entities...", "info");
+      const actions = [
+        () => applyPlayerPreset("goat"), applyBothFeetGodMode,
+        () => applyClubPreset("heal_squad"), () => applyClubPreset("morale_squad"),
+        () => applyClubPreset("sugar_daddy"), () => applyClubPreset("max_facilities"),
+        applyInvincibleBoard, () => applyNationPreset("golden_generation"),
+        () => applyCompetitionPreset("relax_rules")
+      ];
+      for (const action of actions) {
+        if (!await action()) return false;
+      }
+      showToast("Presets staged. Click Save on each affected tab to apply them.", "info");
+      return true;
     }
 
     async function applyBothFeetGodMode() {
@@ -3636,7 +4152,9 @@
       state.activePlayer.positions.left_foot = 20;
       state.activePlayer.positions.right_foot = 20;
       renderPositionsTab();
-      await applyPlayerChanges();
+      state.playerDirtyFields.add("positions");
+      markUnsaved();
+      return true;
     }
 
     async function applyInvincibleBoard() {
@@ -3656,8 +4174,9 @@
       updateDispPercent("disp-fan-conf", 100);
       updateDispPercent("disp-board-conf", 100);
       updateDispPercent("disp-retention", 100);
-      await saveClubToGame();
-      showToast("Invincible Board Job Security Activated (Can never be sacked)!", "success");
+      state.clubDirty = true;
+      showToast("Board changes pending. Click Save on the Club tab.", "info");
+      return true;
     }
 
     async function applyMassivePrizeMoney() {
@@ -3668,7 +4187,9 @@
       if (pm) pm.value = 500000000;
       const tv = document.getElementById("comp-tv-rights");
       if (tv) tv.value = 3000000000;
-      await saveCompetitionToGame();
+      state.competitionDirty = true;
+      showToast("Prize changes pending. Click Save on the Competition tab.", "info");
+      return true;
     }
 
     async function applyCleanNationGovernance() {
@@ -3681,34 +4202,14 @@
       if (ng) ng.value = 20;
       updateDisp("disp-nation-corruption", 0);
       updateDisp("disp-nation-importance", 20);
-      await saveNationToGame();
-      showToast("Clean Governance & Maximum Game Importance applied!", "success");
+      state.nationDirty = true;
+      showToast("Nation changes pending. Click Save on the Nation tab.", "info");
+      return true;
     }
 
     // Apply Player Preset
     async function applyPlayerPreset(preset) {
-      showToast(`Applying preset '${preset}'...`, "info");
-      try {
-        const res = await fetch("/api/player/preset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset: preset,
-            player_id: state.activePlayer ? state.activePlayer.id : null
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.player || data.active_player) {
-            displayPlayer(data.player || data.active_player);
-          }
-          showToast(data.message || "Preset applied successfully!", "success");
-        } else {
-          showToast(data.message || "Preset failed", "error");
-        }
-      } catch (e) {
-        showToast("Preset error: " + e.message, "error");
-      }
+      return queuePreset("player", preset);
     }
 
     // Contract Management
@@ -3716,30 +4217,20 @@
       const el = document.getElementById("contract-wage");
       const cur = parseInt(el.value) || 0;
       el.value = Math.max(1000, cur + delta);
-      autoSaveContract();
+      autoSaveContract("wage_per_week");
     }
 
-    function autoSaveContract() {
-      markUnsaved();
-      if (state.autoApply) {
-        clearTimeout(state.saveTimeout);
-        state.saveTimeout = setTimeout(() => {
-          saveContractToGame();
-        }, 300);
+    function autoSaveContract(fieldName) {
+      if (fieldName) {
+        state.playerDirtyFields.add("contract." + fieldName);
+      } else {
+        state.playerDirtyFields.add("contract");
       }
+      markUnsaved();
     }
 
     async function saveContractToGame() {
-      if (!state.activePlayer) return;
-      if (!state.activePlayer.contract) state.activePlayer.contract = {};
-
-      state.activePlayer.contract.wage_per_week = parseInt(document.getElementById("contract-wage").value) || 50000;
-      state.activePlayer.contract.expiry_year = parseInt(document.getElementById("contract-expiry").value) || 2028;
-      state.activePlayer.contract.release_clause = parseInt(document.getElementById("contract-release").value) || 0;
-      state.activePlayer.contract.squad_status = document.getElementById("contract-status").value;
-      state.activePlayer.contract.happiness = document.getElementById("contract-happiness").value;
-
-      await applyPlayerChanges();
+      return applyPlayerChanges();
     }
 
     // Position & Foot Management
@@ -3768,6 +4259,7 @@
     }
 
     function getFootTierDesc(val) {
+      if (!val) return "Unknown (not exposed)";
       if (val >= 20) return "Very Strong";
       if (val >= 16) return "Strong";
       if (val >= 12) return "Fairly Strong";
@@ -3777,6 +4269,7 @@
     }
 
     function getFootSummaryString(left, right) {
+      if (!left || !right) return "Foot ratings unavailable";
       if (left >= 18 && right >= 18) return "Either Foot";
       if (left >= 15 && right >= 15) return "Both Feet (Strong)";
       if (left >= 15 && right < 10) return "Left Only";
@@ -3786,7 +4279,7 @@
     }
 
     function computePositionString(pos) {
-      if (!pos) return "MC";
+      if (!pos) return "Unknown";
       if (pos.gk >= 15) return "GK";
       const tags = [];
       const dSides = formatSides(pos.dr >= 15, pos.dl >= 15, pos.dc >= 15);
@@ -3799,7 +4292,7 @@
       const amSides = formatSides(pos.amr >= 15, pos.aml >= 15, pos.amc >= 15);
       if (amSides) tags.push(`AM (${amSides})`);
       if (pos.st >= 15) tags.push("ST (C)");
-      return tags.length > 0 ? tags.join(", ") : "MC";
+      return tags.length > 0 ? tags.join(", ") : "Unknown";
     }
 
     function formatSides(r, l, c) {
@@ -3815,11 +4308,11 @@
       const player = state.activePlayer;
       if (!player.positions) {
         player.positions = {
-          gk: 1, dl: 1, dc: 1, dr: 1,
-          wbl: 1, wbr: 1, dm: 1,
-          ml: 1, mc: 20, mr: 1,
-          aml: 1, amc: 1, amr: 1, st: 1,
-          left_foot: 10, right_foot: 20
+          gk: 0, dl: 0, dc: 0, dr: 0,
+          wbl: 0, wbr: 0, dm: 0,
+          ml: 0, mc: 0, mr: 0,
+          aml: 0, amc: 0, amr: 0, st: 0,
+          left_foot: 0, right_foot: 0
         };
       }
       const pos = player.positions;
@@ -3831,33 +4324,36 @@
       const posFootSummary = document.getElementById("pos-foot-summary");
 
       if (posPlayerName) posPlayerName.innerText = `${player.name || "Unknown Player"} — Positions & Roles`;
-      if (posClubName) posClubName.innerText = player.club_name || "Free Agent";
-      
-      const posStr = computePositionString(pos);
+      const clubStr = (player.club_name || "").trim();
+      if (posClubName) posClubName.innerText = clubStr || "Unknown (live)";
+
+      const posStr = (dirtyPlayerFields.has("positions") || !player.position)
+        ? computePositionString(pos)
+        : player.position;
       player.position = posStr;
       if (posSummaryBadge) posSummaryBadge.innerText = posStr;
       const playerPosPill = document.getElementById("player-pos");
-      if (playerPosPill) playerPosPill.innerText = posStr;
+      if (playerPosPill && !dirtyPlayerFields.has("position")) playerPosPill.innerText = posStr;
 
-      const footStr = getFootSummaryString(pos.left_foot || 10, pos.right_foot || 20);
+      const footStr = getFootSummaryString(pos.left_foot ?? 0, pos.right_foot ?? 0);
       if (posFootSummary) posFootSummary.innerText = footStr;
 
       // Update Pitch Nodes
       for (const [key, role] of positionDefinitions) {
-        const val = pos[key] || 1;
+        const val = pos[key] ?? 0;
         const nodeEl = document.getElementById("pitch-node-" + key);
         const valEl = document.getElementById("pitch-val-" + key);
         if (nodeEl) {
           nodeEl.className = `pitch-node ${getPositionTierClass(val)}`;
         }
         if (valEl) {
-          valEl.innerText = val;
+          valEl.innerText = val > 0 ? val : "—";
         }
       }
 
       // Update Foot Sliders
-      const leftVal = pos.left_foot || 10;
-      const rightVal = pos.right_foot || 20;
+      const leftVal = pos.left_foot ?? 0;
+      const rightVal = pos.right_foot ?? 0;
       const sLeft = document.getElementById("slider-foot-left");
       const sRight = document.getElementById("slider-foot-right");
       const vLeft = document.getElementById("foot-val-left");
@@ -3868,11 +4364,11 @@
       if (sLeft) sLeft.value = leftVal;
       if (sRight) sRight.value = rightVal;
       if (vLeft) {
-        vLeft.innerText = leftVal;
+        vLeft.innerText = leftVal > 0 ? leftVal : "—";
         vLeft.style.color = getTierColor(leftVal);
       }
       if (vRight) {
-        vRight.innerText = rightVal;
+        vRight.innerText = rightVal > 0 ? rightVal : "—";
         vRight.style.color = getTierColor(rightVal);
       }
       if (dLeft) dLeft.innerText = getFootTierDesc(leftVal);
@@ -3882,9 +4378,9 @@
       const grid = document.getElementById("pos-grid-container");
       if (grid) {
         grid.innerHTML = positionDefinitions.map(([key, role, fullName]) => {
-          const val = pos[key] || 1;
+          const val = pos[key] ?? 0;
           const tierClass = getPositionTierClass(val);
-          const tierLabel = getPositionTierLabel(val);
+          const tierLabel = val > 0 ? getPositionTierLabel(val) : "Unknown (not exposed)";
           return `
             <div class="pos-item-card">
               <div class="pos-item-left">
@@ -3894,7 +4390,7 @@
               <div class="pos-item-controls">
                 <button class="btn btn-secondary" style="padding: 2px 7px; font-size: 12px; font-weight: 800;" onclick="stepPosition('${key}', -1)" title="Decrease rating">-</button>
                 <div class="attr-val-box ${tierClass}" style="cursor: pointer; min-width: 28px; height: 26px; font-size: 12px; line-height: 24px; text-align: center;" onclick="cyclePosition('${key}')" title="Click to cycle tier (20, 15, 10, 1)">
-                  ${val}
+                  ${val > 0 ? val : "—"}
                 </div>
                 <button class="btn btn-secondary" style="padding: 2px 7px; font-size: 12px; font-weight: 800;" onclick="stepPosition('${key}', 1)" title="Increase rating">+</button>
               </div>
@@ -3906,14 +4402,15 @@
 
     function cyclePosition(key) {
       if (!state.activePlayer) return;
+      state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
-          gk: 1, dl: 1, dc: 1, dr: 1,
-          wbl: 1, wbr: 1, dm: 1,
-          ml: 1, mc: 20, mr: 1,
-          aml: 1, amc: 1, amr: 1, st: 1,
-          left_foot: 10, right_foot: 20
+          gk: 0, dl: 0, dc: 0, dr: 0,
+          wbl: 0, wbr: 0, dm: 0,
+          ml: 0, mc: 0, mr: 0,
+          aml: 0, amc: 0, amr: 0, st: 0,
+          left_foot: 0, right_foot: 0
         };
       }
       const cur = state.activePlayer.positions[key] || 1;
@@ -3925,38 +4422,38 @@
 
       state.activePlayer.positions[key] = next;
       renderPositionsTab();
-      if (state.autoApply) debouncedSavePlayer();
     }
 
     function stepPosition(key, delta) {
       if (!state.activePlayer) return;
+      state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
-          gk: 1, dl: 1, dc: 1, dr: 1,
-          wbl: 1, wbr: 1, dm: 1,
-          ml: 1, mc: 20, mr: 1,
-          aml: 1, amc: 1, amr: 1, st: 1,
-          left_foot: 10, right_foot: 20
+          gk: 0, dl: 0, dc: 0, dr: 0,
+          wbl: 0, wbr: 0, dm: 0,
+          ml: 0, mc: 0, mr: 0,
+          aml: 0, amc: 0, amr: 0, st: 0,
+          left_foot: 0, right_foot: 0
         };
       }
       const cur = state.activePlayer.positions[key] || 1;
       const next = Math.max(1, Math.min(20, cur + delta));
       state.activePlayer.positions[key] = next;
       renderPositionsTab();
-      if (state.autoApply) debouncedSavePlayer();
     }
 
     function handleFootSlider(foot, val) {
       if (!state.activePlayer) return;
+      state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {
         state.activePlayer.positions = {
-          gk: 1, dl: 1, dc: 1, dr: 1,
-          wbl: 1, wbr: 1, dm: 1,
-          ml: 1, mc: 20, mr: 1,
-          aml: 1, amc: 1, amr: 1, st: 1,
-          left_foot: 10, right_foot: 20
+          gk: 0, dl: 0, dc: 0, dr: 0,
+          wbl: 0, wbr: 0, dm: 0,
+          ml: 0, mc: 0, mr: 0,
+          aml: 0, amc: 0, amr: 0, st: 0,
+          left_foot: 0, right_foot: 0
         };
       }
       const num = Math.max(1, Math.min(20, parseInt(val) || 1));
@@ -3966,94 +4463,74 @@
         state.activePlayer.positions.right_foot = num;
       }
       renderPositionsTab();
-      if (state.autoApply) debouncedSavePlayer();
     }
 
     async function applyPositionPreset(preset) {
-      if (!state.activePlayer) return;
-      showToast(`Applying position preset '${preset}'...`, "info");
-      try {
-        const res = await fetch("/api/player/preset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset: preset,
-            player_id: state.activePlayer.id
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.player || data.active_player) {
-            displayPlayer(data.player || data.active_player);
-          }
-          showToast(data.message || "Position preset applied!", "success");
-        } else {
-          showToast(data.message || "Failed to apply preset", "error");
-        }
-      } catch (e) {
-        showToast("Preset error: " + e.message, "error");
-      }
+      return queuePreset("player", preset);
     }
 
     async function savePositionsToGame() {
       if (!state.activePlayer) return;
-      await applyPlayerChanges();
-      showToast(`Saved ${state.activePlayer.name}'s positions & foot ratings!`, "success");
+      return applyPlayerChanges();
     }
 
     // Club & Squad Management
-    function autoSaveClub() {
+    function markClubUnsaved() {
       state.clubDirty = true;
-      if (state.autoApply) {
-        clearTimeout(state.saveTimeout);
-        state.saveTimeout = setTimeout(() => {
-          saveClubToGame();
-        }, 300);
-      }
     }
 
-    async function saveClubToGame() {
-      if (!state.activeClub) return;
+    function autoSaveClub() {
+      markClubUnsaved();
+    }
 
-      state.activeClub.balance = parseInt(document.getElementById("club-balance").value) || 0;
-      state.activeClub.transfer_budget = parseInt(document.getElementById("club-transfer-budget").value) || 0;
-      state.activeClub.wage_budget = parseInt(document.getElementById("club-wage-budget").value) || 0;
-      state.activeClub.max_wage_allowance = parseInt(document.getElementById("club-max-wage").value) || 600000;
+    async function writeClubChanges() {
+      if (!state.activeClub) return false;
+      state.clubDirty = true;
+
+      state.activeClub.balance = numberInput(document.getElementById("club-balance").value, 0);
+      state.activeClub.transfer_budget = numberInput(document.getElementById("club-transfer-budget").value, 0);
+      state.activeClub.wage_budget = numberInput(document.getElementById("club-wage-budget").value, 0);
+      state.activeClub.max_wage_allowance = numberInput(document.getElementById("club-max-wage").value, 600000);
       state.activeClub.stadium_name = (document.getElementById("club-stadium-name").value || "").trim();
-      state.activeClub.stadium_capacity = parseInt(document.getElementById("club-stadium-cap").value) || 45000;
-      state.activeClub.stadium_expansion_cap = parseInt(document.getElementById("club-stadium-exp").value) || 60000;
+      state.activeClub.stadium_capacity = numberInput(document.getElementById("club-stadium-cap").value, 45000);
+      state.activeClub.stadium_expansion_cap = numberInput(document.getElementById("club-stadium-exp").value, 60000);
 
       // 6 Facilities Matrix
-      state.activeClub.training_facilities = parseInt(document.getElementById("fac-training").value) || 20;
-      state.activeClub.youth_facilities = parseInt(document.getElementById("fac-youth").value) || 20;
-      state.activeClub.youth_recruitment = parseInt(document.getElementById("fac-recruitment").value) || 20;
-      state.activeClub.junior_coaching = parseInt(document.getElementById("fac-coaching").value) || 20;
-      state.activeClub.data_analysis_facilities = parseInt(document.getElementById("fac-data-analysis").value) || 18;
-      state.activeClub.corporate_facilities = parseInt(document.getElementById("fac-corporate").value) || 19;
+      state.activeClub.training_facilities = numberInput(document.getElementById("fac-training").value, 20);
+      state.activeClub.youth_facilities = numberInput(document.getElementById("fac-youth").value, 20);
+      state.activeClub.youth_recruitment = numberInput(document.getElementById("fac-recruitment").value, 20);
+      state.activeClub.junior_coaching = numberInput(document.getElementById("fac-coaching").value, 20);
+      state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
+      state.activeClub.corporate_facilities = numberInput(document.getElementById("fac-corporate").value, 19);
 
       // Board & Ownership
       state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
-      state.activeClub.board_patience = parseInt(document.getElementById("club-board-patience").value) || 15;
-      state.activeClub.fan_confidence = parseInt(document.getElementById("club-fan-confidence").value) || 85;
-      state.activeClub.board_confidence = parseInt(document.getElementById("club-board-confidence").value) || 88;
-      state.activeClub.transfer_retention_pct = parseInt(document.getElementById("club-transfer-retention").value) || 100;
+      state.activeClub.board_patience = numberInput(document.getElementById("club-board-patience").value, 15);
+      state.activeClub.fan_confidence = numberInput(document.getElementById("club-fan-confidence").value, 85);
+      state.activeClub.board_confidence = numberInput(document.getElementById("club-board-confidence").value, 88);
+      state.activeClub.transfer_retention_pct = numberInput(document.getElementById("club-transfer-retention").value, 100);
 
+      const submittedEntity = JSON.stringify(state.activeClub);
       try {
         const res = await fetch("/api/club/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(state.activeClub)
+          body: submittedEntity
         });
         const data = await res.json();
         if (res.ok) {
-          state.clubDirty = false;
+          if (JSON.stringify(state.activeClub) === submittedEntity) {
+            state.clubDirty = false;
+          }
           showToast(`Saved ${state.activeClub.club_name} details & facilities!`, "success");
+          return true;
         } else {
           showToast(data.message || "Failed to save club", "error");
         }
       } catch (e) {
         showToast("Club save error: " + e.message, "error");
       }
+      return false;
     }
 
     function stepClubFac(sliderId, delta) {
@@ -4162,9 +4639,9 @@
         showToast("No active club loaded", "warning");
         return;
       }
-      const id = parseInt(document.getElementById("new-aff-id").value) || 0;
+      const id = numberInput(document.getElementById("new-aff-id").value, 0);
       const name = (document.getElementById("new-aff-name").value || "").trim();
-      const fee = parseInt(document.getElementById("new-aff-fee").value) || 0;
+      const fee = numberInput(document.getElementById("new-aff-fee").value, 0);
       if (!name) {
         showToast("Please enter an affiliate club name", "warning");
         return;
@@ -4181,81 +4658,20 @@
         work_permit_haven: document.getElementById("new-aff-haven").checked
       };
 
-      showToast(`Linking affiliate ${name}...`, "info");
-      try {
-        const res = await fetch("/api/club/affiliate/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            club_id: state.activeClub.club_id,
-            affiliate: affiliateObj
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.club || data.active_club) {
-            displayClub(data.club || data.active_club);
-          }
-          document.getElementById("new-aff-name").value = "";
-          showToast(`Linked ${name} as active affiliate!`, "success");
-        } else {
-          showToast(data.message || "Failed to add affiliate", "error");
-        }
-      } catch (e) {
-        showToast("Error adding affiliate: " + e.message, "error");
-      }
+      return queuePendingAction("club", "/api/club/affiliate/add", {
+        club_id: state.activeClub.club_id, affiliate: affiliateObj
+      }, `Add affiliate ${name}`);
     }
 
     async function removeAffiliate(affiliateId) {
-      if (!state.activeClub) return;
-      showToast("Removing affiliate link...", "info");
-      try {
-        const res = await fetch("/api/club/affiliate/remove", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            club_id: state.activeClub.club_id,
-            affiliate_id: affiliateId
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.club || data.active_club) {
-            displayClub(data.club || data.active_club);
-          }
-          showToast("Affiliate relationship removed!", "success");
-        } else {
-          showToast(data.message || "Failed to remove affiliate", "error");
-        }
-      } catch (e) {
-        showToast("Error removing affiliate: " + e.message, "error");
-      }
+      if (!state.activeClub) return false;
+      return queuePendingAction("club", "/api/club/affiliate/remove", {
+        club_id: state.activeClub.club_id, affiliate_id: affiliateId
+      }, `Remove affiliate ${affiliateId}`);
     }
 
     async function applyClubPreset(preset) {
-      showToast(`Executing '${preset}'...`, "info");
-      try {
-        const res = await fetch("/api/club/preset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset: preset,
-            club_id: state.activeClub ? state.activeClub.club_id : null
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.club || data.active_club) {
-            displayClub(data.club || data.active_club);
-          }
-          showToast(data.message || "Club preset applied!", "success");
-          fetchContext();
-        } else {
-          showToast(data.message || "Preset action failed", "error");
-        }
-      } catch (e) {
-        showToast("Error: " + e.message, "error");
-      }
+      return queuePreset("club", preset);
     }
 
     // Nation Details Management
@@ -4298,6 +4714,7 @@
       // Update God Mode Target Badge
       const godNationTarget = document.getElementById("god-nation-target");
       if (godNationTarget) godNationTarget.innerText = `Target: ${nation.name || "Active Nation"}`;
+      refreshPendingActionIndicators();
     }
 
     function setNationStatUI(sliderId, dispId, val) {
@@ -4311,11 +4728,11 @@
     }
 
     function handleYouthRatingInput(val) {
+      state.nationDirty = true;
       const yr = Math.max(1, Math.min(200, parseInt(val) || 1));
       document.getElementById("nation-youth-val").innerText = yr;
       updateYouthRatingDisplay(yr);
       if (state.activeNation) state.activeNation.youth_rating = yr;
-      if (state.autoApply) debouncedSaveNation();
     }
 
     function updateYouthRatingDisplay(yr) {
@@ -4345,6 +4762,7 @@
     }
 
     function stepNationStat(key, delta) {
+      state.nationDirty = true;
       if (!state.activeNation) return;
       const current = state.activeNation[key] ?? 10;
       const maxVal = key === "youth_rating" ? 200 : (key === "tax_rate" ? 100 : 20);
@@ -4373,82 +4791,61 @@
           setNationStatUI(mapping[0], mapping[1], next);
         }
       }
-      if (state.autoApply) debouncedSaveNation();
     }
 
     function handleNationRepChange(val) {
+      state.nationDirty = true;
       const num = Math.max(1, Math.min(10000, parseInt(val) || 5000));
       document.getElementById("nation-rep-num").innerText = `${num.toLocaleString()} / 10,000`;
       document.getElementById("nation-rep-stars").innerText = getReputationStars(num);
       if (state.activeNation) state.activeNation.reputation = num;
-      if (state.autoApply) debouncedSaveNation();
     }
 
-    let nationSaveTimeout = null;
     function debouncedSaveNation() {
       state.nationDirty = true;
-      clearTimeout(nationSaveTimeout);
-      nationSaveTimeout = setTimeout(() => {
-        saveNationToGame(true);
-      }, 400);
     }
 
-    async function saveNationToGame(isQuiet = false) {
-      if (!state.activeNation) return;
+    async function writeNationChanges(isQuiet = false) {
+      if (!state.activeNation) return false;
+      state.nationDirty = true;
 
-      state.activeNation.reputation = parseInt(document.getElementById("nation-reputation").value) || 7500;
-      state.activeNation.youth_rating = parseInt(document.getElementById("nation-youth-slider").value) || 120;
-      state.activeNation.state_of_development = parseInt(document.getElementById("nation-development").value) || 2;
-      state.activeNation.economic_factor = parseInt(document.getElementById("nation-economic").value) || 15;
-      state.activeNation.fa_financial_power = parseInt(document.getElementById("nation-fa-power").value) || 15;
-      state.activeNation.tax_rate = parseInt(document.getElementById("nation-tax-rate").value) || 25;
-      state.activeNation.corruption_index = parseInt(document.getElementById("nation-corruption").value) || 2;
-      state.activeNation.game_importance = parseInt(document.getElementById("nation-game-importance").value) || 18;
-      state.activeNation.youth_facilities_avg = parseInt(document.getElementById("nation-fac-avg").value) || 15;
-      state.activeNation.youth_coaching_avg = parseInt(document.getElementById("nation-coaching-avg").value) || 15;
-      state.activeNation.youth_recruitment_avg = parseInt(document.getElementById("nation-rec-avg").value) || 15;
+      state.activeNation.reputation = numberInput(document.getElementById("nation-reputation").value, 7500);
+      state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider").value, 120);
+      state.activeNation.state_of_development = numberInput(document.getElementById("nation-development").value, 2);
+      state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic").value, 15);
+      state.activeNation.fa_financial_power = numberInput(document.getElementById("nation-fa-power").value, 15);
+      state.activeNation.tax_rate = numberInput(document.getElementById("nation-tax-rate").value, 25);
+      state.activeNation.corruption_index = numberInput(document.getElementById("nation-corruption").value, 2);
+      state.activeNation.game_importance = numberInput(document.getElementById("nation-game-importance").value, 18);
+      state.activeNation.youth_facilities_avg = numberInput(document.getElementById("nation-fac-avg").value, 15);
+      state.activeNation.youth_coaching_avg = numberInput(document.getElementById("nation-coaching-avg").value, 15);
+      state.activeNation.youth_recruitment_avg = numberInput(document.getElementById("nation-rec-avg").value, 15);
 
+      const submittedEntity = JSON.stringify(state.activeNation);
       try {
         const res = await fetch("/api/nation/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(state.activeNation)
+          body: submittedEntity
         });
         const data = await res.json();
         if (res.ok) {
-          state.nationDirty = false;
+          if (JSON.stringify(state.activeNation) === submittedEntity) {
+            state.nationDirty = false;
+          }
           if (!isQuiet) showToast(`Saved ${state.activeNation.name} macro & youth factors!`, "success");
+          return true;
         } else {
           showToast(data.message || "Failed to save nation", "error");
         }
       } catch (e) {
         showToast("Nation save error: " + e.message, "error");
       }
+      return false;
     }
 
     async function applyNationPreset(preset) {
-      showToast(`Executing nation preset '${preset}'...`, "info");
-      try {
-        const res = await fetch("/api/nation/preset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset: preset,
-            nation_id: state.activeNation ? state.activeNation.id : null
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.nation || data.active_nation) {
-            displayNation(data.nation || data.active_nation);
-          }
-          showToast(data.message || "Golden Generation triggered!", "success");
-        } else {
-          showToast(data.message || "Preset action failed", "error");
-        }
-      } catch (e) {
-        showToast("Error: " + e.message, "error");
-      }
+      return queuePreset("nation", preset);
     }
 
     // Competition Details Management
@@ -4483,9 +4880,11 @@
       document.getElementById("comp-foreign-limit").value = comp.max_foreign_players ?? 17;
       document.getElementById("comp-hg-club").value = comp.min_homegrown_club ?? 4;
       document.getElementById("comp-hg-nation").value = comp.min_homegrown_nation ?? 8;
+      refreshPendingActionIndicators();
     }
 
     function stepCompField(id, delta, min, max) {
+      state.competitionDirty = true;
       const input = document.getElementById(id);
       if (!input) return;
       const current = parseInt(input.value) || 0;
@@ -4505,65 +4904,50 @@
       }
     }
 
-    async function saveCompetitionToGame() {
-      if (!state.activeCompetition) return;
+    async function writeCompetitionChanges() {
+      if (!state.activeCompetition) return false;
+      state.competitionDirty = true;
 
-      state.activeCompetition.winner_prize_money = parseInt(document.getElementById("comp-prize-money").value) || 0;
-      state.activeCompetition.tv_rights_pool = parseInt(document.getElementById("comp-tv-rights").value) || 0;
+      state.activeCompetition.winner_prize_money = numberInput(document.getElementById("comp-prize-money").value, 0);
+      state.activeCompetition.tv_rights_pool = numberInput(document.getElementById("comp-tv-rights").value, 0);
 
-      state.activeCompetition.max_substitutes = parseInt(document.getElementById("comp-max-subs").value) || 5;
-      state.activeCompetition.max_bench_size = parseInt(document.getElementById("comp-bench-size").value) || 9;
-      state.activeCompetition.substitution_windows = parseInt(document.getElementById("comp-sub-windows").value) || 3;
-      state.activeCompetition.yellow_cards_for_ban = parseInt(document.getElementById("comp-yellow-ban").value) || 5;
+      state.activeCompetition.max_substitutes = numberInput(document.getElementById("comp-max-subs").value, 5);
+      state.activeCompetition.max_bench_size = numberInput(document.getElementById("comp-bench-size").value, 9);
+      state.activeCompetition.substitution_windows = numberInput(document.getElementById("comp-sub-windows").value, 3);
+      state.activeCompetition.yellow_cards_for_ban = numberInput(document.getElementById("comp-yellow-ban").value, 5);
       state.activeCompetition.var_active = document.getElementById("comp-var-active").checked;
 
-      state.activeCompetition.max_squad_size = parseInt(document.getElementById("comp-squad-size").value) || 25;
-      state.activeCompetition.max_foreign_players = parseInt(document.getElementById("comp-foreign-limit").value) || 17;
-      state.activeCompetition.min_homegrown_club = parseInt(document.getElementById("comp-hg-club").value) || 0;
-      state.activeCompetition.min_homegrown_nation = parseInt(document.getElementById("comp-hg-nation").value) || 0;
+      state.activeCompetition.max_squad_size = numberInput(document.getElementById("comp-squad-size").value, 25);
+      state.activeCompetition.max_foreign_players = numberInput(document.getElementById("comp-foreign-limit").value, 17);
+      state.activeCompetition.min_homegrown_club = numberInput(document.getElementById("comp-hg-club").value, 0);
+      state.activeCompetition.min_homegrown_nation = numberInput(document.getElementById("comp-hg-nation").value, 0);
 
       showToast("Saving competition rules...", "info");
+      const submittedEntity = JSON.stringify(state.activeCompetition);
       try {
         const res = await fetch("/api/competition/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(state.activeCompetition)
+          body: submittedEntity
         });
         const data = await res.json();
         if (res.ok) {
-          state.competitionDirty = false;
+          if (JSON.stringify(state.activeCompetition) === submittedEntity) {
+            state.competitionDirty = false;
+          }
           showToast(`Saved ${state.activeCompetition.name} rules & prize money!`, "success");
+          return true;
         } else {
           showToast(data.message || "Failed to save competition rules", "error");
         }
       } catch (e) {
         showToast("Competition save error: " + e.message, "error");
       }
+      return false;
     }
 
     async function applyCompetitionPreset(preset) {
-      showToast(`Applying '${preset}' to competition rules...`, "info");
-      try {
-        const res = await fetch("/api/competition/preset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset: preset,
-            competition_id: state.activeCompetition ? state.activeCompetition.id : null
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (data.competition || data.active_competition) {
-            displayCompetition(data.competition || data.active_competition);
-          }
-          showToast(data.message || "Rules relaxed (unlimited foreign & 12 bench)!", "success");
-        } else {
-          showToast(data.message || "Preset action failed", "error");
-        }
-      } catch (e) {
-        showToast("Error: " + e.message, "error");
-      }
+      return queuePreset("competition", preset);
     }
 
     // Instant Search Implementation
@@ -4604,18 +4988,28 @@
         let html = "";
         if (players.length > 0) {
           html += `<div class="search-section-title">⚽ Players (${players.length})</div>`;
-          html += players.slice(0, 5).map(p => `
+          html += players.slice(0, 5).map(p => {
+            const isLive = isLivePlayer(p);
+            const caStr = (p.current_ability || 0) > 0 ? p.current_ability : "—";
+            const paStr = (p.potential_ability || 0) > 0 ? p.potential_ability : "—";
+            const clubStr = p.club_name && p.club_name.trim() ? escapeHtml(p.club_name) : '<span style="color:var(--text-dim); font-style:italic;">Unknown (live)</span>';
+            const natStr = p.nationality && p.nationality.trim() ? getCountryFlag(p.nationality) : '🌐';
+            return `
             <div class="search-item" onclick="selectSearchedPlayer(${p.id})">
               <div class="search-item-info">
-                <div class="search-item-avatar">${getCountryFlag(p.nationality)}</div>
+                <div class="search-item-avatar">${natStr}</div>
                 <div>
-                  <div class="search-item-name">${escapeHtml(p.name)}</div>
-                  <div class="search-item-meta">${p.position || "MC"} • ${escapeHtml(p.club_name || "Free Agent")}</div>
+                  <div class="search-item-name">
+                    ${escapeHtml(p.name)}
+                    ${isLive ? '<span class="live-badge-sm">LIVE</span>' : ''}
+                  </div>
+                  <div class="search-item-meta">${p.position || "MC"} • ${clubStr}</div>
                 </div>
               </div>
-              <span class="search-item-badge">CA ${p.current_ability || 150} / PA ${p.potential_ability || 170}</span>
+              <span class="search-item-badge">CA ${caStr} / PA ${paStr}</span>
             </div>
-          `).join("");
+            `;
+          }).join("");
         }
 
         if (clubs.length > 0) {
@@ -4696,15 +5090,18 @@
           body: JSON.stringify({ player_id: playerId })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.player || data.active_player) {
+          dirtyPlayerFields.clear();
+          state.playerDirty = false;
           displayPlayer(data.player || data.active_player);
           state.isPinned = true;
           updateSyncUI();
           switchTab("tab-player");
-          showToast(`Loaded ${data.player?.name || "Player"}!`, "success");
+          showToast(`Loaded ${(data.player || data.active_player)?.name || "Player"}!`, "success");
         }
       } catch (e) {
-        showToast("Error selecting player", "error");
+        showToast("Error selecting player: " + e.message, "error");
       }
     }
 
@@ -4718,6 +5115,7 @@
           body: JSON.stringify({ club_id: clubId })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.club || data.active_club) {
           displayClub(data.club || data.active_club);
           state.isPinned = true;
@@ -4726,7 +5124,7 @@
           showToast(`Loaded ${data.club?.club_name || "Club"}!`, "success");
         }
       } catch (e) {
-        showToast("Error selecting club", "error");
+        showToast("Error selecting club: " + e.message, "error");
       }
     }
 
@@ -4740,6 +5138,7 @@
           body: JSON.stringify({ nation_id: nationId })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.nation || data.active_nation) {
           displayNation(data.nation || data.active_nation);
           state.isPinned = true;
@@ -4762,6 +5161,7 @@
           body: JSON.stringify({ competition_id: compId })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.competition || data.active_competition) {
           displayCompetition(data.competition || data.active_competition);
           state.isPinned = true;
@@ -4772,6 +5172,15 @@
       } catch (e) {
         showToast("Error selecting competition: " + e.message, "error");
       }
+    }
+
+    // Keep manual edits through context polling after an input loses focus.
+    for (const eventName of ["input", "change"]) {
+      document.addEventListener(eventName, event => {
+        if (event.target.closest("#tab-club")) state.clubDirty = true;
+        if (event.target.closest("#tab-nation")) state.nationDirty = true;
+        if (event.target.closest("#tab-competition")) state.competitionDirty = true;
+      });
     }
 
     // Close search dropdown on click outside

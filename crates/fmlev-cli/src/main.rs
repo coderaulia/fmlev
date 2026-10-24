@@ -7,6 +7,8 @@ use fmlev_mem::{
 };
 use fmlev_overlay::{OverlayLauncher, OverlayRenderer};
 
+mod probe;
+
 #[derive(Parser)]
 #[command(name = "fmlev")]
 #[command(about = "Football Manager 26 Open-Source Live Editor & Toolkit for Linux")]
@@ -63,6 +65,37 @@ enum Commands {
 
         /// Value to write (e.g. 200, 15000000, or "90 90" for bytes)
         value: String,
+    },
+
+    /// Read-only diagnostic: dump every live BindingSubsystem entry (property, TypedValue class, raw bytes, decodes)
+    ProbeBindings {
+        /// Only show references whose Name/FullName/InitialSurname/ShirtName contains this substring
+        #[arg(long)]
+        person: Option<String>,
+
+        /// Only show properties whose name contains this substring
+        #[arg(long)]
+        prop: Option<String>,
+
+        /// Maximum number of references (persons) to print
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+
+        /// Include non-person references (SourceRef +0x24 != 1); m_index is then (type<<24 | index)
+        #[arg(long)]
+        all_types: bool,
+    },
+
+    /// Read-only diagnostic: print an IL2CPP object's class and fields (qwords), recursing into pointers
+    ProbeObject {
+        /// Object address (hex)
+        hex_addr: String,
+        /// Bytes to dump per object
+        #[arg(long, default_value_t = 0x40)]
+        size: usize,
+        /// Recursion depth into referenced objects
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
     },
 }
 
@@ -320,6 +353,14 @@ async fn main() -> anyhow::Result<()> {
                     ));
                 }
             }
+        }
+
+        Commands::ProbeBindings { person, prop, limit, all_types } => {
+            probe::run(probe::ProbeArgs { person, prop, limit, all_types })?;
+        }
+
+        Commands::ProbeObject { hex_addr, size, depth } => {
+            probe::inspect_object(parse_address(&hex_addr)?, size, depth)?;
         }
     }
 

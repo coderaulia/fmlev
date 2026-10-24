@@ -302,6 +302,7 @@ pub async fn apply_player_preset(
         other => {
             let action_str = match other {
                 "heal" => "heal_player",
+                "remove_promises" | "clear_promises" => "remove_promises",
                 "morale" => "max_morale",
                 "wonderkid" => "wonderkid",
                 "goat" => "max_attributes",

@@ -188,6 +188,11 @@ impl GameContextManager {
     }
 
     pub fn update_club(&mut self, club: ClubFinances) -> Result<()> {
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+        {
+            return self.update_live_club(club);
+        }
         self.ensure_record_writes_supported()?;
         let club_id = club.club_id;
         if let Some(session) = &self.session {
@@ -202,7 +207,24 @@ impl GameContextManager {
         Ok(())
     }
 
+    fn update_live_club(&mut self, club: ClubFinances) -> Result<()> {
+        let club_id = club.club_id;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let b_sub = resolve_binding_subsystem(session)
+            .ok_or_else(|| CoreError::InvalidValue("Live club bindings are unavailable; open this club's screen in FM26".into()))?;
+        crate::live_club::write_live_club(&session.driver, b_sub, club_id, &club)?;
+        self.user_modified_clubs.insert(club_id);
+        self.context.club = club.clone();
+        self.club_registry.insert(club_id, club);
+        Ok(())
+    }
+
     pub fn update_nation(&mut self, nation: NationDetails) -> Result<()> {
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+        {
+            return self.update_live_nation(nation);
+        }
         self.ensure_record_writes_supported()?;
         let nation_id = nation.id;
         if let Some(session) = &self.session {
@@ -216,7 +238,19 @@ impl GameContextManager {
         Ok(())
     }
 
+    fn update_live_nation(&mut self, _nation: NationDetails) -> Result<()> {
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let _ = resolve_binding_subsystem(session)
+            .ok_or_else(|| CoreError::InvalidValue("Live nation bindings are unavailable; open this nation's screen in FM26".into()))?;
+        return Err(CoreError::InvalidValue("Authoritative live nation writes are not yet calibrated for this screen".into()));
+    }
+
     pub fn update_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+        {
+            return self.update_live_competition(comp);
+        }
         self.ensure_record_writes_supported()?;
         let comp_id = comp.id;
         if let Some(session) = &self.session {
@@ -228,6 +262,13 @@ impl GameContextManager {
         self.competition_registry.insert(comp_id, comp);
         self.active_comp_addr = self.competition_memory_bindings.get(&comp_id).copied();
         Ok(())
+    }
+
+    fn update_live_competition(&mut self, _comp: CompetitionDetails) -> Result<()> {
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let _ = resolve_binding_subsystem(session)
+            .ok_or_else(|| CoreError::InvalidValue("Live competition bindings are unavailable; open this competition's screen in FM26".into()))?;
+        return Err(CoreError::InvalidValue("Authoritative live competition writes are not yet calibrated for this screen".into()));
     }
 
     /// Adds or replaces an affiliate club for a given club ID.
@@ -338,6 +379,19 @@ impl GameContextManager {
         }
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(), "remove_promises" | "clear_promises")
+        {
+            let record = self.verified_native_player(self.context.player.id)?;
+            let session = self.session.as_ref().unwrap();
+            record.remove_promises(&session.driver)?;
+            self.context.player.contract.happiness = "Delighted".to_string();
+            self.player_registry
+                .insert(self.context.player.id, self.context.player.clone());
+            info!("Applied live quick action: remove_promises (Player ID: {})", self.context.player.id);
+            return Ok(());
+        }
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
             && matches!(normalized.as_str(), "heal_squad")
         {
             let target_club_id = self.context.club.club_id;
@@ -393,6 +447,7 @@ impl GameContextManager {
         let is_player_action = matches!(
             normalized.as_str(),
             "heal_player" | "heal" | "max_morale" | "morale" | "boost_morale" | "wonderkid"
+                | "remove_promises" | "clear_promises"
                 | "max_attributes" | "max_stats" | "goat" | "extend_contract" | "contract"
                 | "all_positions_20" | "all_positions" | "total_football"
                 | "both_feet_20" | "either_foot" | "both_feet"
@@ -445,6 +500,12 @@ impl GameContextManager {
                     }
                 }
                 info!("Applied quick action: heal_player (Player ID: {})", self.context.player.id);
+            }
+            "remove_promises" | "clear_promises" => {
+                self.context.player.contract.happiness = "Delighted".to_string();
+                self.player_registry
+                    .insert(self.context.player.id, self.context.player.clone());
+                info!("Applied quick action: remove_promises (Player ID: {})", self.context.player.id);
             }
             "max_morale" | "morale" | "boost_morale" => {
                 self.context.player.morale = 100;
@@ -918,8 +979,8 @@ impl GameContextManager {
                             let (players, names) = extract_live_bound_players(&session.driver, b_sub);
                             live_discovered_players = players;
                             live_bound_ref_names = names;
+                            live_clubs = crate::live_club::read_live_clubs(&session.driver, b_sub);
                             match detected_screen.as_deref() {
-                                Some("club") => live_clubs = crate::live_club::read_live_clubs(&session.driver, b_sub),
                                 Some("nation") => live_nations = crate::live_nation::read_live_nations(&session.driver, b_sub),
                                 Some("competition") => live_competitions = crate::live_competition::read_live_competitions(&session.driver, b_sub),
                                 _ => {}
@@ -973,6 +1034,15 @@ impl GameContextManager {
             let club = self.club_registry.entry(snapshot.id).or_insert_with(unknown_clubfinances);
             club.club_id = snapshot.id;
             club.club_name = snapshot.name.clone();
+            if let Some(bal) = snapshot.balance_game_units { club.balance = bal; }
+            if let Some(tb) = snapshot.transfer_budget_game_units { club.transfer_budget = tb; }
+            if let Some(tr) = snapshot.training_rating { club.training_facilities = tr; }
+            if let Some(yr) = snapshot.youth_rating { club.youth_facilities = yr; }
+            if let Some(cr) = snapshot.corporate_rating { club.corporate_facilities = cr; }
+            if let Some(stadium) = &snapshot.stadium_name { club.stadium_name = stadium.clone(); }
+            if self.context.club.club_id == snapshot.id {
+                self.context.club = club.clone();
+            }
             self.live_clubs.insert(snapshot.id, snapshot);
         }
         for snapshot in live_nations {
@@ -980,6 +1050,9 @@ impl GameContextManager {
             nation.id = snapshot.id;
             nation.name = snapshot.name.clone();
             if let Some(continent) = &snapshot.continent { nation.continent = continent.clone(); }
+            if self.context.nation.id == snapshot.id {
+                self.context.nation = nation.clone();
+            }
             self.live_nations.insert(snapshot.id, snapshot);
         }
         for snapshot in live_competitions {
@@ -987,6 +1060,9 @@ impl GameContextManager {
             competition.id = snapshot.id;
             competition.name = snapshot.name.clone();
             if let Some(nation_id) = snapshot.nation_id { competition.nation_id = nation_id; }
+            if self.context.competition.id == snapshot.id {
+                self.context.competition = competition.clone();
+            }
             self.live_competitions.insert(snapshot.id, snapshot);
         }
         let mut first_live_id: Option<i32> = None;

@@ -238,11 +238,13 @@ pub fn read_live_nations(
         {
             continue;
         }
-        let property_string = driver
-            .read_ptr(property_ptr + 0x10)
+        let property_string = Il2CppString::read(driver, property_ptr)
             .ok()
-            .and_then(|ptr| Il2CppString::read(driver, ptr).ok())
-            .or_else(|| Il2CppString::read(driver, property_ptr).ok());
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let ptr = driver.read_ptr(property_ptr + 0x10).ok()?;
+                Il2CppString::read(driver, ptr).ok().filter(|s| !s.is_empty())
+            });
         let Some(property) = property_string.filter(|s| !s.is_empty() && s.len() < 128) else {
             continue;
         };

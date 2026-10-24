@@ -209,11 +209,13 @@ fn try_read_live_competitions(
         let Some(id) = reference_id(driver, ref_obj, "CompReference", 25) else {
             continue;
         };
-        let prop_str = driver
-            .read_ptr(prop + 0x10)
+        let prop_str = Il2CppString::read(driver, prop)
             .ok()
-            .and_then(|p| Il2CppString::read(driver, p).ok())
-            .or_else(|| Il2CppString::read(driver, prop).ok());
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let p = driver.read_ptr(prop + 0x10).ok()?;
+                Il2CppString::read(driver, p).ok().filter(|s| !s.is_empty())
+            });
         let Some(prop_name) = prop_str else {
             continue;
         };

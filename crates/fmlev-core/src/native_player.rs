@@ -511,29 +511,30 @@ impl NativePlayerRecord {
         self.apply_edits(driver, &patches, contract)
     }
 
-    /// Clear any active injuries in the native injury vector and restore condition and sharpness to 100%.
+    /// Restore condition and sharpness to 100% without corrupting external simulation objects.
     pub fn heal(&self, driver: &LinuxMemoryDriver) -> Result<()> {
         self.validate(driver)?;
         let mut patches = Vec::new();
 
-        let inj_vec_ptr = driver.read_ptr(self.address + 0x248)?;
-        if inj_vec_ptr > 0x10000 {
-            let start = driver.read_ptr(inj_vec_ptr + 0x18)?;
-            let end = driver.read_ptr(inj_vec_ptr + 0x20)?;
-            if end > start && (end - start) % 8 == 0 && (end - start) <= 256 {
-                let count = (end - start) / 8;
-                for i in 0..count {
-                    let item = driver.read_ptr(start + i * 8)?;
-                    if item > 0x10000 {
-                        let active_ptr = driver.read_ptr(item + 0x60)?;
-                        if active_ptr != 0 {
-                            patches.push(NativeEdit::capture(driver, item + 0x60, 0u64.to_le_bytes().to_vec())?);
-                        }
-                    }
-                }
-                patches.push(NativeEdit::capture(driver, inj_vec_ptr + 0x20, start.to_le_bytes().to_vec())?);
-            }
+        let c0 = driver.read::<i32>(self.address + 0xc0)?;
+        if c0 < 10000 {
+            patches.push(NativeEdit::capture(driver, self.address + 0xc0, 10000i32.to_le_bytes().to_vec())?);
         }
+        let f0 = driver.read::<i32>(self.address + 0x100)?;
+        if f0 < 10000 {
+            patches.push(NativeEdit::capture(driver, self.address + 0x100, 10000i32.to_le_bytes().to_vec())?);
+        }
+
+        if !patches.is_empty() {
+            self.apply_edits(driver, &patches, None)?;
+        }
+        Ok(())
+    }
+
+    /// Clear promise friction and restore peak happiness.
+    pub fn remove_promises(&self, driver: &LinuxMemoryDriver) -> Result<()> {
+        self.validate(driver)?;
+        let mut patches = Vec::new();
 
         let c0 = driver.read::<i32>(self.address + 0xc0)?;
         if c0 < 10000 {

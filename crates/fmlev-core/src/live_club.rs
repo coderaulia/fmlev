@@ -9,6 +9,8 @@ use fmlev_mem::LinuxMemoryDriver;
 use serde::Serialize;
 
 use crate::context::{DecodedTypedValue, read_typed_value};
+use crate::error::{CoreError, Result};
+use crate::models::ClubFinances;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct LiveClubSnapshot {
@@ -23,6 +25,9 @@ pub struct LiveClubSnapshot {
     pub training_description: Option<String>,
     pub youth_description: Option<String>,
     pub corporate_description: Option<String>,
+    pub training_rating: Option<u8>,
+    pub youth_rating: Option<u8>,
+    pub corporate_rating: Option<u8>,
     pub balance_game_units: Option<i64>,
     pub transfer_budget_game_units: Option<i64>,
     pub remaining_wage_budget_text: Option<String>,
@@ -41,6 +46,9 @@ struct Partial {
     training: Option<String>,
     youth: Option<String>,
     corporate: Option<String>,
+    training_rating: Option<u8>,
+    youth_rating: Option<u8>,
+    corporate_rating: Option<u8>,
     balance: Option<i64>,
     transfer: Option<i64>,
     wage_remaining: Option<String>,
@@ -104,6 +112,27 @@ fn dynamic_description(driver: &LinuxMemoryDriver, object: usize) -> Option<Stri
     None
 }
 
+fn dynamic_rating(driver: &LinuxMemoryDriver, object: usize) -> Option<u8> {
+    if object_class(driver, object)? != ("DynamicReference".into(), "SI.Bindable".into()) { return None; }
+    let entries = driver.read_ptr(object + 0x18).ok()?;
+    if !ptr(entries) { return None; }
+    let count = driver.read::<usize>(entries + 0x18).ok()?;
+    if count == 0 || count > 64 { return None; }
+    for i in 0..count {
+        let entry = entries + 0x20 + i * 24;
+        let key = driver.read::<u32>(entry + 8).ok()?;
+        if key != 0x3235_2020 { continue; }
+        let tv = driver.read_ptr(entry + 16).ok()?;
+        if ptr(tv) {
+            let v = number_value(driver, tv)?;
+            if (1..=20).contains(&v) {
+                return Some(v as u8);
+            }
+        }
+    }
+    None
+}
+
 fn extract_rows(driver: &LinuxMemoryDriver, subsystem: usize) -> Vec<(i32, i32, String, usize)> {
     if !ptr(subsystem) { return Vec::new(); }
     let Ok(data) = driver.read_ptr(subsystem + 0x78) else { return Vec::new(); };
@@ -133,10 +162,14 @@ fn extract_rows(driver: &LinuxMemoryDriver, subsystem: usize) -> Vec<(i32, i32, 
         let Ok(kind) = driver.read::<i32>(object + 0x24) else { continue; };
         if index <= 0 || !matches!((class.as_str(),kind), ("ClubReference",3) | ("TeamReference",24) | ("StadiumReference",21)) { continue; }
         let Some(name) = properties.entry(property).or_insert_with(|| {
-            let indirect = driver.read_ptr(property + 0x10).ok()
-                .and_then(|p| Il2CppString::read(driver, p).ok());
-            indirect.or_else(|| Il2CppString::read(driver, property).ok())
-                .filter(|s| !s.is_empty() && s.len() < 128)
+            Il2CppString::read(driver, property)
+                .ok()
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    let p = driver.read_ptr(property + 0x10).ok()?;
+                    Il2CppString::read(driver, p).ok().filter(|s| !s.is_empty())
+                })
+                .filter(|s| s.len() < 128)
         }).clone() else { continue; };
         let Ok(binding) = driver.read_ptr(items + 0x20 + key * 8) else { continue; };
         let Ok(tv) = driver.read_ptr(binding + 0x30) else { continue; };
@@ -162,9 +195,21 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
             (21, "CapacityWithText" | "Capacity") => part.capacity = text_value(driver, tv),
             (21, "YearBuilt") => part.year = year_value(driver, tv),
             (21, "Owner" | "OwnedBy" | "OwnedByString") => part.owner = text_value(driver, tv),
-            (3, "TrainingFacilityRating") => part.training = object_value(driver, tv).and_then(|p| dynamic_description(driver, p)),
-            (3, "YouthFacilityRating") => part.youth = object_value(driver, tv).and_then(|p| dynamic_description(driver, p)),
-            (3, "CorporateFacilityRating") => part.corporate = object_value(driver, tv).and_then(|p| dynamic_description(driver, p)),
+            (3, "TrainingFacilityRating") => {
+                let obj = object_value(driver, tv);
+                part.training = obj.and_then(|p| dynamic_description(driver, p));
+                part.training_rating = obj.and_then(|p| dynamic_rating(driver, p));
+            }
+            (3, "YouthFacilityRating") => {
+                let obj = object_value(driver, tv);
+                part.youth = obj.and_then(|p| dynamic_description(driver, p));
+                part.youth_rating = obj.and_then(|p| dynamic_rating(driver, p));
+            }
+            (3, "CorporateFacilityRating") => {
+                let obj = object_value(driver, tv);
+                part.corporate = obj.and_then(|p| dynamic_description(driver, p));
+                part.corporate_rating = obj.and_then(|p| dynamic_rating(driver, p));
+            }
             (3, "OverallBalance") => part.balance = number_value(driver, tv),
             (3, "TransferBudget") => part.transfer = number_value(driver, tv),
             (3, "RemainingWageBudgetWithText") => part.wage_remaining = text_value(driver, tv),
@@ -186,6 +231,9 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
             stadium_owner: stadium.and_then(|(_,s)| s.owner.clone()),
             training_description: club.training, youth_description: club.youth,
             corporate_description: club.corporate,
+            training_rating: club.training_rating,
+            youth_rating: club.youth_rating,
+            corporate_rating: club.corporate_rating,
             balance_game_units: club.balance, transfer_budget_game_units: club.transfer,
             remaining_wage_budget_text: club.wage_remaining,
             current_wage_spending_text: club.wage_spending,
@@ -193,4 +241,119 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
     }
     output.sort_by_key(|club| club.id);
     output
+}
+
+/// Writes editable club finances and facilities ratings to live UI bindings in `BindingSubsystem`.
+/// Edits are verified by readback, and rolled back if verification fails.
+pub fn write_live_club(
+    driver: &LinuxMemoryDriver,
+    binding_subsystem: usize,
+    club_id: i32,
+    finances: &ClubFinances,
+) -> Result<()> {
+    let rows = extract_rows(driver, binding_subsystem);
+    let mut balance_tv: Option<usize> = None;
+    let mut training_obj: Option<usize> = None;
+    let mut youth_obj: Option<usize> = None;
+    let mut corporate_obj: Option<usize> = None;
+
+    for (kind, id, prop, tv) in rows {
+        if kind == 3 && id == club_id {
+            match prop.as_str() {
+                "OverallBalance" => balance_tv = Some(tv),
+                "TrainingFacilityRating" => training_obj = object_value(driver, tv),
+                "YouthFacilityRating" => youth_obj = object_value(driver, tv),
+                "CorporateFacilityRating" => corporate_obj = object_value(driver, tv),
+                _ => {}
+            }
+        }
+    }
+
+    if balance_tv.is_none() && training_obj.is_none() && youth_obj.is_none() && corporate_obj.is_none() {
+        return Err(CoreError::InvalidValue(format!("No writable bindings found for club {club_id}; open Club > Finances or Club > Facilities in FM26")));
+    }
+
+    // 1. Write balance if slot is present
+    if let Some(tv) = balance_tv {
+        let old_balance: i64 = driver.read(tv + 0x18)?;
+        if finances.balance != old_balance {
+            driver.write(tv + 0x18, &finances.balance)?;
+            let readback: i64 = driver.read(tv + 0x18)?;
+            if readback != finances.balance {
+                let _ = driver.write(tv + 0x18, &old_balance);
+                return Err(CoreError::InvalidValue(
+                    "Club balance read-back verification failed; rolled back to previous value".into(),
+                ));
+            }
+        }
+    }
+
+    // Helper to resolve commonInts pool from any valid TV
+    let find_common_ints = || -> Option<usize> {
+        let sample_tv = balance_tv?;
+        let mut klass = driver.read_ptr(sample_tv).ok()?;
+        for _ in 0..8 {
+            if let Ok(c) = fmlev_il2cpp::Il2CppClass::read(driver, klass) {
+                if c.name == "TypedValue" && c.namespaze == "SI.Core" {
+                    if let Ok(arr) = c.read_static_field_ptr(driver, 0x40) {
+                        if driver.read::<u64>(arr + 0x18).ok() == Some(102) {
+                            return Some(arr);
+                        }
+                    }
+                }
+            }
+            klass = driver.read_ptr(klass + 0x58).ok()?;
+        }
+        None
+    };
+
+    let common_array = find_common_ints();
+
+    // Helper to write facility rating key 0x3235_2020 in a DynamicReference
+    let write_facility_rating = |obj_opt: Option<usize>, target_rating: u8| -> Result<()> {
+        if !(1..=20).contains(&target_rating) {
+            return Err(CoreError::InvalidValue(format!("Facility rating {target_rating} must be between 1 and 20")));
+        }
+        let Some(obj) = obj_opt else { return Ok(()); };
+        let Some(arr) = common_array else { return Ok(()); };
+        let replacement = driver.read_ptr(arr + 0x20 + (target_rating as usize + 1) * 8)?;
+        if !ptr(replacement) {
+            return Err(CoreError::InvalidValue("Invalid common integer pointer".into()));
+        }
+
+        let entries = driver.read_ptr(obj + 0x18)?;
+        if !ptr(entries) { return Ok(()); }
+        let count = driver.read::<usize>(entries + 0x18)?;
+        for i in 0..count.min(64) {
+            let entry = entries + 0x20 + i * 24;
+            let key = driver.read::<u32>(entry + 8)?;
+            if key == 0x3235_2020 {
+                let old_ptr = driver.read_ptr(entry + 16)?;
+                if old_ptr != replacement {
+                    driver.write(entry + 16, &replacement)?;
+                    let readback = driver.read_ptr(entry + 16)?;
+                    if readback != replacement {
+                        let _ = driver.write(entry + 16, &old_ptr);
+                        return Err(CoreError::InvalidValue(
+                            "Facility rating pointer verification failed; rolled back".into(),
+                        ));
+                    }
+                }
+                break;
+            }
+        }
+        Ok(())
+    };
+
+    if finances.training_facilities > 0 {
+        write_facility_rating(training_obj, finances.training_facilities)?;
+    }
+    if finances.youth_facilities > 0 {
+        write_facility_rating(youth_obj, finances.youth_facilities)?;
+    }
+    if finances.corporate_facilities > 0 {
+        write_facility_rating(corporate_obj, finances.corporate_facilities)?;
+    }
+
+    Ok(())
 }

@@ -34,6 +34,9 @@ Addresses and 64-bit memory values are hex strings to avoid JSON precision loss.
 | `struct PID ADDR [--depth N] [--max OBJECTS]` | Annotate 0x400 bytes per object, recursively following heap pointers with a cycle guard. Default depth 0, max 64 objects; limits 8 and 4096. |
 | `vec PID ADDR [--stride N] [--max N]` | Validate a begin/end/capacity triple and dump elements. |
 | `rtti PID VTABLE_OR_OBJECT` | Resolve an MSVC x64 RTTI decorated type name in `game_plugin.dll`. |
+| `contract PID INDEX UID [--record HEX]` | Inspect an owned parent contract, including absent/invalid diagnostics. |
+| `transfer PID INDEX UID [--record HEX] [--refs] [--max N]` | Inspect agreement/loan roots, current team and squad membership candidates; optionally scan inbound references. |
+| `transfer-watch PID INDEX UID [--record HEX] [--ms N] [--count POLLS]` | Emit baseline and changed contract/transfer snapshots as JSON lines. |
 | `entity PID player\|club\|nation\|competition [--name TEXT] [--id N] [--uid N] [--related]` | Discover native named records without opening any FM26 screen. |
 | `graph PID OBJECT --in --out` | Group inbound slots by region and annotate outbound mapped pointers. Either direction or both is supported. |
 | `watch PID ADDR LEN [--ms N] [--count POLLS]` | Poll a range and print changed words, including a trailing partial word. |
@@ -204,6 +207,10 @@ vtable is a clue; it does not establish ownership. Changes at sampled noisy slot
 are excluded even if the later action also touches them.
 
 ## Interpretation limits
+
+Contract/transfer commands, upstream source research, live Endrick/Yamal evidence,
+and the next experiment are documented in [CONTRACT_RESEARCH.md](CONTRACT_RESEARCH.md).
+They are read-only diagnostics; sign, loan and terminate writes remain unresolved.
 
 - Structure output labels mapped pointers and small integers; nonpointers include
   both u32/i32/float halves and possible packed dates. Dates are shape matches,

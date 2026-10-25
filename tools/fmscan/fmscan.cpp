@@ -1,6 +1,7 @@
 // Read-only process memory discovery. Build: g++ -O2 -std=c++20 -o fmscan fmscan.cpp
 #include "scan.hpp"
 #include "player_data.hpp"
+#include "contracts.hpp"
 
 static const char* HELP = R"(fmscan: read-only FM26 memory discovery (never writes to the target)
 Usage:
@@ -16,11 +17,14 @@ Usage:
   fmscan entity PID player|club|nation|competition [--name TEXT] [--id N] [--uid N]
                     [--related] [--editor] [--max N] [--near HEX[:RADIUS]]
   fmscan player-data PID INDEX UID [--record HEX] [--iterations N] [--near HEX[:RADIUS]]
+  fmscan contract PID INDEX UID [--record HEX] [--near HEX[:RADIUS]]
+  fmscan transfer PID INDEX UID [--record HEX] [--refs] [--max N] [--near HEX[:RADIUS]]
+  fmscan transfer-watch PID INDEX UID [--record HEX] [--near HEX[:RADIUS]] [--ms N] [--count POLLS]
   fmscan graph PID HEX_OBJECT --in|--out [--near HEX[:RADIUS]] [--len N] [--max N]
   fmscan watch PID HEX_ADDR LEN [--ms N] [--count POLLS]
   fmscan diffset PID [--noise-ms N] [--action-wait SECONDS] [--near HEX[:RADIUS]]
                     [--exclude FILE] [--max N]
-All commands support --json (one object; watch emits JSON lines). Errors go to stderr.
+All commands support --json (watch and transfer-watch emit JSON lines). Errors go to stderr.
 Addresses/radii and diff values are hex. Other integers are decimal or 0x-prefixed.
 Scans use anonymous/heap rw-private mappings only. --near radius defaults to 0x100.
 watch: Ctrl-C stops; --count 0 (default) watches indefinitely.
@@ -49,6 +53,7 @@ int main(int argc, char** argv) {
         if (cmd == "diffset") return cmd_diffset(m, a);
         if (cmd == "entity") return cmd_entity(m, a);
         if (cmd == "player-data") return cmd_player_data(m, a);
+        if (cmd == "contract" || cmd == "transfer" || cmd == "transfer-watch") return cmd_contract(m, a);
         throw std::runtime_error("unknown command; use --help");
     } catch (const std::exception& e) {
         if (json) { Json j; j.str("error", e.what()); std::cerr << j.done() << std::endl; }

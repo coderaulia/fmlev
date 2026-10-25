@@ -1,6 +1,6 @@
 # FMLE Handover
 
-## State (HEAD 92c1093, tree clean, `cargo check` clean)
+## State (original baseline HEAD 92c1093; C++ tooling completed below)
 Verified in game, shipped: club balance/transfer budget, squad numbers (swap), tactical familiarity max, register-anytime (manager flag + domestic stage entry+0x9a), competition prizes, contract extend. Details: `AGENTS.md` Phase 3.
 
 Not implemented (endpoints return 501):
@@ -10,6 +10,12 @@ Not implemented (endpoints return 501):
 - Never edit a player's injury vector (player+0x248): crashes FM26.
 
 ## C++ tooling plan (`tools/fmscan/`, read-only, Rust stays the main tool)
+Implemented on 2026-10-25: all seven tooling items below. Usage, JSON behavior,
+heuristic limits and synthetic/live validation: `tools/fmscan/README.md`.
+Build remains `g++ -O2 -std=c++20 -o fmscan fmscan.cpp` from `tools/fmscan/`;
+focused headers keep every source file below 1,500 lines. Run the C++ process tests
+with `python3 -m unittest discover -s tools/fmscan/tests -v`.
+
 Existing: `fmscan snap|diff|refs|find|dump` (build: `g++ -O2 -std=c++20 -o fmscan fmscan.cpp`; uses process_vm_readv, rw-private regions, 8-byte words, `--exclude` noise file, `--to32`).
 
 Goal: faster discovery loop than Rust examples; Rust only receives verified offsets.
@@ -24,6 +30,11 @@ Goal: faster discovery loop than Rust examples; Rust only receives verified offs
 8. Safety rule: C++ tool never writes; any write experiment stays in Rust (`live_write.rs`, readback + rollback).
 
 Suggested order: 2 -> 4 -> 3 -> 5 (unblocks sign/loan), then 1, 6, 7.
+
+Read-only live smoke proof: manager-list vector decoded successfully and manager
+vtable resolved to `.?AVHUMAN_NON_PLAYER@db@@`. Proton maps PE sections anonymously;
+the RTTI resolver validates the named PE header at the COL-derived image base.
+Sign/loan/terminate investigations below remain pending; tools do not prove safe writes.
 
 ## Next-session targets
 1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.

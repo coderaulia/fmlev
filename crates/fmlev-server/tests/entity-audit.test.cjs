@@ -81,3 +81,24 @@ test('verified competition overview renders identity facts without exposing rule
   assert.deepEqual(facts, ['Clubs', '18', 'Season', '2025/26', 'Asia ranking', '26', 'Reputation', 'Decent']);
   assert.equal(ui.nodes.get('tab-competition').controls.every(control => control.disabled), true);
 });
+
+test('verified live editor controls remain enabled while unverified controls are disabled in connected mode', () => {
+  const ui = app();
+  const panel = ui.nodes.get('tab-club');
+  const verifiedControl = {
+    id: 'fac-training', disabled: false, dataset: {}, style: {},
+    closest(sel) { return sel === '[data-live-editor]' ? {} : null; },
+    hasAttribute() { return false; },
+    getAttribute() { return null; }
+  };
+  const unverifiedControl = {
+    id: 'fac-data-analysis', disabled: false, dataset: { unverified: 'true' }, style: {},
+    closest(sel) { return sel === '[data-live-editor]' ? {} : null; },
+    hasAttribute(attr) { return attr === 'data-unverified'; },
+    getAttribute() { return null; }
+  };
+  panel.controls = [verifiedControl, unverifiedControl];
+  ui.run(`state.connected = true; displayClub({ club_id: 2313, club_name: 'Persib', reputation: 7000 });`);
+  assert.equal(verifiedControl.disabled, false, 'verified live controls must stay enabled');
+  assert.equal(unverifiedControl.disabled, true, 'unverified controls must be disabled');
+});

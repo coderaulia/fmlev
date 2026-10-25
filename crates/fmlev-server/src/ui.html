@@ -2617,7 +2617,7 @@
           Competition reputation is stored natively (1 - 200) and mapped to the 1 - 10,000 UI scale. Saved natively with transactional readback and rollback.
         </p>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <input id="comp-reputation" type="number" min="1" max="10000" class="form-control" style="max-width: 220px;" placeholder="Reputation (1-10000)">
+          <input id="comp-reputation" type="number" min="1" max="10000" class="form-control" style="max-width: 220px;" placeholder="Reputation (1-10000)" oninput="handleCompRepChange(this.value)">
           <button class="btn btn-emerald" onclick="saveCompetitionToGame()">💾 Save Competition Reputation</button>
         </div>
       </div>
@@ -5135,17 +5135,24 @@
       if (!state.activeNation) return false;
       state.nationDirty = true;
 
-      state.activeNation.reputation = numberInput(document.getElementById("nation-reputation").value, 7500);
-      state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider").value, 120);
-      state.activeNation.state_of_development = numberInput(document.getElementById("nation-development").value, 2);
-      state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic").value, 15);
-      state.activeNation.fa_financial_power = numberInput(document.getElementById("nation-fa-power").value, 15);
-      state.activeNation.tax_rate = numberInput(document.getElementById("nation-tax-rate").value, 25);
-      state.activeNation.corruption_index = numberInput(document.getElementById("nation-corruption").value, 2);
-      state.activeNation.game_importance = numberInput(document.getElementById("nation-game-importance").value, 18);
-      state.activeNation.youth_facilities_avg = numberInput(document.getElementById("nation-fac-avg").value, 15);
-      state.activeNation.youth_coaching_avg = numberInput(document.getElementById("nation-coaching-avg").value, 15);
-      state.activeNation.youth_recruitment_avg = numberInput(document.getElementById("nation-rec-avg").value, 15);
+      if (state.connected) {
+        state.activeNation.reputation = numberInput(document.getElementById("nation-reputation")?.value, state.activeNation.reputation || 7500);
+        state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, state.activeNation.youth_rating || 120);
+        state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, state.activeNation.state_of_development ?? 2);
+        state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, state.activeNation.economic_factor || 15);
+      } else {
+        state.activeNation.reputation = numberInput(document.getElementById("nation-reputation")?.value, 7500);
+        state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, 120);
+        state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, 2);
+        state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, 15);
+        state.activeNation.fa_financial_power = numberInput(document.getElementById("nation-fa-power")?.value, 15);
+        state.activeNation.tax_rate = numberInput(document.getElementById("nation-tax-rate")?.value, 25);
+        state.activeNation.corruption_index = numberInput(document.getElementById("nation-corruption")?.value, 2);
+        state.activeNation.game_importance = numberInput(document.getElementById("nation-game-importance")?.value, 18);
+        state.activeNation.youth_facilities_avg = numberInput(document.getElementById("nation-fac-avg")?.value, 15);
+        state.activeNation.youth_coaching_avg = numberInput(document.getElementById("nation-coaching-avg")?.value, 15);
+        state.activeNation.youth_recruitment_avg = numberInput((document.getElementById("nation-recruitment-avg") || document.getElementById("nation-rec-avg"))?.value, 15);
+      }
 
       const submittedEntity = JSON.stringify(state.activeNation);
       try {
@@ -5175,6 +5182,16 @@
     }
 
     // Competition Details Management
+    function handleCompRepChange(val) {
+      state.competitionDirty = true;
+      const num = Math.max(1, Math.min(10000, parseInt(val) || 5000));
+      const repNum = document.getElementById("comp-rep-num");
+      if (repNum) repNum.innerText = `${num.toLocaleString()} / 10,000`;
+      const repStars = document.getElementById("comp-rep-stars");
+      if (repStars) repStars.innerText = getReputationStars(num);
+      if (state.activeCompetition) state.activeCompetition.reputation = num;
+    }
+
     function displayCompetition(comp) {
       state.activeCompetition = JSON.parse(JSON.stringify(comp));
       if (displayEntityAvailability("competition", comp)) return;
@@ -5185,6 +5202,8 @@
 
       document.getElementById("comp-rep-num").innerText = `${(comp.reputation || 8000).toLocaleString()} / 10,000`;
       document.getElementById("comp-rep-stars").innerText = getReputationStars(comp.reputation || 8000);
+      const compRep = document.getElementById("comp-reputation");
+      if (compRep) compRep.value = comp.reputation || 8000;
 
       // Financial prizes
       document.getElementById("comp-prize-money").value = comp.winner_prize_money ?? 40000000;
@@ -5235,21 +5254,31 @@
       if (!state.activeCompetition) return false;
       state.competitionDirty = true;
 
-      state.activeCompetition.winner_prize_money = numberInput(document.getElementById("comp-prize-money").value, 0);
-      state.activeCompetition.tv_rights_pool = numberInput(document.getElementById("comp-tv-rights").value, 0);
+      const compRepInput = document.getElementById("comp-reputation");
+      if (compRepInput) {
+        state.activeCompetition.reputation = numberInput(compRepInput.value, state.activeCompetition.reputation || 8000);
+      }
 
-      state.activeCompetition.max_substitutes = numberInput(document.getElementById("comp-max-subs").value, 5);
-      state.activeCompetition.max_bench_size = numberInput(document.getElementById("comp-bench-size").value, 9);
-      state.activeCompetition.substitution_windows = numberInput(document.getElementById("comp-sub-windows").value, 3);
-      state.activeCompetition.yellow_cards_for_ban = numberInput(document.getElementById("comp-yellow-ban").value, 5);
-      state.activeCompetition.var_active = document.getElementById("comp-var-active").checked;
+      if (!state.connected) {
+        state.activeCompetition.winner_prize_money = numberInput(document.getElementById("comp-prize-money")?.value, 0);
+        state.activeCompetition.tv_rights_pool = numberInput(document.getElementById("comp-tv-rights")?.value, 0);
 
-      state.activeCompetition.max_squad_size = numberInput(document.getElementById("comp-squad-size").value, 25);
-      state.activeCompetition.max_foreign_players = numberInput(document.getElementById("comp-foreign-limit").value, 17);
-      state.activeCompetition.min_homegrown_club = numberInput(document.getElementById("comp-hg-club").value, 0);
-      state.activeCompetition.min_homegrown_nation = numberInput(document.getElementById("comp-hg-nation").value, 0);
+        state.activeCompetition.max_substitutes = numberInput(document.getElementById("comp-max-subs")?.value, 5);
+        state.activeCompetition.max_bench_size = numberInput(document.getElementById("comp-bench-size")?.value, 9);
+        state.activeCompetition.substitution_windows = numberInput(document.getElementById("comp-sub-windows")?.value, 3);
+        state.activeCompetition.yellow_cards_for_ban = numberInput(document.getElementById("comp-yellow-ban")?.value, 5);
+        const varActive = document.getElementById("comp-var-active");
+        if (varActive) {
+          state.activeCompetition.var_active = varActive.checked;
+        }
 
-      showToast("Saving competition rules...", "info");
+        state.activeCompetition.max_squad_size = numberInput(document.getElementById("comp-squad-size")?.value, 25);
+        state.activeCompetition.max_foreign_players = numberInput(document.getElementById("comp-foreign-limit")?.value, 17);
+        state.activeCompetition.min_homegrown_club = numberInput(document.getElementById("comp-hg-club")?.value, 0);
+        state.activeCompetition.min_homegrown_nation = numberInput(document.getElementById("comp-hg-nation")?.value, 0);
+      }
+
+      showToast("Saving competition...", "info");
       const submittedEntity = JSON.stringify(state.activeCompetition);
       try {
         const res = await fetch("/api/competition/update", {

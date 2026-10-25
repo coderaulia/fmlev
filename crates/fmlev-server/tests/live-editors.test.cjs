@@ -18,7 +18,15 @@ function depthAtCard(section, cardId) {
   return opens - closes;
 }
 
-for (const [section, card] of [['tab-club', 'club-money-card'], ['tab-competition', 'registration-card'], ['tab-competition', 'prize-card']]) {
+for (const [section, card] of [
+  ['tab-club', 'club-money-card'],
+  ['tab-club', 'club-facilities-card'],
+  ['tab-nation', 'nation-youth-card'],
+  ['tab-nation', 'nation-macro-card'],
+  ['tab-competition', 'competition-reputation-card'],
+  ['tab-competition', 'registration-card'],
+  ['tab-competition', 'prize-card']
+]) {
   test(`${card} stays visible while connected`, () => {
     assert.equal(depthAtCard(section, card), 0, `${card} must be a direct child of ${section}`);
     assert.match(html, new RegExp(`id="${card}"[^>]*data-live-editor="true"`));
@@ -38,6 +46,9 @@ test('every live editor endpoint the UI calls exists in the router', () => {
     '/api/transfer/move',
     '/api/player/familiarity',
     '/api/club/money',
+    '/api/club/update',
+    '/api/nation/update',
+    '/api/competition/update',
     '/api/competition/prizes',
     '/api/competition/registration',
   ]) {
@@ -56,6 +67,9 @@ test('live editor buttons call functions that exist', () => {
     'maxFamiliarity',
     'loadClubMoney',
     'saveClubMoney',
+    'saveClubToGame',
+    'saveNationToGame',
+    'saveCompetitionToGame',
     'loadPrizeTable',
     'savePrizeTable',
     'setRegistration',

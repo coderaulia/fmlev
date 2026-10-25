@@ -214,3 +214,10 @@ the updated release. This follow-up remains uncommitted and unpushed.
 | Squad number | Native contract + 0x5d | Native write with teammate swap, readback/rollback; verified in game (visible after next day) |
 
 Never edit a player's injury vector (player + 0x248): a null or emptied vector for an injured player crashes FM26 at `game_plugin.dll+0x33af065` and the damage is saved into the career.
+
+## Contracts and transfers (Phase 4)
+
+- **Extend contract (verified in memory):** `POST /api/player/contract/extend {player_id, years?}` writes the expiry word at contract + 0x48 (year in the high 16 bits, flags `0xfe00`, 1-based day of year), with readback and rollback.
+- **Terminate (not implemented):** setting expiry to the in-game date did not release the player after the date passed. The route returns 501.
+- **Sign / loan (not implemented):** a signing allocates a new contract (record + 0x1e8) and an agreement object (record + 0x1e0); a loan adds an agreement object (record + 0x1f0) holding the person, the loan team and start/end dates. Memory writes cannot create these. A contract's team pointer (+0x10) is a team object (first team, B team, U19s), not the club. Both routes return 501.
+- **Diagnostics:** `tools/fmscan` and the `inspect_contract`, `find_refs`, `snapshot_player` examples.

@@ -84,6 +84,7 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | Area | What you can do live | Notes |
 | --- | --- | --- |
 | **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Open the player's profile first |
+| **Contract extension** | Extend expiry by 1–10 years (`POST /api/player/contract/extend`) | Same date, later year; loaned-out players extend the parent contract; shows after the next day |
 | **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
 | **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
 | **Club money** | Balance and transfer budget (raw GBP) | Reopen Club > Finances; month-end persistence of balance unconfirmed |
@@ -91,12 +92,14 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | **Register anytime** | Allow squad registration outside the window per competition | Re-apply after a new season or stage change |
 | **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Bindings only appear while the matching screen is open |
 
-**Not writable yet** (no verified native field): club facilities and board settings, nation reputation / youth rating, competition squad / foreign / substitution rules, squad-numbers-anytime. These controls are fixtures or read-only in live mode.
+**Not writable yet** (no verified native field): club facilities and board settings, nation reputation / youth rating, competition squad / foreign / substitution rules, squad-numbers-anytime, **terminate/release, signing a player and loans** (`/api/player/contract/terminate`, `/api/transfer/sign`, `/api/transfer/loan` return 501: expiring a contract on the current date did not release the player, and signings and loans need contracts and loan agreements that only the game can allocate). These controls are fixtures or read-only in live mode.
 
 > ⚠️ **Never edit a player's injury vector.** An emptied vector for an injured player crashes FM26 on the next day and the damage is saved into the career.
 > Always test on a throwaway save, and Save As a new file after live edits.
 
 The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because every route can write game memory.
+
+**Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation (`g++ -O2 -std=c++20 -o fmscan fmscan.cpp`; commands `snap`, `diff` with a noise filter, `refs`, `find`, `dump`). Rust examples `inspect_contract`, `find_refs` and `snapshot_player` cover the same ground per player.
 
 ### Core Capabilities:
 

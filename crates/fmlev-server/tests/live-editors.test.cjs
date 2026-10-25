@@ -64,6 +64,7 @@ test('live editor buttons call functions that exist', () => {
   for (const fn of [
     'saveSquadNumber',
     'extendContract',
+    'signFreeAgent',
     'terminateContract',
     'terminateLoan',
     'movePlayer',

@@ -1026,7 +1026,7 @@ pub async fn update_club_money(
             StatusCode::OK,
             Json(serde_json::json!({
                 "status": "success",
-                "message": "Club money saved. Reopen Club > Finances to see it.",
+                "message": if payload.balance.is_none() && payload.transfer_budget.is_none() { "Club money read from the game." } else { "Club money saved. Reopen Club > Finances to see it." },
                 "club": club
             })),
         ),

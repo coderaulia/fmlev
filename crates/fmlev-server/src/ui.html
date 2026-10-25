@@ -2053,7 +2053,7 @@
         <div style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
           <h3 style="font-size: 15px; font-weight: 800;">⚡ Native Transfer & Contract Lifecycle</h3>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-            Transactionally release players as free agents (compacting squad vectors), terminate loans back to parent clubs, or transfer contracted players between clubs.
+            Release players as free agents, recall loans, move contracted players or sign free agents (first team squad must have a spare slot). Verified in game on a throwaway save; always use a backup.
           </div>
         </div>
         <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
@@ -2069,6 +2069,9 @@
             <input id="transfer-target-club-id" type="number" class="form-control" placeholder="Target Club ID..." style="width: 140px; font-size: 12px;">
             <button id="btn-move-player" class="btn btn-emerald" style="padding: 6px 14px; font-size: 12px;" onclick="movePlayer()">
               📦 Move Player
+            </button>
+            <button id="btn-sign-free-agent" class="btn btn-emerald" style="padding: 6px 14px; font-size: 12px;" onclick="signFreeAgent()">
+              ✍️ Sign Free Agent
             </button>
           </div>
         </div>
@@ -3104,7 +3107,7 @@
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify(action.body)
           });
-          const data = await res.json();
+          const data = await readJson(res);
           if (!res.ok) throw new Error(data.message || "Pending action failed");
           const queue = pendingActions.get(key) || [];
           const at = queue.indexOf(action);
@@ -3432,9 +3435,9 @@
       if (button) { button.disabled = true; button.innerText = "Scanning players…"; }
       try {
         const res = await fetch("/api/players/discover", { method: "POST" });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Player scan failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
       finally { if (button) { button.disabled = false; button.innerText = "Scan Loaded Players"; } }
     }
@@ -3444,9 +3447,10 @@
       try {
         const res = await fetch("/api/context");
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await readJson(res);
 
         state.connected = data.connected;
+        updateTransferButtons();
         state.liveClubs = data.live_clubs || {};
         state.liveNations = data.live_nations || {};
         state.liveCompetitions = data.live_competitions || {};
@@ -4017,8 +4021,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ club_id: clubId })
         });
-        const data = await res.json();
-        if (!res.ok || state.clubDirty || state.activeClub?.club_id !== clubId) return;
+        const data = await readJson(res);
+        if (!res.ok) { nativeClubSyncedId = null; return; }
+        if (state.clubDirty || state.activeClub?.club_id !== clubId) return;
         const club = data.club;
         Object.assign(state.activeClub, {
           training_facilities: club.training_facilities, youth_facilities: club.youth_facilities,
@@ -4034,6 +4039,27 @@
       } catch (e) { nativeClubSyncedId = null; }
     }
 
+    // Transfer/contract actions need a live attached game and an open player profile.
+    function updateTransferButtons() {
+      const enabled = !!state.connected && !!state.activePlayer;
+      for (const id of ["btn-terminate-contract", "btn-terminate-loan", "btn-move-player", "btn-sign-free-agent"]) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.disabled = !enabled;
+          el.title = enabled ? "Tested in game on a throwaway save; use a backup save" : "Attach to FM26 and open the player's profile first";
+        }
+      }
+    }
+    function adjustClubField(id, delta) {
+      const el = document.getElementById(id);
+      if (!el || el.disabled) return;
+      el.value = Math.max(0, (parseInt(el.value, 10) || 0) + delta);
+      markClubUnsaved();
+    }
+    function adjustClubBalance(delta) { adjustClubField("club-balance", delta); }
+    function adjustTransferBudget(delta) { adjustClubField("club-transfer-budget", delta); }
+    function adjustWageBudget(delta) { adjustClubField("club-wage-budget", delta); }
+
     let nativeNationSyncedId = null, nativeCompetitionSyncedId = null;
     async function syncNationNative(id) {
       if (!state.connected || !id || nativeNationSyncedId === id || state.nationDirty) return;
@@ -4043,8 +4069,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nation_id: id })
         });
-        const data = await res.json();
-        if (!res.ok || state.nationDirty || state.activeNation?.id !== id) return;
+        const data = await readJson(res);
+        if (!res.ok) { nativeNationSyncedId = null; return; }
+        if (state.nationDirty || state.activeNation?.id !== id) return;
         const n = data.nation;
         Object.assign(state.activeNation, {
           youth_rating: n.youth_rating, reputation: n.reputation, economic_factor: n.economic_factor,
@@ -4067,8 +4094,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ competition_id: id })
         });
-        const data = await res.json();
-        if (!res.ok || state.competitionDirty || state.activeCompetition?.id !== id) return;
+        const data = await readJson(res);
+        if (!res.ok) { nativeCompetitionSyncedId = null; return; }
+        if (state.competitionDirty || state.activeCompetition?.id !== id) return;
         state.activeCompetition.reputation = data.competition.reputation;
         const el = document.getElementById("comp-reputation");
         if (el) el.value = data.competition.reputation;
@@ -4358,7 +4386,7 @@
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(clubName)}`);
         if (res.ok) {
-          const data = await res.json();
+          const data = await readJson(res);
           const clubs = data.clubs || [];
           const found = clubs.find(c => c.club_name.toLowerCase() === clubName.toLowerCase()) || clubs[0];
           if (found) {
@@ -4370,39 +4398,8 @@
         console.warn("Search club error:", e);
       }
 
-      if (!state.activeClub) {
-        state.activeClub = {
-          club_id: 9999,
-          club_name: clubName,
-          league_name: "Domestic League",
-          reputation: 8200,
-          balance: 100000000,
-          transfer_budget: 45000000,
-          wage_budget: 1500000,
-          max_wage_allowance: 350000,
-          stadium_name: `${clubName} Stadium`,
-          stadium_capacity: 40000,
-          stadium_expansion_cap: 55000,
-          training_facilities: 18,
-          youth_facilities: 18,
-          youth_recruitment: 18,
-          junior_coaching: 18,
-          data_analysis_facilities: 17,
-          corporate_facilities: 17,
-          sugar_daddy_type: "None",
-          board_patience: 15,
-          fan_confidence: 85,
-          board_confidence: 88,
-          transfer_retention_pct: 100,
-          affiliates: []
-        };
-      } else {
-        state.activeClub.club_name = clubName;
-        state.activeClub.stadium_name = `${clubName} Stadium`;
-      }
-      displayClub(state.activeClub);
-      switchTab("tab-club");
-      showToast(`Loaded ${clubName} in Club Details!`, "success");
+      showToast(`Club "${clubName}" was not found in the loaded game data.`, "warning");
+      return;
     }
 
     // Toggle Pin / Unpin
@@ -4417,7 +4414,7 @@
             unpin: !willPin
           })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Selection failed");
         state.isPinned = data.is_pinned;
         updateSyncUI();
@@ -4432,7 +4429,7 @@
       showToast("Scanning for active Football Manager 26 process...", "info");
       try {
         const res = await fetch("/api/attach", { method: "POST" });
-        const data = await res.json();
+        const data = await readJson(res);
         if (res.ok && data.status === "attached") {
           showToast(`Attached to FM26 (PID: ${data.pid})!`, "success");
           fetchContext();
@@ -4499,7 +4496,7 @@
               field.startsWith("attr_") ? `attributes.${field.slice(5)}` : field)
           })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (res.ok) {
           // An older request must not erase edits made while it was in flight.
           if (state.activePlayer.id === submittedId && JSON.stringify(state.activePlayer) === submittedPlayer) {
@@ -4921,13 +4918,13 @@
           headers: { "Content-Type": "application/json" },
           body: submittedEntity
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (res.ok) {
           if (JSON.stringify(state.activeClub) === submittedEntity) {
             state.clubDirty = false;
           }
           nativeClubSyncedId = null;
-          showToast(`Saved ${state.activeClub.club_name} details & facilities!`, "success");
+          showToast(`Saved ${state.activeClub.club_name}: changed facility ratings, balance and transfer budget are written natively; other fields are not live-writable.`, "success");
           return true;
         } else {
           showToast(data.message || "Failed to save club", "error");
@@ -5049,6 +5046,10 @@
       const fee = numberInput(document.getElementById("new-aff-fee").value, 0);
       if (!name) {
         showToast("Please enter an affiliate club name", "warning");
+        return;
+      }
+      if (!Number.isInteger(id) || id <= 0) {
+        showToast("Enter the affiliate club's numeric club ID (greater than 0)", "warning");
         return;
       }
 
@@ -5247,13 +5248,13 @@
           headers: { "Content-Type": "application/json" },
           body: submittedEntity
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (res.ok) {
           if (JSON.stringify(state.activeNation) === submittedEntity) {
             state.nationDirty = false;
             nativeNationSyncedId = null;
           }
-          if (!isQuiet) showToast(`Saved ${state.activeNation.name} macro & youth factors!`, "success");
+          if (!isQuiet) showToast(`Saved ${state.activeNation.name}: youth rating, reputation, economic factor, development and population are written natively; governance fields are not live-writable.`, "success");
           return true;
         } else {
           showToast(data.message || "Failed to save nation", "error");
@@ -5373,13 +5374,13 @@
           headers: { "Content-Type": "application/json" },
           body: submittedEntity
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (res.ok) {
           if (JSON.stringify(state.activeCompetition) === submittedEntity) {
             state.competitionDirty = false;
             nativeCompetitionSyncedId = null;
           }
-          showToast(`Saved ${state.activeCompetition.name} rules & prize money!`, "success");
+          showToast(`Saved ${state.activeCompetition.name} native competition values (reputation). Rules and prize money are saved separately.`, "success");
           return true;
         } else {
           showToast(data.message || "Failed to save competition rules", "error");
@@ -5416,7 +5417,7 @@
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await readJson(res);
 
         const players = data.players || [];
         const clubs = data.clubs || [];
@@ -5535,7 +5536,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: playerId })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.player || data.active_player) {
           dirtyPlayerFields.clear();
@@ -5560,7 +5561,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ club_id: clubId })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.club || data.active_club) {
           displayClub(data.club || data.active_club);
@@ -5583,7 +5584,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nation_id: nationId })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.nation || data.active_nation) {
           displayNation(data.nation || data.active_nation);
@@ -5606,7 +5607,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ competition_id: compId })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Selection failed");
         if (data.competition || data.active_competition) {
           displayCompetition(data.competition || data.active_competition);
@@ -5647,7 +5648,7 @@
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ club_id: state.activeClub.club_id, ...body })
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.message || "Club money request failed");
       document.getElementById("club-money-balance").value = data.club.balance;
       document.getElementById("club-money-transfer").value = data.club.transfer_budget;
@@ -5663,7 +5664,7 @@
         const body = { balance: read("club-money-balance"), transfer_budget: read("club-money-transfer") };
         if ([body.balance, body.transfer_budget].some(v => v !== null && !Number.isInteger(v))) throw new Error("Amounts must be whole numbers");
         const data = await clubMoneyRequest(body);
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
 
@@ -5674,9 +5675,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id, squad })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Familiarity request failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
 
@@ -5689,9 +5690,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comp_index: comp.id, comp_uid: live.unique_id, enabled })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Registration request failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
     async function extendContract(years) {
@@ -5701,9 +5702,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id, years })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Contract extension failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
     async function terminateContract() {
@@ -5714,9 +5715,9 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Contract termination failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
         if (typeof fetchContext === "function") await fetchContext();
       } catch (error) { showToast(error.message, "error"); }
     }
@@ -5728,9 +5729,26 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Loan termination failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
+        if (typeof fetchContext === "function") await fetchContext();
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function signFreeAgent() {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        const clubInput = document.getElementById("transfer-target-club-id");
+        const clubId = clubInput ? Number(clubInput.value) : 0;
+        if (!clubId || !Number.isInteger(clubId)) throw new Error("Enter a valid target Club ID");
+        if (typeof confirm === "function" && !confirm(`Sign free agent ${state.activePlayer.name} to club ${clubId}'s first team?`)) return;
+        const res = await fetch("/api/transfer/sign", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, target_club_id: clubId })
+        });
+        const data = await readJson(res);
+        if (!res.ok) throw new Error(data.message || "Signing failed");
+        showToast(data.message || "Done", "success");
         if (typeof fetchContext === "function") await fetchContext();
       } catch (error) { showToast(error.message, "error"); }
     }
@@ -5740,13 +5758,14 @@
         const clubInput = document.getElementById("transfer-target-club-id");
         const clubId = clubInput ? Number(clubInput.value) : 0;
         if (!clubId || !Number.isInteger(clubId)) throw new Error("Enter a valid target Club ID");
+        if (typeof confirm === "function" && !confirm(`Move ${state.activePlayer.name} to club ${clubId}'s first team?`)) return;
         const res = await fetch("/api/transfer/move", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id, target_club_id: clubId })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Player move failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
         if (typeof fetchContext === "function") await fetchContext();
       } catch (error) { showToast(error.message, "error"); }
     }
@@ -5759,12 +5778,16 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ player_id: state.activePlayer.id, number: raw || null })
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Squad number save failed");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
     async function prizeRequest(prizes) {
+      for (const [id, label] of [["prize-teams", "team count"], ["prize-first", "first prize"], ["prize-last", "last prize"]]) {
+        const v = Number(document.getElementById(id).value);
+        if (!Number.isInteger(v) || v <= 0) throw new Error(`Enter the ${label} shown on the Rules page first`);
+      }
       const body = {
         teams: Number(document.getElementById("prize-teams").value),
         first_prize: Number(document.getElementById("prize-first").value),
@@ -5775,7 +5798,7 @@
       const res = await fetch("/api/competition/prizes", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.message || "Prize request failed");
       return data;
     }
@@ -5783,17 +5806,23 @@
       try {
         const data = await prizeRequest();
         document.getElementById("prize-list").value = data.prizes.join("\n");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
     }
     async function savePrizeTable() {
       try {
         const amounts = document.getElementById("prize-list").value.split(/\s+/).filter(Boolean).map(Number);
+        if (!amounts.length) throw new Error("Enter one prize amount per line, or use Load from game first");
         if (amounts.some(v => !Number.isInteger(v) || v < 0)) throw new Error("Prize amounts must be whole numbers");
         const data = await prizeRequest(amounts);
         document.getElementById("prize-list").value = data.prizes.join("\n");
-        showToast(data.message, "success");
+        showToast(data.message || "Done", "success");
       } catch (error) { showToast(error.message, "error"); }
+    }
+    // Error bodies are not always JSON (proxy or crash); keep the HTTP status instead of a parser error.
+    async function readJson(res) {
+      try { return await res.json(); }
+      catch (e) { return { message: res.ok ? "" : `HTTP ${res.status} ${res.statusText}`.trim() }; }
     }
     function showToast(msg, type = "info") {
       const container = document.getElementById("toast-container");

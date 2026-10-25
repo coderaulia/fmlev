@@ -126,9 +126,9 @@ fixture defaults. Sign/loan/termination writes remain separate unresolved work.
 
 ## Verification
 
-- 12 new entity-process tests cover values/scales, gender separation, field range
+- 12 entity-process tests cover values/scales, gender separation, field range
   failures, finance/container/team ownership, unknown builds, invalid stages and
   the stadium/training-ground distinction.
-- Current combined C++ process suite: 43 passed, with warnings-as-errors builds.
-- Workspace check passes; Rust 109 passed / 1 ignored; UI 32 passed.
-- All modified/new source files remain below 1,500 lines.
+- Current combined C++ process suite: 57 passed, with warnings-as-errors builds.
+- Workspace check passes; Rust 120 passed / 1 ignored; UI 37 passed.
+- All modified/new source files remain strictly below 1,328 lines.

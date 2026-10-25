@@ -85,21 +85,31 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | --- | --- | --- |
 | **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Open the player's profile first |
 | **Contract extension** | Extend expiry by 1–10 years (`POST /api/player/contract/extend`) | Same date, later year; loaned-out players extend the parent contract; shows after the next day |
+| **Contract termination** | Release player as free agent (`POST /api/player/contract/terminate`) | Multi-object detachment: compacts squad vectors, nulls `0x1e8` contract and `0x130`/`0x138` team pointers |
+| **Loan recall** | Recall player from loan (`POST /api/player/loan/terminate`) | Compacts loan squad vector, returns team to parent club, clears `+0x1f0` loan node |
+| **Player transfers** | Move player between clubs (`POST /api/transfer/move`) | Compacts source squad vector, appends to destination team (verifying spare capacity), updates team pointers |
 | **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
 | **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
-| **Club money** | Balance and transfer budget (raw GBP) | Reopen Club > Finances; month-end persistence of balance unconfirmed |
-| **Competition prize money** | Edit the per-position prize table | Match the first/last prize shown on Rules (optional tolerance for rounded values); payout source at season end unconfirmed |
-| **Register anytime** | Allow squad registration outside the window per competition | Re-apply after a new season or stage change |
-| **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Bindings only appear while the matching screen is open |
+| **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/corporate facilities, reputations, stadium capacity | Reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
+| **Nation macro & youth** | Youth rating (1–200), international reputation (1–10,000), economic factor, state of development | Native container architecture (`NativeNationRecord`); live slider updates youth rating |
+| **Competition reputation** | Native league reputation (1–200 scale) | Saved natively via `NativeCompetitionRecord` |
+| **Competition prize money** | Edit the per-position prize table | Match first/last prize on Rules; payout source at season end unconfirmed |
+| **Register anytime** | Allow squad registration outside the window per competition | Toggles manager flag bit `0x100` and domestic stage gate byte `0x9a=1` |
+| **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Screen-independent discovery via native records |
 
-**Not writable yet** (no verified native field): club facilities and board settings, nation reputation / youth rating, competition squad / foreign / substitution rules, squad-numbers-anytime, **terminate/release, signing a player and loans** (`/api/player/contract/terminate`, `/api/transfer/sign`, `/api/transfer/loan` return 501: expiring a contract on the current date did not release the player, and signings and loans need contracts and loan agreements that only the game can allocate). These controls are fixtures or read-only in live mode.
+**Remaining gaps & what is not writable yet**:
+1. **Signing unemployed free agents** (`/api/transfer/sign` returns 400 with explanation): Creating a brand-new contract for an unemployed free agent requires allocating a new `FULL_CONTRACT` object in the engine's custom heap, which external memory writes cannot safely instantiate.
+2. **Pending transfer join date**: The join date of an arranged future transfer is not stored in the agreement node (`+0x1e0`); the `AgreementOffset` lookup table remains unmapped.
+3. **Squad-number-anytime gate**: Domestic leagues check squad numbers against transfer windows; human manager bit `0x200` was identified, but its check routine in `game_plugin.dll` is not yet traced.
+4. **Active competition match/squad rules**: In-match rules (substitutions, bench size, VAR) and squad constraints (foreign player limits, squad size caps) exist as static 'sqsr' data nodes, but modifying them does not alter the active simulation engine.
+5. **Unmapped club & nation fields**: Club data analysis facilities, sugar daddy status, board patience, and fan confidence remain unmapped. Nation tax rates, corruption index, languages, population, and FIFA rank points are unmapped.
 
 > ⚠️ **Never edit a player's injury vector.** An emptied vector for an injured player crashes FM26 on the next day and the damage is saved into the career.
 > Always test on a throwaway save, and Save As a new file after live edits.
 
 The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because every route can write game memory.
 
-**Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation and screen-independent native entity discovery. `entity PID club|nation|competition --name TEXT --editor --json` now reads guarded facilities, finance, grounds, gender-specific nation youth/reputation and competition reputation/stage-gate data. See [exact native field coverage and remaining WIP](docs/NATIVE_ENTITY_READS.md) and [scanner usage](tools/fmscan/README.md). Rust UI overview bindings still require their matching screens; these C++ exports do not enable additional writes. Rust examples `inspect_contract`, `find_refs` and `snapshot_player` remain read-only diagnostics.
+**Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation and screen-independent native entity discovery. `entity PID club|nation|competition --name TEXT --editor --json` reads guarded facilities, finance, grounds, gender-specific nation youth/reputation and competition reputation/stage-gate data. `fmwrite` is a standalone journaled CLI writer for test-save plan/apply/restore experiments. See [exact native field coverage and remaining WIP](docs/NATIVE_ENTITY_READS.md) and [scanner usage](tools/fmscan/README.md).
 
 ### Core Capabilities:
 

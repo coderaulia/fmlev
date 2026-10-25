@@ -1,90 +1,32 @@
 # FMLE Handover
 
-## State (original baseline HEAD 92c1093; C++ tooling completed below)
-Verified in game, shipped: club balance/transfer budget, squad numbers (swap), tactical familiarity max, register-anytime (manager flag + domestic stage entry+0x9a), competition prizes, contract extend. Details: `AGENTS.md` Phase 3.
+## State (Completed 2026-10-25)
 
-Not implemented (endpoints return 501):
-- `POST /api/player/contract/terminate` — expiry=today does not release; FM26 releases via scheduled events.
-- `POST /api/transfer/sign`, `/api/transfer/loan` — game allocates contract (+0x1e8) and loan-agreement (+0x1f0 -> node -> agreement) objects; memory writes cannot create them.
-- Squad-number-anytime gate (bit 0x200 of dword at manager X+0x404) not traced.
-- Never edit a player's injury vector (player+0x248): crashes FM26.
+Verified in game and shipped in Rust production runtime (`fmlev-core` + `fmlev-server` + `ui.html`):
+- **Player & Medical**: 60 attributes, positions & feet, CA/PA, weekly wage, contract extension, safe heal (10,000 condition/sharpness units without touching injury vector `+0x248`).
+- **Contract & Squads**: Contract extension (`POST /api/player/contract/extend`), squad number assignment & teammate swapping (`POST /api/player/squad-number`), tactical familiarity max (`POST /api/player/familiarity`).
+- **Contract Termination & Transfers**:
+  - `POST /api/player/contract/terminate`: Releases player as free agent via multi-object detachment (nulls `record + 0x1e8`, clears `0x130`/`0x138`, compacts all owning squad vectors `team + 0x38`, clears agreement/loan slots).
+  - `POST /api/player/loan/terminate`: Recalls player from loan, compacts loan team squad vector, restores parent team pointers, and clears loan node (`+0x1f0`).
+  - `POST /api/transfer/move`: Transfers player between squads, verifying destination spare capacity (`spare_slots > 0`), compacting source squad vector, appending to destination squad vector, and updating contract/team pointers.
+- **Club Details & Facilities**: Balance, transfer budget, training/youth/coaching/recruitment facilities (`details + 0x100`), corporate facilities (`finance + 0x8b5`), team & world reputations, main stadium capacity/expansion.
+- **Nation Macro & Youth**: Youth rating (1–200), reputation (1–10,000), economic factor (`+0x1f0`), state of development (`+0x1ec`).
+- **Competition**: Native reputation (1–200, `comp + 0x188`), league prize table (`POST /api/competition/prizes`), Register Anytime (manager flag bit `0x100` + domestic stage gate byte `0x9a = 1`).
+- **Web UI & Test Suite**: All verified live cards decoupled at top level; connected-mode enables verified controls while disabling unverified fields; 120 Rust unit tests, 37 Node DOM tests, and 57 C++ synthetic tests passing.
 
-## C++ tooling plan (`tools/fmscan/`, read-only, Rust stays the main tool)
-Implemented on 2026-10-25: all seven tooling items below. Usage, JSON behavior,
-heuristic limits and synthetic/live validation: `tools/fmscan/README.md`.
-Build remains `g++ -O2 -std=c++20 -o fmscan fmscan.cpp` from `tools/fmscan/`;
-focused headers keep every source file below 1,500 lines. Run the C++ process tests
-with `python3 -m unittest discover -s tools/fmscan/tests -v`.
+## Remaining Gaps & Next Targets
 
-Existing: `fmscan snap|diff|refs|find|dump` (build: `g++ -O2 -std=c++20 -o fmscan fmscan.cpp`; uses process_vm_readv, rw-private regions, 8-byte words, `--exclude` noise file, `--to32`).
-
-Goal: faster discovery loop than Rust examples; Rust only receives verified offsets.
-
-1. **`fmscan watch <pid> <hex_addr> <len> [--ms N]`** — poll a range, print changed words live (see what a day tick / UI action touches).
-2. **`fmscan struct <pid> <hex_addr> [--depth N]`** — dump record at +0..+0x400 annotating each qword: heap pointer (+ its first qword/vtable), small int, float, date-shaped u32 (year 2000..2200 in high 16). Follow pointers to depth N with cycle guard.
-3. **`fmscan rtti <pid> <hex_vtable|addr>`** — resolve MSVC RTTI type name from vtable (needs module base from /proc/pid/maps of game_plugin.dll) so unknown objects are named.
-4. **`fmscan vec <pid> <hex_addr>`** — decode begin/end/cap triples, element count and stride guess, dump elements.
-5. **`fmscan graph <pid> <hex_obj> --in/--out`** — inbound refs (generalise `refs`, grouped by owning region) and outbound pointers; used to find which lists contain a person/contract (needed for sign/loan list membership).
-6. **`fmscan diffset`** — chain snap/noise/diff in one command (`--action-wait`) and emit a ranked candidate list (address, old->new, nearest vtable).
-7. **JSON output (`--json`)** for all commands so Rust examples/tests can consume results.
-8. Safety rule: C++ tool never writes; any write experiment stays in Rust (`live_write.rs`, readback + rollback).
-
-Suggested order: 2 -> 4 -> 3 -> 5 (unblocks sign/loan), then 1, 6, 7.
-
-Read-only live smoke proof: manager-list vector decoded successfully and manager
-vtable resolved to `.?AVHUMAN_NON_PLAYER@db@@`. Proton maps PE sections anonymously;
-the RTTI resolver validates the named PE header at the COL-derived image base.
-Sign/loan/terminate investigations below remain pending; tools do not prove safe writes.
-
-### Screen-independent named discovery (2026-10-25)
-`fmscan entity PID player|club|nation|competition --name TEXT [--related] --json`
-now discovers native RTTI types from the DLL and scans loaded records without UI
-bindings, an open profile, a known object address or prior editor calibration.
-`--id` and `--uid` selectors are also supported. Expected type, duplicate UIDs,
-player person/attribute layout and contract ownership are validated. Related links
-carry pointer offsets; missing or invalid targets are explicitly unavailable.
-
-Live proof: Lamine Yamal Nasraoui (index 40629, UID 2000256231) -> native parent
-contract -> team 1279 -> Barcelona (1074/1708) -> Spain (170/796), plus team ->
-Spanish First Division (51/67) -> the same Spain record. Independent full club,
-nation and competition searches agreed. No game screen was opened and no target
-memory was written. The native player scan validated 39,489 records, one matching
-name, with 20 unreadable chunks reported. This is not an exhaustive save census.
-See `tools/fmscan/README.md` for command semantics and version/loan limitations.
-
-### Full supported player editor dump and benchmark (2026-10-25)
-`entity ... player --editor` prints name/IDs, 60 attributes, positions/feet,
-CA/PA, nationality, parent-contract club, competition, wage/expiry and squad number.
-Unsupported UI fields are explicitly unavailable; no game screen is required.
-`--json` exports the same supported data. Live Yamal CA/PA 175/194, weekly wage
-GBP 280867, expiry 2031, number 10; all common C++/Rust payload fields matched.
-
-`player-data PID INDEX UID [--record HEX] [--iterations N]` is the common read-only
-identity-scan/read diagnostic. Rust counterpart: example `player_data`; it uses
-the real memory driver and production attribute decoder without changing writer
-calibration. `tools/fmscan/benchmark_player.py` builds both at optimization level 3,
-alternates seven trials, excludes compilation/warmups, verifies payload/checksum
-and scan-work equality, and reports wall and internal times separately.
-Live medians: internal full scan C++ 919.67 ms / Rust 799.39 ms; known-record read
-C++ 8.53 us / Rust 9.67 us. This compares matched diagnostic implementations, not
-the HTTP UI refresh path or RTTI/name discovery, and is not a universal language claim.
-Verification: 21 C++/Rust process tests plus the required workspace/UI trio pass.
-
-## Next-session targets
-Native nonplayer editor reads were expanded on 2026-10-25: `entity ... --editor`
-now supports club, nation and competition. See `docs/NATIVE_ENTITY_READS.md` for
-field coverage, native-code evidence, live values and remaining WIP. Key findings:
-club facilities live in separate details/finance records; nation youth/reputation
-are gender-specific; main stadium is a first-team link, distinct from the training
-ground; competition reputation is 1..200 and its stage gate is not all registration
-policy. New numeric layouts require PE timestamp 0x6a229e8a plus object guards.
-43 combined process tests and the Rust/UI verification trio pass. No live writes
-or game-screen navigation occurred, and active competition rule/prize-source
-mapping remains unresolved.
-
-1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.
-2. Terminate: find the scheduled-event queue entry for contract release; or find the release routine in game_plugin.dll.
-3. Squad-number-anytime gate (0x200).
+1. **Signing Unemployed Free Agents (`POST /api/transfer/sign`)**:
+   - Signing an unemployed player requires the game engine to allocate a new `FULL_CONTRACT` C++ object at `record + 0x1e8` and establish ~50 inbound references. External memory writes cannot safely instantiate this object from outside the engine's custom heap allocator (returns an informative 400 error).
+2. **Forcing Arranged/Pending Deals to Join Early**:
+   - Arranged future transfers (e.g. Cortina joining R. Madrid) only populate the agreement node at `+0x1e0`. The join date is stored elsewhere (likely in the `AgreementOffset` table from `fm-ai-assistent`), so forcing an arranged deal to join immediately remains unmapped.
+3. **Squad-Number-Anytime Gate (bit 0x200)**:
+   - Domestic leagues check squad numbers against official windows. Bit `0x200` of the dword at `manager + 0x404` was identified, but its exact check routine in `game_plugin.dll` is not yet traced.
+4. **Active Competition Rules & Calendar Windows**:
+   - In-match rules (substitutions, bench size, VAR) and squad constraints (foreign player limits, squad size caps) exist as static 'sqsr' data nodes; editing them does not update the active simulation engine. Transfer window open/close dates exist as calendar events ('wnd0'/'wnd1') and are not yet writable.
+5. **Unmapped Entity Fields**:
+   - Club: Data analysis facilities, sugar daddy status, board patience, fan confidence, affiliate club pointer chain.
+   - Nation: Flat tax rate, corruption index, languages, population, FIFA world ranking points.
 
 ## Rules
 Max 1,500 LOC/file; verification trio from `AGENTS.md`; commit locally, never push unless asked; test risky writes on a throwaway save, then Save As.

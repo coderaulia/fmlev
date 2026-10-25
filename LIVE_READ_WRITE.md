@@ -13,8 +13,18 @@ used test-layout offsets against those handles. They must not be used for live e
 | Position aptitudes and feet | Numeric bindings; validated native records take precedence | Native record write, identity validation, readback and rollback |
 | CA/PA | Validated native u16 fields; 1..200 | Native writes with readback/rollback |
 | Contract wages and expiry | Ownership-checked full contract; weekly wage in GBP | Weekly wage and expiry year, preserving month/day/flags |
-| Condition, sharpness, morale, other contract fields | Available bindings only; zero/empty means unavailable | Not supported: native layouts/semantics unverified |
-| Clubs, nations, competitions, affiliates | Available bindings only | Not supported: native offsets unverified |
+| Contract termination | Native full contract, team squad vectors | Multi-object detachment releasing player as free agent with rollback |
+| Loan recall | Native loan node and squad vector | Recalls player from loan, restores parent team pointers, clears loan node |
+| Player move between clubs | Source and target team squad vectors, contract team pointers | Moves contracted player between squads (requires destination spare capacity) |
+| Squad numbers | Contract team and player squad number (+0x5d) | Sets squad number (1-99) and atomically swaps with teammate wearing it |
+| Tactical familiarity | 8 native vectors at player -0x48 | Sets all vectors to 10000 (game's MAXIMISE action) |
+| Condition & sharpness | Native player +0xc0 / +0xc8 | Restores condition and match sharpness to 10,000 units (safe heal) |
+| Club balance & transfer budget | Native finance object at club +0x150 | Direct transactional write to balance (+0x14) and transfer budget (+0x7cc) |
+| Club facilities | Club details +0x100 and finance +0x8b5 | Training, youth, coaching, recruitment, and corporate facilities (1-20) |
+| Club reputations & stadium | First team +0xa8, club +0x166, stadium +0x7c/+0x8c | First-team/world reputations (1-10000) and stadium capacity/expansion |
+| Nation youth rating & macro | Containers at nation +0x108/+0x110, nation +0x1f0/+0x1ec | Youth rating (1-200), reputation (1-10000), economic factor, development code |
+| Competition reputation & prizes | Native comp +0x188, raw GBP prize table | Reputation (1-200 native scale), league finishing position prize table |
+| Register anytime | Human manager +0x404, comp stage rule entry +0x9a | Toggles manager bit 0x100 and domestic stage gate byte 0x9a=1 |
 | Raw memory tools | Explicit address and type | Explicit address/type, range and transfer validation |
 | Offline demonstration data | Fixtures | Fixtures only; does not modify FM26 |
 

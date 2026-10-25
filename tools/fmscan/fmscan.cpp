@@ -1,6 +1,6 @@
 // Read-only process memory discovery. Build: g++ -O2 -std=c++20 -o fmscan fmscan.cpp
 #include "scan.hpp"
-#include "player_data.hpp"
+#include "entity_details.hpp"
 #include "contracts.hpp"
 
 static const char* HELP = R"(fmscan: read-only FM26 memory discovery (never writes to the target)

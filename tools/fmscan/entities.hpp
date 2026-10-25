@@ -7,6 +7,8 @@ struct NativeEntity {
 };
 inline Json editor_player_data(const Memory&, const NativeCatalog&, const NativeEntity&);
 inline void print_player_editor(const Memory&, const NativeCatalog&, const NativeEntity&);
+inline Json editor_entity_data(const Memory&, const NativeCatalog&, const NativeEntity&);
+inline void print_entity_editor(const Memory&, const NativeCatalog&, const NativeEntity&);
 inline std::optional<NativeEntity> read_entity(const Memory& m, const NativeCatalog& catalog, U address, const std::string& kind) {
     auto type = catalog.at(m, address, kind); if (!type) return {};
     // NativePlayerRecord's calibrated attribute/person view is embedded at ACTUAL_PLAYER+0x148.
@@ -102,7 +104,6 @@ inline int cmd_entity(const Memory& m, const Args& a) {
     a.allow({"--name", "--id", "--uid", "--max", "--near", "--related", "--editor"}, 3);
     const auto& kind = a.pos[2];
     if (kind != "player" && kind != "club" && kind != "nation" && kind != "competition") throw std::runtime_error("entity kind must be player|club|nation|competition");
-    if (a.has("--editor") && kind != "player") throw std::runtime_error("--editor requires player kind");
     U max = a.val("--max", 20), id = a.val("--id", 0), uid = a.val("--uid", 0);
     if (!max || max > 1000 || id > INT32_MAX || uid > UINT32_MAX || (a.has("--name") && a.get("--name").empty())) throw std::runtime_error("invalid entity selector or max (1..1000)");
     NativeCatalog catalog(m);
@@ -130,8 +131,8 @@ inline int cmd_entity(const Memory& m, const Args& a) {
         auto fresh = read_entity(m, catalog, e.address, e.kind);
         if (!fresh || fresh->index != e.index || fresh->uid != e.uid || fresh->name != e.name) throw std::runtime_error("native identity changed during scan; retry");
         Json j = entity_json(e);
-        if (a.has("--editor")) j.raw("editor_data",editor_player_data(m,catalog,e).done());
-        if (a.has("--editor") && !a.json) print_player_editor(m,catalog,e);
+        if (a.has("--editor")) j.raw("editor_data",(kind=="player"?editor_player_data(m,catalog,e):editor_entity_data(m,catalog,e)).done());
+        if (a.has("--editor") && !a.json) { if(kind=="player")print_player_editor(m,catalog,e);else print_entity_editor(m,catalog,e); }
         if (a.has("--related")) {
             EntityRelations links{m, catalog, {}, {}, {}, {}};
             if (e.kind == "player") links.player(e);
@@ -145,7 +146,7 @@ inline int cmd_entity(const Memory& m, const Args& a) {
     out.str("source", "native_database_memory"); out.raw("requires_open_screen", "false"); out.num("validated_records", examined);
     out.num("total_matches", total); out.num("scanned_bytes", stats.bytes); out.num("unreadable_chunks", stats.unreadable);
     out.raw("truncated", total > found.size() ? "true" : "false"); out.raw("matches", array(rows));
-    if (a.has("--editor") && !a.json) std::cout << total << " matching player(s)\n";
+    if (a.has("--editor") && !a.json) std::cout << total << " matching " << kind << " record(s)\n";
     else emit(a, out, out.done());
     return 0;
 }

@@ -99,7 +99,7 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 
 The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because every route can write game memory.
 
-**Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation (`g++ -O2 -std=c++20 -o fmscan fmscan.cpp`; commands `snap`, `diff` with a noise filter, `refs`, `find`, `dump`). Rust examples `inspect_contract`, `find_refs` and `snapshot_player` cover the same ground per player.
+**Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation and screen-independent native entity discovery. `entity PID club|nation|competition --name TEXT --editor --json` now reads guarded facilities, finance, grounds, gender-specific nation youth/reputation and competition reputation/stage-gate data. See [exact native field coverage and remaining WIP](docs/NATIVE_ENTITY_READS.md) and [scanner usage](tools/fmscan/README.md). Rust UI overview bindings still require their matching screens; these C++ exports do not enable additional writes. Rust examples `inspect_contract`, `find_refs` and `snapshot_player` remain read-only diagnostics.
 
 ### Core Capabilities:
 

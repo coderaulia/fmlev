@@ -71,6 +71,17 @@ the HTTP UI refresh path or RTTI/name discovery, and is not a universal language
 Verification: 21 C++/Rust process tests plus the required workspace/UI trio pass.
 
 ## Next-session targets
+Native nonplayer editor reads were expanded on 2026-10-25: `entity ... --editor`
+now supports club, nation and competition. See `docs/NATIVE_ENTITY_READS.md` for
+field coverage, native-code evidence, live values and remaining WIP. Key findings:
+club facilities live in separate details/finance records; nation youth/reputation
+are gender-specific; main stadium is a first-team link, distinct from the training
+ground; competition reputation is 1..200 and its stage gate is not all registration
+policy. New numeric layouts require PE timestamp 0x6a229e8a plus object guards.
+43 combined process tests and the Rust/UI verification trio pass. No live writes
+or game-screen navigation occurred, and active competition rule/prize-source
+mapping remains unresolved.
+
 1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.
 2. Terminate: find the scheduled-event queue entry for contract release; or find the release routine in game_plugin.dll.
 3. Squad-number-anytime gate (0x200).

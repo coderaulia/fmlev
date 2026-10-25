@@ -164,6 +164,98 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(fields, other)
         self.assertEqual(len(other), 60)
 
+    def details(self, kind, index):
+        return self.scan(kind, "--id", index, "--editor")["matches"][0]["editor_data"]
+
+    def test_club_native_details(self):
+        d = self.details("club", 1074)
+        for key, value in {"training_facilities": 19, "youth_facilities": 20,
+                           "junior_coaching": 18, "youth_recruitment": 17,
+                           "corporate_facilities": 19, "balance": -1200,
+                           "transfer_budget": 123456, "reputation": 9098,
+                           "world_reputation": 7557, "transfer_retention_pct": 30,
+                           "wage_budget_raw_gbp": 100000}.items():
+            self.assertEqual(d[key], value, key)
+        self.assertEqual(d["currency"], "GBP")
+        self.assertIn("unverified", d["wage_period"])
+        self.assertIsNone(d["board_patience"])
+        self.assertIsNone(d["data_analysis_facilities"])
+
+    def test_nation_gender_specific_youth_and_reputation(self):
+        d = self.details("nation", 170)
+        self.assertEqual(d["three_letter_code"], "ESP")
+        self.assertEqual(d["continent"], "Europe")
+        self.assertEqual((d["men"]["youth_rating"], d["women"]["youth_rating"]), (145, 160))
+        self.assertEqual((d["men"]["reputation"], d["women"]["reputation"]), (9011, 9300))
+        self.assertIsNone(d["youth_rating"])
+        self.assertEqual(d["economic_factor"], 17)
+        self.assertEqual(d["state_of_development_native_code"], 1)
+        self.assertIsNone(d["state_of_development"])
+        self.assertIsNone(d["men"]["fifa_rank"])
+
+    def test_competition_native_reputation_scale_and_stage(self):
+        d = self.details("competition", 51)
+        self.assertEqual(d["reputation"], 178)
+        self.assertIn("1..200", d["reputation_scale"])
+        self.assertEqual(d["stage_registration_gate"], 1)
+        self.assertEqual(d["short_name"], "First Division")
+        self.assertIsNone(d["max_squad_size"])
+        self.assertIsNone(d["max_foreign_players"])
+        self.assertIsNone(d["winner_prize_money"])
+
+    def test_new_numeric_layouts_require_known_build(self):
+        self.action("unknown-build")
+        self.assertIsNone(self.details("club", 1074)["training_facilities"])
+        self.assertIsNone(self.details("nation", 170)["men"]["youth_rating"])
+        self.assertIsNone(self.details("competition", 51)["reputation"])
+
+    def test_invalid_facility_is_unavailable_not_clamped(self):
+        self.action("bad-facility")
+        d = self.details("club", 1074)
+        self.assertIsNone(d["training_facilities"])
+        self.assertEqual(d["youth_facilities"], 20)
+
+    def test_finance_owner_required(self):
+        self.action("bad-finance-owner")
+        d = self.details("club", 1074)
+        self.assertIsNone(d["balance"])
+        self.assertIsNone(d["transfer_budget"])
+        self.assertIsNone(d["corporate_facilities"])
+
+    def test_national_container_owner_required(self):
+        self.action("bad-container-owner")
+        d = self.details("nation", 170)
+        self.assertIsNone(d["men"]["youth_rating"])
+        self.assertIsNone(d["men"]["reputation"])
+        self.assertEqual(d["women"]["youth_rating"], 160)
+
+    def test_national_team_back_pointer_required(self):
+        self.action("bad-national-team-owner")
+        d = self.details("nation", 170)
+        self.assertIsNone(d["men"]["reputation"])
+        self.assertEqual(d["men"]["youth_rating"], 145)
+
+    def test_youth_rating_read_as_word_and_range_checked(self):
+        self.action("bad-youth")
+        self.assertIsNone(self.details("nation", 170)["men"]["youth_rating"])
+
+    def test_invalid_stage_does_not_invent_registration_status(self):
+        self.action("bad-stage")
+        d = self.details("competition", 51)
+        self.assertIsNone(d["stage_registration_gate"])
+        self.assertEqual(d["reputation"], 178)
+
+    def test_competition_reputation_does_not_use_fixture_scale(self):
+        self.action("bad-comp-reputation")
+        self.assertIsNone(self.details("competition", 51)["reputation"])
+
+    def test_stadium_is_first_teams_ground_not_training_ground(self):
+        d = self.details("club", 1074)
+        self.assertEqual(d["stadium_name"], "Camp Nou")
+        self.assertEqual(d["training_ground_name"], "Training Ground")
+        self.assertEqual(d["stadium_capacity"], 62500)
+        self.assertEqual(d["stadium_expansion_cap"], 105000)
+
 
 if __name__ == "__main__":
     unittest.main()

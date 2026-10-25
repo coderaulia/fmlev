@@ -100,6 +100,23 @@ for future game versions. A structurally incompatible record is rejected.
 
 ### Player editor data and Rust comparison
 
+`--editor` also supports **club, nation and competition** records. See
+[native entity field coverage, ownership evidence and WIP](../../docs/NATIVE_ENTITY_READS.md).
+The new numeric layouts check the native DLL's PE timestamp; unknown builds leave
+those fields unavailable. Examples:
+
+```bash
+./fmscan entity PID club --name Barcelona --editor --json
+./fmscan entity PID nation --name Spain --editor --json
+./fmscan entity PID competition --name "Spanish First Division" --editor --json
+```
+
+Club exports include facilities, guarded finance values, reputation and main
+stadium capacity/expansion. Nation youth/reputation are separate under `men` and
+`women`; economic factor and a raw development-state code are also readable.
+Competition reputation keeps its native 1..200 scale; its stage registration gate
+does not claim to evaluate manager overrides. Unmapped active rules remain null.
+
 ```bash
 # Print every supported editor field in readable text, without opening FM screens.
 ./fmscan entity PID player --name "Lamine Yamal" --editor

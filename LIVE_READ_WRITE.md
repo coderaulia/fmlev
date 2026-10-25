@@ -199,3 +199,15 @@ rejection before any write, exact fractional-byte rollback, calendar/flag
 preservation, explicit changed-field merging, all 60 UI attribute controls,
 identity and range checks, and native-type peer discovery. The editor is running
 the updated release. This follow-up remains uncommitted and unpushed.
+
+
+## Update — 25 October 2026 (native club and competition fields)
+
+| Feature | Live reads | Live writes |
+| --- | --- | --- |
+| Club transfer budget | Binding value | Native block write with readback/rollback; verified in game |
+| Club balance, income, expenditure, facilities | Bindings | Not supported: UI caches are overwritten by the game; native sources not located |
+| Competition prize money | Native i32 table (identified by Rules-page values) | Native write with readback/rollback; verified on the Rules page, season-end payout unconfirmed |
+| Competition rules (subs, foreign, squad) | Not located | Not supported |
+
+Never edit a player's injury vector (player + 0x248): a null or emptied vector for an injured player crashes FM26 at `game_plugin.dll+0x33af065` and the damage is saved into the career.

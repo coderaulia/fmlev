@@ -14,6 +14,7 @@ use crate::session::LiveSession;
 pub mod default_registries;
 pub mod inspector;
 pub mod mutations;
+pub mod prizes;
 
 #[cfg(test)]
 mod tests;

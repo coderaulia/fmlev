@@ -39,6 +39,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/nation/preset", post(apply_nation_preset))
         .route("/api/competition/update", post(update_competition))
         .route("/api/competition/preset", post(apply_competition_preset))
+        .route("/api/competition/prizes", post(competition_prizes))
         .route("/api/club/affiliate/add", post(add_club_affiliate))
         .route("/api/club/affiliate/remove", post(remove_club_affiliate))
         .route("/api/attach", post(attach_process))

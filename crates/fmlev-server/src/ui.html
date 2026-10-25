@@ -2522,6 +2522,25 @@
         </div>
       </div>
 
+      <div class="glass-card" id="prize-card" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">🏆 Live Prize Money (raw GBP per position)</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Open Competition &gt; Rules in FM26, enter the team count and the first and last prize shown there
+          (in the game's display currency, as raw amounts), then Load. Changes appear on the Rules page after you leave
+          and reopen it. <strong>Caveat:</strong> the season-end payout source is unconfirmed; this edits the table the Rules page reads.
+        </p>
+        <div class="form-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+          <input id="prize-teams" type="number" min="2" max="64" class="form-control" placeholder="Teams (18)">
+          <input id="prize-first" type="number" min="1" class="form-control" placeholder="First prize (165000)">
+          <input id="prize-last" type="number" min="1" class="form-control" placeholder="Last prize (80000)">
+        </div>
+        <textarea id="prize-list" class="form-control" rows="4" style="margin-top: 8px;" placeholder="One amount per line, position 1 first"></textarea>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button class="btn" onclick="loadPrizeTable()">Load from game</button>
+          <button class="btn btn-emerald" onclick="savePrizeTable()">💾 Save Prize Money</button>
+        </div>
+      </div>
+
       <!-- Competition Grid -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
         <!-- Left: Match Rules & VAR Active -->
@@ -5370,6 +5389,37 @@
     });
 
     // Toast helper
+
+    async function prizeRequest(prizes) {
+      const body = {
+        teams: Number(document.getElementById("prize-teams").value),
+        first_prize: Number(document.getElementById("prize-first").value),
+        last_prize: Number(document.getElementById("prize-last").value)
+      };
+      if (prizes) body.prizes = prizes;
+      const res = await fetch("/api/competition/prizes", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Prize request failed");
+      return data;
+    }
+    async function loadPrizeTable() {
+      try {
+        const data = await prizeRequest();
+        document.getElementById("prize-list").value = data.prizes.join("\n");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function savePrizeTable() {
+      try {
+        const amounts = document.getElementById("prize-list").value.split(/\s+/).filter(Boolean).map(Number);
+        if (amounts.some(v => !Number.isInteger(v) || v < 0)) throw new Error("Prize amounts must be whole numbers");
+        const data = await prizeRequest(amounts);
+        document.getElementById("prize-list").value = data.prizes.join("\n");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
     function showToast(msg, type = "info") {
       const container = document.getElementById("toast-container");
       if (!container) return;

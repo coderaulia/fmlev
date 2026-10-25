@@ -812,3 +812,28 @@ pub async fn remove_club_affiliate(
         ),
     }
 }
+
+/// Reads or writes the live league prize table (display-verified; payout source unconfirmed).
+pub async fn competition_prizes(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::PrizeRequest>,
+) -> impl IntoResponse {
+    let writing = payload.prizes.is_some();
+    let mut w = state.inner.write().await;
+    match w.context_mgr.competition_prizes(
+        payload.teams,
+        payload.first_prize,
+        payload.last_prize,
+        payload.prizes,
+    ) {
+        Ok(prizes) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": if writing { "Prize money written. Reopen Competition > Rules to see it; season-end payout is unconfirmed." } else { "Prize money read." },
+                "prizes": prizes
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}

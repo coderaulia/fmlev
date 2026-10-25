@@ -160,6 +160,16 @@ pub struct SearchQuery {
     pub q: String,
 }
 
+/// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.
+/// Omit `prizes` to read; provide it to write one raw-GBP amount per position.
+#[derive(Deserialize)]
+pub struct PrizeRequest {
+    pub teams: usize,
+    pub first_prize: i32,
+    pub last_prize: i32,
+    pub prizes: Option<Vec<i32>>,
+}
+
 #[derive(Deserialize)]
 pub struct ContextSelectRequest {
     pub player_id: Option<i32>,

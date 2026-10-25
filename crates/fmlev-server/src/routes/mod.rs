@@ -33,6 +33,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
         .route("/api/player/preset", post(apply_player_preset))
+        .route("/api/player/squad-number", post(update_squad_number))
         .route("/api/club/update", post(update_club))
         .route("/api/club/preset", post(apply_club_preset))
         .route("/api/nation/update", post(update_nation))

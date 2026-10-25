@@ -209,5 +209,6 @@ the updated release. This follow-up remains uncommitted and unpushed.
 | Club balance, income, expenditure, facilities | Bindings | Not supported: UI caches are overwritten by the game; native sources not located |
 | Competition prize money | Native i32 table (identified by Rules-page values) | Native write with readback/rollback; verified on the Rules page, season-end payout unconfirmed |
 | Competition rules (subs, foreign, squad) | Not located | Not supported |
+| Squad number | Native contract + 0x5d | Native write with teammate swap, readback/rollback; verified in game (visible after next day) |
 
 Never edit a player's injury vector (player + 0x248): a null or emptied vector for an injured player crashes FM26 at `game_plugin.dll+0x33af065` and the damage is saved into the career.

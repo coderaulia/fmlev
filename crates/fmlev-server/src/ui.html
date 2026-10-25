@@ -1676,6 +1676,12 @@
         <button class="preset-btn" onclick="applyPlayerPreset('goat')">Max Attributes + CA/PA</button>
         <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">+2 Player Attributes</button>
       </div>
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Squad Number:</span>
+        <input id="squad-number-input" type="number" min="0" max="99" class="form-control" style="width: 80px;" placeholder="1-99, 0 = none">
+        <button class="preset-btn" onclick="saveSquadNumber()">💾 Save Squad Number</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Shown in FM26 after the next day. A teammate wearing it is swapped.</span>
+      </div>
 
       <!-- Authentic FM 3-Column Attribute Table -->
       <div class="attributes-columns">
@@ -5391,6 +5397,21 @@
 
     // Toast helper
 
+
+    async function saveSquadNumber() {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        const raw = Number(document.getElementById("squad-number-input").value);
+        if (!Number.isInteger(raw) || raw < 0 || raw > 99) throw new Error("Squad number must be 0-99");
+        const res = await fetch("/api/player/squad-number", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, number: raw || null })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Squad number save failed");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
     async function prizeRequest(prizes) {
       const body = {
         teams: Number(document.getElementById("prize-teams").value),

@@ -12,6 +12,9 @@ const RIGHT_FOOT: usize = 0x30;
 const PERSON: usize = 0x140;
 const INDEX: usize = PERSON + 8;
 const UID: usize = PERSON + 12;
+const SQUAD_NUMBER: usize = 0x5d;
+const NO_SQUAD_NUMBER: u8 = 255;
+const CONTRACT_TEAM: usize = 0x10;
 
 pub struct NativeAttribute {
     pub name: &'static str,
@@ -304,6 +307,107 @@ impl NativePlayerRecord {
             left_foot: left / 5,
             right_foot: right / 5,
         })
+    }
+
+    /// Squad number: u8 at contract + 0x5d (255 = none). Verified against the squad screen for
+    /// 11 players and by an in-game write; the screen refreshes at the next day tick.
+    pub fn squad_number(&self, driver: &LinuxMemoryDriver) -> Result<Option<u8>> {
+        let contract = self.contract(driver)?;
+        let value = driver.read::<u8>(contract.address + SQUAD_NUMBER)?;
+        Ok((value != NO_SQUAD_NUMBER).then_some(value))
+    }
+
+    /// Finds the teammate (same contract team object) currently wearing `number`.
+    fn squad_number_holder(&self, driver: &LinuxMemoryDriver, team: usize, number: u8) -> Result<Option<(Self, NativeContract)>> {
+        let mut found = Vec::new();
+        for map in parse_process_maps(driver.pid())?.iter().filter(|m| m.is_rw_private()) {
+            let mut start = map.start;
+            while start < map.end {
+                let len = (map.end - start).min(16 << 20);
+                let mut buf = vec![0u8; len];
+                if driver.read_bytes(start, &mut buf).is_ok() {
+                    for (i, chunk) in buf.chunks_exact(8).enumerate() {
+                        if usize::from_le_bytes(chunk.try_into().unwrap()) != self.player_vtable { continue; }
+                        let address = start + i * 8;
+                        if address == self.address { continue; }
+                        let Ok(contract) = driver.read_ptr(address + 0x1e8) else { continue };
+                        if contract <= 0x10000
+                            || driver.read_ptr(contract + 8).ok() != Some(address + PERSON)
+                            || driver.read_ptr(contract + CONTRACT_TEAM).ok() != Some(team)
+                            || driver.read::<u8>(contract + SQUAD_NUMBER).ok() != Some(number)
+                        { continue; }
+                        found.push(address);
+                    }
+                }
+                start += len;
+            }
+        }
+        match found.as_slice() {
+            [] => Ok(None),
+            [address] => {
+                let holder = Self {
+                    address: *address,
+                    pid: self.pid,
+                    index: driver.read::<i32>(address + INDEX)?,
+                    uid: driver.read::<u32>(address + UID)?,
+                    player_vtable: self.player_vtable,
+                    person_vtable: driver.read_ptr(address + PERSON)?,
+                    attributes_verified: false,
+                };
+                let contract = holder.contract(driver)?;
+                Ok(Some((holder, contract)))
+            }
+            many => Err(invalid(&format!("{} teammates already wear number {number}; not written", many.len()))),
+        }
+    }
+
+    /// Sets the squad number (`None` clears it). A teammate already wearing the number receives
+    /// this player's old number in the same transaction. Returns the swapped teammate's index.
+    pub fn write_squad_number(&self, driver: &LinuxMemoryDriver, number: Option<u8>) -> Result<Option<i32>> {
+        if number.is_some_and(|n| !(1..=99).contains(&n)) {
+            return Err(invalid("Squad number must be between 1 and 99"));
+        }
+        let contract = self.contract(driver)?;
+        let team = driver.read_ptr(contract.address + CONTRACT_TEAM)?;
+        if team <= 0x10000 { return Err(invalid("Player's contract has no team")); }
+        let old = driver.read::<u8>(contract.address + SQUAD_NUMBER)?;
+        let next = number.unwrap_or(NO_SQUAD_NUMBER);
+        if old == next { return Ok(None); }
+        let holder = match number {
+            Some(n) => self.squad_number_holder(driver, team, n)?,
+            None => None,
+        };
+        let mut edits = vec![(self, contract, old, next)];
+        if let Some((record, holder_contract)) = &holder {
+            edits.push((record, *holder_contract, next, old));
+        }
+        let mut written = 0;
+        let result = (|| -> Result<()> {
+            for (record, c, expected, value) in &edits {
+                record.validate_contract(driver, *c)?;
+                if driver.read::<u8>(c.address + SQUAD_NUMBER)? != *expected {
+                    return Err(invalid("Squad number changed during Save; refresh and retry"));
+                }
+                driver.write(c.address + SQUAD_NUMBER, value)?;
+                written += 1;
+            }
+            for (_, c, _, value) in &edits {
+                if driver.read::<u8>(c.address + SQUAD_NUMBER)? != *value {
+                    return Err(invalid("Squad number readback mismatch"));
+                }
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let mut failures = Vec::new();
+            for (_, c, expected, _) in edits[..written].iter().rev() {
+                if driver.write(c.address + SQUAD_NUMBER, expected).is_err()
+                    || driver.read::<u8>(c.address + SQUAD_NUMBER).ok() != Some(*expected)
+                { failures.push(c.address); }
+            }
+            return Err(invalid(&format!("Squad number Save failed: {error}; rollback failures: {failures:x?}")));
+        }
+        Ok(holder.map(|(record, _)| record.index))
     }
 
     pub fn attributes_verified(&self) -> bool { self.attributes_verified }

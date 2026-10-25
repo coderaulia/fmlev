@@ -160,6 +160,13 @@ pub struct SearchQuery {
     pub q: String,
 }
 
+/// `number` 1..=99, or null/0 to clear the squad number.
+#[derive(Deserialize)]
+pub struct SquadNumberRequest {
+    pub player_id: i32,
+    pub number: Option<u8>,
+}
+
 /// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.
 /// Omit `prizes` to read; provide it to write one raw-GBP amount per position.
 #[derive(Deserialize)]

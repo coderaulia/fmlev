@@ -838,3 +838,27 @@ pub async fn competition_prizes(
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }
+
+/// Sets a player's native squad number; a teammate wearing it is swapped.
+pub async fn update_squad_number(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::SquadNumberRequest>,
+) -> impl IntoResponse {
+    let number = payload.number.filter(|n| *n != 0);
+    let mut w = state.inner.write().await;
+    match w.context_mgr.update_squad_number(payload.player_id, number) {
+        Ok(swapped) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": match (number, swapped) {
+                    (_, Some(other)) => format!("Squad number saved; swapped with player {other}. FM26 shows it after the next day."),
+                    (Some(_), None) => "Squad number saved. FM26 shows it after the next day.".to_string(),
+                    (None, None) => "Squad number cleared. FM26 shows it after the next day.".to_string(),
+                },
+                "swapped_with": swapped
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}

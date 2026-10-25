@@ -15,6 +15,7 @@ pub mod default_registries;
 pub mod inspector;
 pub mod mutations;
 pub mod prizes;
+pub mod squad;
 
 #[cfg(test)]
 mod tests;

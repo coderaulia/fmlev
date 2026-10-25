@@ -205,8 +205,8 @@ the updated release. This follow-up remains uncommitted and unpushed.
 
 | Feature | Live reads | Live writes |
 | --- | --- | --- |
-| Club transfer budget | Binding value | Native block write with readback/rollback; verified in game |
-| Club balance, income, expenditure, facilities | Bindings | Not supported: UI caches are overwritten by the game; native sources not located |
+| Club balance and transfer budget | Native finance object | Native write with readback/rollback; verified in game (balance month-end persistence unconfirmed) |
+| Club income, expenditure, facilities | Bindings | Not supported: UI caches are overwritten by the game; native sources not located |
 | Competition prize money | Native i32 table (identified by Rules-page values) | Native write with readback/rollback; verified on the Rules page, season-end payout unconfirmed |
 | Competition rules (subs, foreign, squad) | Not located | Not supported |
 | Squad number | Native contract + 0x5d | Native write with teammate swap, readback/rollback; verified in game (visible after next day) |

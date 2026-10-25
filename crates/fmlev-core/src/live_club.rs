@@ -245,23 +245,20 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
 
 /// Writes the club values that have a verified native path. Binding values are only UI caches
 /// the game overwrites, so they are never written. Currently only the transfer budget is native
-/// (verified in game); balance and facility ratings are rejected rather than reported as saved.
+/// and the balance (native finance object, both verified in game; balance month-end persistence
+/// unconfirmed); facility ratings are rejected rather than reported as saved.
 pub fn write_live_club(
     driver: &LinuxMemoryDriver,
     binding_subsystem: usize,
     club_id: i32,
     finances: &ClubFinances,
 ) -> Result<()> {
+    // Facility ratings can only be compared while their bindings are visible.
     let snapshot = read_live_clubs(driver, binding_subsystem)
         .into_iter()
         .find(|club| club.id == club_id)
-        .ok_or_else(|| CoreError::InvalidValue(format!(
-            "No live bindings found for club {club_id}; open Club > Finances in FM26"
-        )))?;
+        .unwrap_or_default();
     let mut unsupported = Vec::new();
-    if snapshot.balance_game_units.is_some_and(|v| v != finances.balance) {
-        unsupported.push("balance (derived by the game, no verified native field)");
-    }
     for (name, live, requested) in [
         ("training_facilities", snapshot.training_rating, finances.training_facilities),
         ("youth_facilities", snapshot.youth_rating, finances.youth_facilities),
@@ -273,18 +270,21 @@ pub fn write_live_club(
     }
     if !unsupported.is_empty() {
         return Err(CoreError::InvalidValue(format!(
-            "No verified native write path for: {}. No fields were written. Only the transfer budget can be saved.",
+            "No verified native write path for: {}. No fields were written. Only the balance and transfer budget can be saved.",
             unsupported.join(", ")
         )));
     }
-    let (Some(transfer), Some(balance)) = (snapshot.transfer_budget_game_units, snapshot.balance_game_units) else {
-        return Err(CoreError::InvalidValue(
-            "Open Club > Finances in FM26 so the transfer budget can be located".into(),
-        ));
-    };
-    if transfer == finances.transfer_budget {
-        return Ok(());
+    // Native values are authoritative; bindings lag until the screen refreshes.
+    let record = crate::native_club::NativeClubFinance::discover(driver, club_id)?;
+    let (balance, transfer) = (record.read_balance(driver)?, record.read_transfer_budget(driver)?);
+    if i64::from(transfer) != finances.transfer_budget {
+        record.write_transfer_budget(driver, finances.transfer_budget)?;
     }
-    let block = crate::native_club::NativeClubFinance::discover(driver, transfer, balance)?;
-    block.write_transfer_budget(driver, finances.transfer_budget)
+    if i64::from(balance) != finances.balance {
+        if let Err(error) = record.write_balance(driver, finances.balance) {
+            let _ = record.write_transfer_budget(driver, i64::from(transfer));
+            return Err(error);
+        }
+    }
+    Ok(())
 }

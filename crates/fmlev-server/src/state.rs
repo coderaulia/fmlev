@@ -160,6 +160,14 @@ pub struct SearchQuery {
     pub q: String,
 }
 
+/// Raw-GBP club money; omit a field to leave it unchanged.
+#[derive(Deserialize)]
+pub struct ClubMoneyRequest {
+    pub club_id: i32,
+    pub balance: Option<i64>,
+    pub transfer_budget: Option<i64>,
+}
+
 /// `number` 1..=99, or null/0 to clear the squad number.
 #[derive(Deserialize)]
 pub struct SquadNumberRequest {

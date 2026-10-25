@@ -862,3 +862,25 @@ pub async fn update_squad_number(
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }
+
+/// Writes the active club's native balance and/or transfer budget (Club > Finances must be open).
+pub async fn update_club_money(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::ClubMoneyRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    if let Err(error) = w.context_mgr.sync_live_context() {
+        return api_error(StatusCode::BAD_REQUEST, error);
+    }
+    match w.context_mgr.update_club_money(payload.club_id, payload.balance, payload.transfer_budget) {
+        Ok(club) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": "Club money saved. Reopen Club > Finances to see it.",
+                "club": club
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}

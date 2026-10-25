@@ -2263,6 +2263,22 @@
           </button>
         </div>
 
+        <!-- Live native club money (verified fields only) -->
+        <div class="card" id="club-money-card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">💷 Live Club Money (raw GBP)</div>
+          <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+            Balance and transfer budget are read and written natively and show after you reopen Club &gt; Finances. Balance survives day ticks; month-end persistence is unconfirmed.
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input id="club-money-balance" type="number" class="form-control" placeholder="Balance">
+            <input id="club-money-transfer" type="number" class="form-control" placeholder="Transfer budget">
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button class="btn" onclick="loadClubMoney()">Load from game</button>
+            <button class="btn btn-emerald" onclick="saveClubMoney()">💾 Save Club Money</button>
+          </div>
+        </div>
+
         <!-- Affiliated Clubs Manager -->
         <div class="card">
           <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
@@ -5398,6 +5414,32 @@
     // Toast helper
 
 
+
+    async function clubMoneyRequest(body) {
+      if (!state.activeClub) throw new Error("Select a club first");
+      const res = await fetch("/api/club/money", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ club_id: state.activeClub.club_id, ...body })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Club money request failed");
+      document.getElementById("club-money-balance").value = data.club.balance;
+      document.getElementById("club-money-transfer").value = data.club.transfer_budget;
+      return data;
+    }
+    async function loadClubMoney() {
+      try { await clubMoneyRequest({}); showToast("Club money read from the game.", "success"); }
+      catch (error) { showToast(error.message, "error"); }
+    }
+    async function saveClubMoney() {
+      try {
+        const read = id => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
+        const body = { balance: read("club-money-balance"), transfer_budget: read("club-money-transfer") };
+        if ([body.balance, body.transfer_budget].some(v => v !== null && !Number.isInteger(v))) throw new Error("Amounts must be whole numbers");
+        const data = await clubMoneyRequest(body);
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
     async function saveSquadNumber() {
       try {
         if (!state.activePlayer) throw new Error("Select a player first");

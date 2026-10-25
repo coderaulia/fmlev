@@ -16,6 +16,7 @@ pub mod inspector;
 pub mod mutations;
 pub mod prizes;
 pub mod squad;
+pub mod club_money;
 
 #[cfg(test)]
 mod tests;

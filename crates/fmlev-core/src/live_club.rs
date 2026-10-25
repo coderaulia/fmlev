@@ -253,6 +253,7 @@ pub fn write_live_club(
 ) -> Result<()> {
     let rows = extract_rows(driver, binding_subsystem);
     let mut balance_tv: Option<usize> = None;
+    let mut transfer_tv: Option<usize> = None;
     let mut training_obj: Option<usize> = None;
     let mut youth_obj: Option<usize> = None;
     let mut corporate_obj: Option<usize> = None;
@@ -261,6 +262,7 @@ pub fn write_live_club(
         if kind == 3 && id == club_id {
             match prop.as_str() {
                 "OverallBalance" => balance_tv = Some(tv),
+                "TransferBudget" => transfer_tv = Some(tv),
                 "TrainingFacilityRating" => training_obj = object_value(driver, tv),
                 "YouthFacilityRating" => youth_obj = object_value(driver, tv),
                 "CorporateFacilityRating" => corporate_obj = object_value(driver, tv),
@@ -269,28 +271,13 @@ pub fn write_live_club(
         }
     }
 
-    if balance_tv.is_none() && training_obj.is_none() && youth_obj.is_none() && corporate_obj.is_none() {
+    if balance_tv.is_none() && transfer_tv.is_none() && training_obj.is_none() && youth_obj.is_none() && corporate_obj.is_none() {
         return Err(CoreError::InvalidValue(format!("No writable bindings found for club {club_id}; open Club > Finances or Club > Facilities in FM26")));
-    }
-
-    // 1. Write balance if slot is present
-    if let Some(tv) = balance_tv {
-        let old_balance: i64 = driver.read(tv + 0x18)?;
-        if finances.balance != old_balance {
-            driver.write(tv + 0x18, &finances.balance)?;
-            let readback: i64 = driver.read(tv + 0x18)?;
-            if readback != finances.balance {
-                let _ = driver.write(tv + 0x18, &old_balance);
-                return Err(CoreError::InvalidValue(
-                    "Club balance read-back verification failed; rolled back to previous value".into(),
-                ));
-            }
-        }
     }
 
     // Helper to resolve commonInts pool from any valid TV
     let find_common_ints = || -> Option<usize> {
-        let sample_tv = balance_tv?;
+        let sample_tv = balance_tv.or(transfer_tv)?;
         let mut klass = driver.read_ptr(sample_tv).ok()?;
         for _ in 0..8 {
             if let Ok(c) = fmlev_il2cpp::Il2CppClass::read(driver, klass) {
@@ -308,6 +295,43 @@ pub fn write_live_club(
     };
 
     let common_array = find_common_ints();
+
+    // Money slots are plain numeric payloads. They must never be one of the shared
+    // `TypedValue.s_commonInts` objects, or every other binding using that constant changes.
+    let write_money = |tv_opt: Option<usize>, target: i64, label: &str| -> Result<()> {
+        let Some(tv) = tv_opt else { return Ok(()); };
+        let Some(arr) = common_array else {
+            return Err(CoreError::InvalidValue(format!(
+                "Cannot prove {label} is not a shared constant (common-int pool unavailable); not written"
+            )));
+        };
+        for i in 0..102 {
+            if driver.read_ptr(arr + 0x20 + i * 8)? == tv {
+                return Err(CoreError::InvalidValue(format!(
+                    "{label} binding is a shared constant; not written"
+                )));
+            }
+        }
+        if object_class(driver, tv) != Some(("NumericTypedValue".into(), "SI.Core".into()))
+            || driver.read::<i32>(tv + 0x20)? != 0
+        {
+            return Err(CoreError::InvalidValue(format!("{label} binding is not a signed numeric value; not written")));
+        }
+        let old: i64 = driver.read(tv + 0x18)?;
+        if old == target {
+            return Ok(());
+        }
+        driver.write(tv + 0x18, &target)?;
+        if driver.read::<i64>(tv + 0x18)? != target {
+            let _ = driver.write(tv + 0x18, &old);
+            return Err(CoreError::InvalidValue(format!(
+                "{label} read-back verification failed; rolled back to previous value"
+            )));
+        }
+        Ok(())
+    };
+    write_money(balance_tv, finances.balance, "Club balance")?;
+    write_money(transfer_tv, finances.transfer_budget, "Transfer budget")?;
 
     // Helper to write facility rating key 0x3235_2020 in a DynamicReference
     let write_facility_rating = |obj_opt: Option<usize>, target_rating: u8| -> Result<()> {

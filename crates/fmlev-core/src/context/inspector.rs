@@ -1284,3 +1284,27 @@ pub(crate) fn decode_base64_simple(input: &str) -> Option<Vec<u8>> {
     }
     Some(out)
 }
+
+/// Club fields with a live write path. Everything else is a UI-only or fixture value.
+const LIVE_CLUB_WRITABLE: [&str; 7] = [
+    "balance",
+    "transfer_budget",
+    "training_facilities",
+    "youth_facilities",
+    "corporate_facilities",
+    "club_id",
+    "club_name",
+];
+
+pub(crate) fn unsupported_live_club_changes(
+    previous: &crate::models::ClubFinances,
+    requested: &crate::models::ClubFinances,
+) -> Vec<String> {
+    let old = serde_json::to_value(previous).unwrap();
+    let new = serde_json::to_value(requested).unwrap();
+    let (Some(old), Some(new)) = (old.as_object(), new.as_object()) else { return Vec::new(); };
+    new.iter()
+        .filter(|(key, value)| old.get(*key) != Some(*value) && !LIVE_CLUB_WRITABLE.contains(&key.as_str()))
+        .map(|(key, _)| key.clone())
+        .collect()
+}

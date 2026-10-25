@@ -531,26 +531,6 @@ impl NativePlayerRecord {
         Ok(())
     }
 
-    /// Clear promise friction and restore peak happiness.
-    pub fn remove_promises(&self, driver: &LinuxMemoryDriver) -> Result<()> {
-        self.validate(driver)?;
-        let mut patches = Vec::new();
-
-        let c0 = driver.read::<i32>(self.address + 0xc0)?;
-        if c0 < 10000 {
-            patches.push(NativeEdit::capture(driver, self.address + 0xc0, 10000i32.to_le_bytes().to_vec())?);
-        }
-        let f0 = driver.read::<i32>(self.address + 0x100)?;
-        if f0 < 10000 {
-            patches.push(NativeEdit::capture(driver, self.address + 0x100, 10000i32.to_le_bytes().to_vec())?);
-        }
-
-        if !patches.is_empty() {
-            self.apply_edits(driver, &patches, None)?;
-        }
-        Ok(())
-    }
-
     #[cfg(test)]
     fn apply_byte_edits(&self, driver: &LinuxMemoryDriver, edits: &[(usize, u8, u8)]) -> Result<()> {
         let edits: Vec<_> = edits.iter().map(|&(offset, old, next)| NativeEdit {

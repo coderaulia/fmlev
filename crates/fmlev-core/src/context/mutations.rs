@@ -9,7 +9,7 @@ use crate::models::{
 use super::inspector::{
     build_template_live_player, extract_live_bound_players, merge_player_attributes,
     resolve_binding_subsystem, unknown_clubfinances, unknown_competitiondetails,
-    unknown_nationdetails, unsupported_live_player_changes,
+    unknown_nationdetails, unsupported_live_club_changes, unsupported_live_player_changes,
 };
 use super::GameContextManager;
 
@@ -209,6 +209,14 @@ impl GameContextManager {
 
     fn update_live_club(&mut self, club: ClubFinances) -> Result<()> {
         let club_id = club.club_id;
+        if let Some(previous) = self.club_registry.get(&club_id) {
+            let unsupported = unsupported_live_club_changes(previous, &club);
+            if !unsupported.is_empty() {
+                return Err(CoreError::InvalidValue(format!(
+                    "No verified live write path for: {}. No fields were written. Balance, transfer budget and facility ratings can be saved.", unsupported.join(", ")
+                )));
+            }
+        }
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         let b_sub = resolve_binding_subsystem(session)
             .ok_or_else(|| CoreError::InvalidValue("Live club bindings are unavailable; open this club's screen in FM26".into()))?;
@@ -381,14 +389,9 @@ impl GameContextManager {
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
             && matches!(normalized.as_str(), "remove_promises" | "clear_promises")
         {
-            let record = self.verified_native_player(self.context.player.id)?;
-            let session = self.session.as_ref().unwrap();
-            record.remove_promises(&session.driver)?;
-            self.context.player.contract.happiness = "Delighted".to_string();
-            self.player_registry
-                .insert(self.context.player.id, self.context.player.clone());
-            info!("Applied live quick action: remove_promises (Player ID: {})", self.context.player.id);
-            return Ok(());
+            return Err(CoreError::InvalidValue(
+                "Clearing promises has no verified native field yet. Use Heal for condition and sharpness.".to_string(),
+            ));
         }
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())

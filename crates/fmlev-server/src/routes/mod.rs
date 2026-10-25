@@ -38,6 +38,8 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/player/squad-number", post(update_squad_number))
         .route("/api/player/contract/extend", post(extend_contract))
         .route("/api/player/contract/terminate", post(terminate_contract))
+        .route("/api/player/loan/terminate", post(terminate_loan))
+        .route("/api/transfer/move", post(move_player))
         .route("/api/transfer/sign", post(transfer_not_implemented))
         .route("/api/transfer/loan", post(transfer_not_implemented))
         .route("/api/player/familiarity", post(maximise_familiarity))

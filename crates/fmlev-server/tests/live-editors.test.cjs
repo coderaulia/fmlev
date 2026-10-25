@@ -30,14 +30,36 @@ test('connected-mode hiding skips marked live editors', () => {
 });
 
 test('every live editor endpoint the UI calls exists in the router', () => {
-  for (const route of ['/api/player/squad-number', '/api/player/contract/extend', '/api/player/familiarity', '/api/club/money', '/api/competition/prizes', '/api/competition/registration']) {
+  for (const route of [
+    '/api/player/squad-number',
+    '/api/player/contract/extend',
+    '/api/player/contract/terminate',
+    '/api/player/loan/terminate',
+    '/api/transfer/move',
+    '/api/player/familiarity',
+    '/api/club/money',
+    '/api/competition/prizes',
+    '/api/competition/registration',
+  ]) {
     assert.ok(html.includes(`"${route}"`), `UI calls ${route}`);
     assert.ok(router.includes(`"${route}"`), `router serves ${route}`);
   }
 });
 
 test('live editor buttons call functions that exist', () => {
-  for (const fn of ['saveSquadNumber', 'extendContract', 'maxFamiliarity', 'loadClubMoney', 'saveClubMoney', 'loadPrizeTable', 'savePrizeTable', 'setRegistration']) {
+  for (const fn of [
+    'saveSquadNumber',
+    'extendContract',
+    'terminateContract',
+    'terminateLoan',
+    'movePlayer',
+    'maxFamiliarity',
+    'loadClubMoney',
+    'saveClubMoney',
+    'loadPrizeTable',
+    'savePrizeTable',
+    'setRegistration',
+  ]) {
     assert.match(html, new RegExp(`function ${fn}\\(`), `${fn} is defined`);
     assert.match(html, new RegExp(`onclick="${fn}\\(`), `${fn} is wired to a button`);
   }

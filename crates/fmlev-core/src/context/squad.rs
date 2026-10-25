@@ -36,4 +36,44 @@ impl GameContextManager {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         record.extend_contract(&session.driver, years)
     }
+
+    /// Releases a player as a free agent by detaching their contract and removing them from squad vectors.
+    pub fn terminate_contract(&mut self, id: i32) -> Result<Vec<usize>> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let res = record.terminate_contract(&session.driver)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
+
+    /// Terminates an active loan, returning the player to their parent club.
+    pub fn terminate_loan(&mut self, id: i32) -> Result<(usize, usize)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let res = record.terminate_loan(&session.driver)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
+
+    /// Moves a contracted player to a target club's first team (or a specific team address).
+    pub fn move_player(
+        &mut self,
+        id: i32,
+        target_club_id: Option<i32>,
+        target_team_address: Option<usize>,
+    ) -> Result<(usize, usize)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let team_addr = match (target_team_address, target_club_id) {
+            (Some(addr), _) => addr,
+            (None, Some(club_id)) => {
+                let club = crate::native_club::NativeClubRecord::discover(&session.driver, club_id)?;
+                club.first_team.ok_or_else(|| CoreError::InvalidValue("Target club has no valid first team".into()))?
+            }
+            (None, None) => return Err(CoreError::InvalidValue("Either target_club_id or target_team_address must be provided".into())),
+        };
+        let res = record.move_player(&session.driver, team_addr)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
 }

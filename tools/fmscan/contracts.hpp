@@ -74,7 +74,10 @@ inline Json squad_membership(const Memory& m, const NativeCatalog& catalog, U te
     if (!m.read(team + 0x38, check) || check != v || !fresh || fresh->uid != entity->uid || fresh->index != entity->index)
         throw std::runtime_error("squad identity/vector changed during capture; retry");
     j.str("status", "bounded_pointer_vector_candidate"); j.addr("begin", v[0]); j.addr("end", v[1]); j.addr("capacity", v[2]);
-    j.num("entry_count", entries.size()); j.raw("selected_player_slots", array(matches));
+    j.num("entry_count", entries.size());
+    j.num("capacity_count", (v[2] - v[0]) / 8);
+    j.num("spare_slots", (v[2] - v[1]) / 8);
+    j.raw("selected_player_slots", array(matches));
     j.str("interpretation", "exact ACTUAL_PLAYER pointer matches only; roster semantics and writes not authorized");
     return j;
 }

@@ -106,9 +106,44 @@ checks free agents, bad ownership/types/dates/teams/vectors, duplicate identitie
 loan attachment, reference truncation and watcher changes. There has been no live
 sign, loan, terminate or pending-join experiment in this stage.
 
-For the next experiment, capture a baseline with `transfer --refs`, start
-`transfer-watch`, perform one normal game action, then capture `transfer --refs`
-again. Compare contract, loan, current-team and both squad lists together. A
-pending join date may be elsewhere; the AgreementOffset table is an unimplemented
-lead. Any future writer needs ownership/lifecycle validation and a separate
-transactional design, readback/rollback and continued-game proof.
+## Live Contract Termination and Transfer Mechanics (Stage 1 Resolution)
+
+### Free Agent Identity & Reference Findings (2026-10-25, PID 5945)
+1. **Unemployed Free Agents in FM26**:
+   - Examination of genuine free agents across live memory (e.g., Brad Guzan, 2888/980785):
+     - `record + 0x1e8 == 0` (parent `FULL_CONTRACT` pointer is null).
+     - `ACTUAL_PLAYER + 0x130 == 0` and `ACTUAL_PLAYER + 0x138 == 0` (current team pointers are null).
+     - `record + 0x1e0 == 0` (agreement slot is null, unless a pending transfer was arranged).
+     - `record + 0x1f0 == 0` (loan node slot is null).
+     - Global team squad vector scan: 0 appearances across all 4,890 team squad vectors.
+2. **Contract Object Pointer Ownership**:
+   - Whole-memory reference scans across all readable/writable private heap mappings revealed that **only one single pointer** in the entire process references a contracted player's `FULL_CONTRACT` object: the player's own `record + 0x1e8` slot.
+   - There is no process-wide contract registry, vector, or lookup table iterating `FULL_CONTRACT` objects. Detaching the pointer at `record + 0x1e8` cleanly releases the player's contract without corrupting engine lookups.
+3. **Squad Vector Memory Safety**:
+   - Live scanning across 4,890 `TEAM` objects demonstrated that 4,346 teams have `end == capacity` while 544 have spare capacity.
+   - **Compacting Removal**: Shrinking a squad vector (`compact_removal_patches`) only shifts remaining pointer entries left and decrements `end` by 8 bytes. It never reallocates and never overflows.
+   - **Appending**: Appending a player to a destination squad vector (`append_patches`) safely requires `spare_slots > 0` (`end < capacity`). If a destination team is full, writes are refused rather than risking out-of-bounds heap corruption.
+
+### Production Rust Implementation (`crates/fmlev-core/src/native_transfer.rs`)
+- `terminate_contract`: multi-object detachment releasing the player as a free agent:
+  - Validates player identity and contract ownership.
+  - Locates and compacts all team squad vectors where the player appears (current team, parent team, loan team).
+  - Clears `ACTUAL_PLAYER + 0x130` and `+ 0x138` to null.
+  - Clears `record + 0x1e8` (contract), `record + 0x1e0` (agreement), and `record + 0x1f0` (loan) to null.
+  - Atomic readback and full reverse rollback verification.
+- `terminate_loan`: recalls a loaned player back to their parent club:
+  - Compacts the loan team squad vector.
+  - Restores `ACTUAL_PLAYER + 0x130` and `+ 0x138` to the parent team.
+  - If not already present in the parent squad vector and spare capacity exists, appends the player.
+  - Clears `record + 0x1f0` (loan node).
+- `move_player`: transfers a contracted player between teams:
+  - Requires destination squad vector to have spare capacity (`spare_slots > 0`).
+  - Removes player from source squad vector (compacting `end -= 8`).
+  - Appends player to target squad vector (`end += 8`).
+  - Updates `ACTUAL_PLAYER + 0x130`/`0x138` and `FULL_CONTRACT + 0x10`/`0x18` to the target team.
+  - Clears active loan node if present.
+- REST API:
+  - `POST /api/player/contract/terminate` `{ player_id }`
+  - `POST /api/player/loan/terminate` `{ player_id }`
+  - `POST /api/transfer/move` `{ player_id, target_club_id?, target_team_address? }`
+  - `POST /api/transfer/sign`: returns 400 Bad Request explaining that signing an unemployed free agent requires game-allocated contract objects.

@@ -661,3 +661,51 @@ async fn memory_routes_round_trip_values_and_reject_invalid_writes() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert_eq!(buffer, previous);
 }
+
+#[tokio::test]
+async fn test_contract_and_transfer_routes() {
+    let app_state = offline_app_state();
+    let app = create_router(ServerState {
+        inner: Arc::new(RwLock::new(app_state)),
+    });
+
+    // 1. Sign free agent should return informative bad request
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/transfer/sign")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 2. Terminate contract with offline state should fail gracefully (no live session)
+    let body = serde_json::json!({ "player_id": 1 });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/player/contract/terminate")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 3. Move player with offline state should fail gracefully (no live session)
+    let body = serde_json::json!({ "player_id": 1, "target_club_id": 100 });
+    let response = app
+        .oneshot(
+            Request::post("/api/transfer/move")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

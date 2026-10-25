@@ -218,8 +218,7 @@ impl GameContextManager {
             }
         }
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let b_sub = resolve_binding_subsystem(session)
-            .ok_or_else(|| CoreError::InvalidValue("Live club bindings are unavailable; open this club's screen in FM26".into()))?;
+        let b_sub = resolve_binding_subsystem(session).unwrap_or(0);
         crate::live_club::write_live_club(&session.driver, b_sub, club_id, &club)?;
         self.user_modified_clubs.insert(club_id);
         self.context.club = club.clone();

@@ -198,6 +198,23 @@ pub struct ContractExtendRequest {
     pub years: Option<i32>,
 }
 
+#[derive(Deserialize)]
+pub struct ContractTerminateRequest {
+    pub player_id: i32,
+}
+
+#[derive(Deserialize)]
+pub struct LoanTerminateRequest {
+    pub player_id: i32,
+}
+
+#[derive(Deserialize)]
+pub struct PlayerMoveRequest {
+    pub player_id: i32,
+    pub target_club_id: Option<i32>,
+    pub target_team_address: Option<usize>,
+}
+
 /// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.
 /// Omit `prizes` to read; provide it to write one raw-GBP amount per position.
 #[derive(Deserialize)]

@@ -169,3 +169,26 @@ crates/
   - `cargo test --workspace`: 116 tests passing (115 passed, 1 ignored, 0 failed).
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 32 passed, 0 failed.
   - All source files strictly $\le$ 1,328 LOC.
+
+### Phase 8: Native Contract Termination, Loan Recall, and Player Moves (Completed)
+- **Investigation & Memory Verification on PID 5945**:
+  - Investigated native contract and transfer data structures on live FM26 PID 5945 using C++ `fmscan` and Python memory analysis.
+  - Inspected real free agents (Brad Guzan 2888/980785 and others) and confirmed exact native state: `record + 0x1e8 == 0` (contract absent), `ACTUAL_PLAYER + 0x130 == 0` and `+ 0x138 == 0` (current team absent), `record + 0x1e0 == 0` (agreement absent), `record + 0x1f0 == 0` (loan absent), and zero appearances in any team squad vector (`team + 0x38`).
+  - Heap-wide reference scans across all `rw-p` memory regions confirmed that only a single pointer in the entire process references a player's `FULL_CONTRACT` object (the player's own `record + 0x1e8` slot). No global contract registry or iteration vector exists.
+  - Squad vector analysis across 4,890 live teams revealed 4,346 teams have `end == capacity` while 544 have spare capacity. Removing a player and compacting remaining elements (`end -= 8`) never requires reallocation. Appending to a destination squad vector (`append_patches`) safely requires `spare_slots > 0` (`end < capacity`), preventing out-of-bounds heap corruption.
+- **C++ Discovery Enhancements (`tools/fmscan/`)**:
+  - `entities.hpp`: relaxed `read_entity` team duplicate UID check so reserve / youth / U19 teams (which have `uid != uid2`) resolve properly, linking youth players (e.g. Cortina at Levante U19s) to their parent club.
+  - `contracts.hpp`: squad membership candidate now extracts `capacity_count` and `spare_slots`.
+- **Rust Implementation (`crates/fmlev-core/` and `crates/fmlev-server/`)**:
+  - `native_transfer.rs`: Implemented `SquadVector` (bounds checking, element reading, compaction removal, append), `NativeEdit`, and transactional atomic writes with readback and full reverse rollback.
+  - Added `terminate_contract`: detaches parent contract, clears team pointers (`0x130`/`0x138`), clears agreements and loans, and removes player from all squad vectors.
+  - Added `terminate_loan`: removes player from loan team squad vector, restores current team pointers to parent team, and clears loan node.
+  - Added `move_player`: verifies spare capacity in destination squad vector, removes from source squad vector, appends to target squad vector, updates contract team pointers (`contract + 0x10`/`0x18`) and player team pointers (`0x130`/`0x138`).
+  - Added REST API routes: `POST /api/player/contract/terminate`, `POST /api/player/loan/terminate`, `POST /api/transfer/move`, and informative `POST /api/transfer/sign`.
+  - Added UI controls and action buttons in `ui.html` for contract termination, loan recall, and club transfer.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 120 tests passing (119 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 32 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 tests passed, 0 failed.
+  - All source files strictly $\le$ 1,223 LOC.

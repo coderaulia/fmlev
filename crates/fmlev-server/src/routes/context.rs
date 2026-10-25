@@ -884,21 +884,72 @@ pub async fn extend_contract(
     }
 }
 
-/// Terminate is unverified: setting the expiry to today did not release the player in game
-/// (FM26 releases through scheduled events), so nothing is written.
-pub async fn terminate_contract() -> impl IntoResponse {
-    api_error(
-        StatusCode::NOT_IMPLEMENTED,
-        fmlev_core::CoreError::InvalidValue("Terminate is not implemented: expiring the contract on the current date does not release the player".into()),
-    )
+/// Terminates a player's contract in native memory, detaching contract, team, and agreement links,
+/// and removing the player from team squad vectors. Releases the player as a free agent.
+pub async fn terminate_contract(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::ContractTerminateRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.terminate_contract(payload.player_id) {
+        Ok(cleared_teams) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": format!("Player contract terminated and detached from {} squad vector(s). Player is now a free agent.", cleared_teams.len()),
+                "cleared_teams": cleared_teams
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
 }
 
-/// Sign and loan are not implemented: the game allocates a contract (free agent) or a loan
-/// agreement object plus list entries for a transfer, which memory writes cannot create safely.
+/// Terminates an active loan, returning the player from the loan club to their parent club.
+pub async fn terminate_loan(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::LoanTerminateRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.terminate_loan(payload.player_id) {
+        Ok((loan_team, parent_team)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": "Loan terminated. Player returned to parent club squad.",
+                "loan_team": format!("0x{:x}", loan_team),
+                "parent_team": format!("0x{:x}", parent_team),
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Moves a contracted player to a destination club or team.
+pub async fn move_player(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::PlayerMoveRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address) {
+        Ok((from_team, to_team)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": "Player moved successfully to target team squad.",
+                "from_team": format!("0x{:x}", from_team),
+                "to_team": format!("0x{:x}", to_team),
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Sign for unemployed free agents is not implemented: the game allocates a contract object with
+/// complex internal simulation queues, which raw memory writes cannot create safely.
 pub async fn transfer_not_implemented() -> impl IntoResponse {
     api_error(
-        StatusCode::NOT_IMPLEMENTED,
-        fmlev_core::CoreError::InvalidValue("Signing and loans are not implemented: they need game-allocated contract and loan objects".into()),
+        StatusCode::BAD_REQUEST,
+        fmlev_core::CoreError::InvalidValue("Signing an unemployed free agent requires game-allocated contract objects. Use Move Player for contracted players instead.".into()),
     )
 }
 

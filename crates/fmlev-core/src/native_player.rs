@@ -136,13 +136,13 @@ fn expiry_with_year(raw: u32, year: i32) -> Result<u32> {
 
 #[derive(Debug, Clone)]
 pub struct NativePlayerRecord {
-    address: usize,
-    pid: i32,
-    index: i32,
-    uid: u32,
-    player_vtable: usize,
-    person_vtable: usize,
-    attributes_verified: bool,
+    pub(crate) address: usize,
+    pub(crate) pid: i32,
+    pub(crate) index: i32,
+    pub(crate) uid: u32,
+    pub(crate) player_vtable: usize,
+    pub(crate) person_vtable: usize,
+    pub(crate) attributes_verified: bool,
 }
 
 fn invalid(message: &str) -> CoreError {
@@ -866,6 +866,25 @@ impl NativePlayerRecord {
             )));
         }
         Ok(())
+    }
+
+    /// Terminates the player's contract, detaching all team/contract/loan links and
+    /// removing the player from team squad vectors.
+    pub fn terminate_contract(&self, driver: &LinuxMemoryDriver) -> Result<Vec<usize>> {
+        self.validate(driver)?;
+        crate::native_transfer::terminate_contract(driver, self)
+    }
+
+    /// Terminates an active loan, returning the player to their parent team.
+    pub fn terminate_loan(&self, driver: &LinuxMemoryDriver) -> Result<(usize, usize)> {
+        self.validate(driver)?;
+        crate::native_transfer::terminate_loan(driver, self)
+    }
+
+    /// Moves a contracted player to a destination team squad vector.
+    pub fn move_player(&self, driver: &LinuxMemoryDriver, target_team: usize) -> Result<(usize, usize)> {
+        self.validate(driver)?;
+        crate::native_transfer::move_player(driver, self, target_team)
     }
 }
 

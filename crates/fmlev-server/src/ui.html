@@ -2047,6 +2047,32 @@
           </button>
         </div>
       </div>
+
+      <!-- NATIVE CONTRACT & TRANSFER ACTIONS -->
+      <div id="transfer-actions-card" class="card" style="margin-top: 16px;">
+        <div style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+          <h3 style="font-size: 15px; font-weight: 800;">⚡ Native Transfer & Contract Lifecycle</h3>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Transactionally release players as free agents (compacting squad vectors), terminate loans back to parent clubs, or transfer contracted players between clubs.
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="btn-terminate-contract" class="btn" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444;" onclick="terminateContract()">
+              🚪 Terminate Contract (Free Agent)
+            </button>
+            <button id="btn-terminate-loan" class="btn" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b;" onclick="terminateLoan()">
+              ↩️ Recall from Loan
+            </button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input id="transfer-target-club-id" type="number" class="form-control" placeholder="Target Club ID..." style="width: 140px; font-size: 12px;">
+            <button id="btn-move-player" class="btn btn-emerald" style="padding: 6px 14px; font-size: 12px;" onclick="movePlayer()">
+              📦 Move Player
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 4: ADVANCED CLUB DETAILS, FACILITIES, BOARD & AFFILIATES -->
@@ -2082,134 +2108,131 @@
         </div>
       </div>
 
-      <!-- Financial Budgets & Facilities Matrix Grid -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
-        <!-- Left: Financial Budgets & Stadium -->
-        <div class="card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <span>💰 Financial Budgets & Stadium</span>
-            <span style="font-size: 11px; color: var(--text-dim);">Live Balance & Capacity</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <span>Overall Balance ($)</span>
-              <span style="display: flex; gap: 4px;">
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(50000000)">+$50M</button>
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(-50000000)">-$50M</button>
-              </span>
-            </label>
-            <input id="club-balance" type="number" class="form-control" value="220000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <span>Transfer Budget ($)</span>
-              <span style="display: flex; gap: 4px;">
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(50000000)">+$50M</button>
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(10000000)">+$10M</button>
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(-10000000)">-$10M</button>
-              </span>
-            </label>
-            <input id="club-transfer-budget" type="number" class="form-control" value="115000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <span>Wage Budget ($ / week)</span>
-              <span style="display: flex; gap: 4px;">
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(500000)">+500k</button>
-                <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(-500000)">-500k</button>
-              </span>
-            </label>
-            <input id="club-wage-budget" type="number" class="form-control" value="4200000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Max Wage Allowance ($ / week)</label>
-            <input id="club-max-wage" type="number" class="form-control" value="600000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Stadium Name</label>
-            <input id="club-stadium-name" type="text" class="form-control" value="Etihad Stadium" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label class="form-label">Stadium Capacity</label>
-              <input id="club-stadium-cap" type="number" class="form-control" value="53400" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Expansion Cap</label>
-              <input id="club-stadium-exp" type="number" class="form-control" value="62000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
-            </div>
-          </div>
-
-          <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveClubToGame()">
-            💾 Save Financial Budgets & Stadium
-          </button>
+      <!-- Left: Financial Budgets & Stadium (Unverified in live session; use Live Club Money card below) -->
+      <div class="card" id="club-finances-card" style="margin: 16px 0;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <span>💰 Financial Budgets & Stadium</span>
+          <span style="font-size: 11px; color: var(--text-dim);">Live Balance & Capacity</span>
         </div>
 
-        <!-- Right: Facilities Matrix (1 - 20) with Stepper Controls -->
-        <div class="card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <span>🏗️ Facilities Matrix (1 - 20)</span>
-            <button class="preset-btn" style="padding: 2px 8px; font-size: 10px;" onclick="applyClubPreset('max_facilities')">⭐ Max All (20/20)</button>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Governs squad training quality and attribute growth rates">Training Facilities</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-training', -1)">−</button>
-            <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-training', 1)">+</button>
-            <span id="fac-training-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-training', 'Training Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Governs youth training environment and development quality">Youth Facilities</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-youth', -1)">−</button>
-            <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-youth', 1)">+</button>
-            <span id="fac-youth-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-youth', 'Youth Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Determines youth intake talent pool quality and wonderkid newgen generation">Youth Recruitment</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', -1)">−</button>
-            <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', 1)">+</button>
-            <span id="fac-recruitment-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-recruitment', 'Youth Recruitment')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Governs the starting CA and fundamentals of newly generated youth candidates">Junior Coaching</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-coaching', -1)">−</button>
-            <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-coaching', 1)">+</button>
-            <span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Governs match analyst report precision and opposition data">Data Analysis</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
-            <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
-            <span id="fac-data-analysis-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-data-analysis', 'Data Analysis')" title="Click to enter 1-20" style="cursor: pointer;">18</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name" title="Governs corporate suites and commercial revenue potential">Corporate Facilities</span>
-            <button class="stepper-btn" onclick="stepClubFac('fac-corporate', -1)">−</button>
-            <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepClubFac('fac-corporate', 1)">+</button>
-            <span id="fac-corporate-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-corporate', 'Corporate Facilities')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
-          </div>
-
-          <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveClubToGame()">
-            💾 Save Facilities to Game
-          </button>
+        <div class="form-group">
+          <label class="form-label">
+            <span>Overall Balance ($)</span>
+            <span style="display: flex; gap: 4px;">
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(50000000)">+$50M</button>
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustClubBalance(-50000000)">-$50M</button>
+            </span>
+          </label>
+          <input id="club-balance" type="number" class="form-control" value="220000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
         </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>Transfer Budget ($)</span>
+            <span style="display: flex; gap: 4px;">
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(50000000)">+$50M</button>
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(10000000)">+$10M</button>
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustTransferBudget(-10000000)">-$10M</button>
+            </span>
+          </label>
+          <input id="club-transfer-budget" type="number" class="form-control" value="115000000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>Wage Budget ($ / week)</span>
+            <span style="display: flex; gap: 4px;">
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(500000)">+500k</button>
+              <button type="button" class="btn" style="padding: 1px 6px; font-size: 10px;" onclick="adjustWageBudget(-500000)">-500k</button>
+            </span>
+          </label>
+          <input id="club-wage-budget" type="number" class="form-control" value="4200000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Max Wage Allowance ($ / week)</label>
+          <input id="club-max-wage" type="number" class="form-control" value="600000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Stadium Name</label>
+          <input id="club-stadium-name" type="text" class="form-control" value="Etihad Stadium" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label">Stadium Capacity</label>
+            <input id="club-stadium-cap" type="number" class="form-control" value="53400" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Expansion Cap</label>
+            <input id="club-stadium-exp" type="number" class="form-control" value="62000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
+          </div>
+        </div>
+
+        <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveClubToGame()">
+          💾 Save Financial Budgets & Stadium
+        </button>
+      </div>
+
+      <!-- Right: Facilities Matrix (1 - 20) with Stepper Controls -->
+      <div class="card" id="club-facilities-card" data-live-editor="true" style="margin: 16px 0;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <span>🏗️ Facilities Matrix (1 - 20)</span>
+          <button class="preset-btn" style="padding: 2px 8px; font-size: 10px;" onclick="applyClubPreset('max_facilities')">⭐ Max All (20/20)</button>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name" title="Governs squad training quality and attribute growth rates">Training Facilities</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-training', -1)">−</button>
+          <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-training', 1)">+</button>
+          <span id="fac-training-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-training', 'Training Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name" title="Governs youth training environment and development quality">Youth Facilities</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-youth', -1)">−</button>
+          <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-youth', 1)">+</button>
+          <span id="fac-youth-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-youth', 'Youth Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name" title="Determines youth intake talent pool quality and wonderkid newgen generation">Youth Recruitment</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', -1)">−</button>
+          <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', 1)">+</button>
+          <span id="fac-recruitment-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-recruitment', 'Youth Recruitment')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name" title="Governs the starting CA and fundamentals of newly generated youth candidates">Junior Coaching</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-coaching', -1)">−</button>
+          <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-coaching', 1)">+</button>
+          <span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name" title="Unverified in FM26 memory">Data Analysis (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
+          <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
+          <span id="fac-data-analysis-disp" class="facility-val tier-elite" style="cursor: not-allowed;">18</span>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name" title="Governs corporate suites and commercial revenue potential">Corporate Facilities</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-corporate', -1)">−</button>
+          <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-corporate', 1)">+</button>
+          <span id="fac-corporate-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-corporate', 'Corporate Facilities')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+        </div>
+
+        <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveClubToGame()">
+          💾 Save Facilities to Game
+        </button>
       </div>
 
       <!-- Board & Ownership and Affiliated Clubs Manager Grid -->
@@ -2378,7 +2401,7 @@
       </div>
 
       <!-- Visual Youth Rating Gauge & Slider (1 - 200) -->
-      <div class="youth-gauge-container">
+      <div class="youth-gauge-container" id="nation-youth-card" data-live-editor="true">
         <div class="gauge-header">
           <div>
             <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-cyan);">🧬 National Youth Rating Gauge (1 - 200)</span>
@@ -2411,73 +2434,76 @@
         </div>
       </div>
 
-      <!-- Macro & Governance Grid -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
-        <!-- Card 1: Economic & Governance Macro -->
-        <div class="card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-            <span>🌐 Macro & Economic Factors</span>
-          </div>
+      <!-- Card 1: Economic & Governance Macro -->
+      <div class="card" id="nation-macro-card" data-live-editor="true" style="margin: 16px 0;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <span>🌐 Macro & Economic Factors</span>
+          <button class="btn btn-emerald" style="padding: 3px 10px; font-size: 11px;" onclick="saveNationToGame()">💾 Save Nation</button>
+        </div>
 
-          <div class="form-group">
-            <label class="form-label">International Reputation (1 - 10,000)</label>
-            <div class="stepper-input-group">
-              <input id="nation-reputation" type="number" min="1" max="10000" class="form-control" value="8800" onchange="handleNationRepChange(this.value)">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">State of Development</label>
-            <select id="nation-development" class="form-control">
-              <option value="0">0: Third World / Emerging Nation</option>
-              <option value="1">1: Developing Economy</option>
-              <option value="2" selected>2: Developed Nation</option>
-            </select>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name">Economic Factor (1-20)</span>
-            <button class="stepper-btn" onclick="stepNationStat('economic_factor', -1)">−</button>
-            <input id="nation-economic" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateDisp('disp-nation-econ', this.value)">
-            <button class="stepper-btn" onclick="stepNationStat('economic_factor', 1)">+</button>
-            <span id="disp-nation-econ" class="facility-val tier-elite">19</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name">FA Financial Power (1-20)</span>
-            <button class="stepper-btn" onclick="stepNationStat('fa_financial_power', -1)">−</button>
-            <input id="nation-fa-power" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateDisp('disp-nation-fa', this.value)">
-            <button class="stepper-btn" onclick="stepNationStat('fa_financial_power', 1)">+</button>
-            <span id="disp-nation-fa" class="facility-val tier-elite">18</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name">Tax Rate (0 - 100%)</span>
-            <button class="stepper-btn" onclick="stepNationStat('tax_rate', -5)">−</button>
-            <input id="nation-tax-rate" type="range" min="0" max="100" value="45" class="facility-slider" style="accent-color: var(--accent-gold);" oninput="updateDispPercent('disp-nation-tax', this.value)">
-            <button class="stepper-btn" onclick="stepNationStat('tax_rate', 5)">+</button>
-            <span id="disp-nation-tax" class="facility-val tier-good" style="width: 42px;">45%</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name">Corruption Index (0-20)</span>
-            <button class="stepper-btn" onclick="stepNationStat('corruption_index', -1)">−</button>
-            <input id="nation-corruption" type="range" min="0" max="20" value="2" class="facility-slider" style="accent-color: var(--fm-low);" oninput="updateDisp('disp-nation-corruption', this.value)">
-            <button class="stepper-btn" onclick="stepNationStat('corruption_index', 1)">+</button>
-            <span id="disp-nation-corruption" class="facility-val tier-elite">2</span>
-          </div>
-
-          <div class="facility-row">
-            <span class="facility-name">Game Importance (1-20)</span>
-            <button class="stepper-btn" onclick="stepNationStat('game_importance', -1)">−</button>
-            <input id="nation-game-importance" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateDisp('disp-nation-importance', this.value)">
-            <button class="stepper-btn" onclick="stepNationStat('game_importance', 1)">+</button>
-            <span id="disp-nation-importance" class="facility-val tier-elite">20</span>
+        <div class="form-group">
+          <label class="form-label">International Reputation (1 - 10,000)</label>
+          <div class="stepper-input-group">
+            <input id="nation-reputation" type="number" min="1" max="10000" class="form-control" value="8800" onchange="handleNationRepChange(this.value)">
           </div>
         </div>
 
-        <!-- Card 2: Youth Facilities, Coaching & Recruitment Averages -->
-        <div class="card">
+        <div class="form-group">
+          <label class="form-label">State of Development</label>
+          <select id="nation-development" class="form-control">
+            <option value="0">0: Third World / Emerging Nation</option>
+            <option value="1">1: Developing Economy</option>
+            <option value="2" selected>2: Developed Nation</option>
+          </select>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name">Economic Factor (1-20)</span>
+          <button class="stepper-btn" onclick="stepNationStat('economic_factor', -1)">−</button>
+          <input id="nation-economic" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateDisp('disp-nation-econ', this.value)">
+          <button class="stepper-btn" onclick="stepNationStat('economic_factor', 1)">+</button>
+          <span id="disp-nation-econ" class="facility-val tier-elite">19</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">FA Financial Power (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('fa_financial_power', -1)">−</button>
+          <input id="nation-fa-power" type="range" min="1" max="20" value="18" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('fa_financial_power', 1)">+</button>
+          <span id="disp-nation-fa" class="facility-val tier-elite" style="cursor: not-allowed;">18</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Tax Rate (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('tax_rate', -5)">−</button>
+          <input id="nation-tax-rate" type="range" min="0" max="100" value="45" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('tax_rate', 5)">+</button>
+          <span id="disp-nation-tax" class="facility-val tier-good" style="width: 42px; cursor: not-allowed;">45%</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Corruption Index (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('corruption_index', -1)">−</button>
+          <input id="nation-corruption" type="range" min="0" max="20" value="2" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('corruption_index', 1)">+</button>
+          <span id="disp-nation-corruption" class="facility-val tier-elite" style="cursor: not-allowed;">2</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Game Importance (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('game_importance', -1)">−</button>
+          <input id="nation-game-importance" type="range" min="1" max="20" value="20" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('game_importance', 1)">+</button>
+          <span id="disp-nation-importance" class="facility-val tier-elite" style="cursor: not-allowed;">20</span>
+        </div>
+
+        <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveNationToGame()">
+          💾 Save Nation Macro & Youth
+        </button>
+      </div>
+
+      <!-- Card 2: Youth Facilities, Coaching & Recruitment Averages (Unverified in live session) -->
+      <div class="card" id="nation-averages-card" style="margin: 16px 0;">
           <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
             <span>🌱 National Youth System Averages (1 - 20)</span>
           </div>
@@ -2521,7 +2547,6 @@
             💾 Save Nation Details to Game
           </button>
         </div>
-      </div>
     </section>
 
     <!-- VIEW 6: COMPETITION DETAILS, RULES & PRIZE MONEY -->
@@ -2582,6 +2607,18 @@
         <div style="display: flex; gap: 8px; margin-top: 8px;">
           <button class="btn" onclick="loadPrizeTable()">Load from game</button>
           <button class="btn btn-emerald" onclick="savePrizeTable()">💾 Save Prize Money</button>
+        </div>
+      </div>
+
+      <!-- Live Competition Reputation -->
+      <div class="glass-card" id="competition-reputation-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">⭐ Live Competition Reputation</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Competition reputation is stored natively (1 - 200) and mapped to the 1 - 10,000 UI scale. Saved natively with transactional readback and rollback.
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="comp-reputation" type="number" min="1" max="10000" class="form-control" style="max-width: 220px;" placeholder="Reputation (1-10000)">
+          <button class="btn btn-emerald" onclick="saveCompetitionToGame()">💾 Save Competition Reputation</button>
         </div>
       </div>
 
@@ -3805,6 +3842,16 @@
       }
       for (const input of panel.querySelectorAll("input, select, button, textarea")) {
         if (state.connected) {
+          if (input.closest && input.closest("[data-live-editor]") && !input.hasAttribute("data-unverified")) {
+            continue;
+          }
+          if (input.getAttribute && (
+            input.getAttribute("onclick")?.includes("saveClubToGame") ||
+            input.getAttribute("onclick")?.includes("saveNationToGame") ||
+            input.getAttribute("onclick")?.includes("saveCompetitionToGame")
+          )) {
+            continue;
+          }
           if (!input.hasAttribute("data-entity-original-disabled")) input.dataset.entityOriginalDisabled = String(input.disabled);
           input.disabled = true;
         } else if (input.hasAttribute("data-entity-original-disabled")) {
@@ -3817,23 +3864,51 @@
       const text = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
       if (kind === "club") {
         text("club-title", record.club_name || "Club unavailable");
-        text("club-league-badge", "League unavailable");
-        text("club-rep-num", "Unavailable");
-        text("club-rep-stars", "—");
-        text("save-club-status-indicator", "Live editing unavailable");
+        text("club-league-badge", record.league_name || "League unavailable");
+        text("club-rep-num", record.reputation ? `${record.reputation.toLocaleString()} / 10,000` : "Unavailable");
+        text("club-rep-stars", record.reputation ? getReputationStars(record.reputation) : "—");
+        text("save-club-status-indicator", "✅ Synced with FM26");
+        setFacVal("fac-training", "fac-training-disp", record.training_facilities || 18);
+        setFacVal("fac-youth", "fac-youth-disp", record.youth_facilities || 18);
+        setFacVal("fac-recruitment", "fac-recruitment-disp", record.youth_recruitment || 18);
+        setFacVal("fac-coaching", "fac-coaching-disp", record.junior_coaching || 18);
+        setFacVal("fac-corporate", "fac-corporate-disp", record.corporate_facilities || 19);
       } else if (kind === "nation") {
         text("nation-name", record.name || "Nation unavailable");
         text("nation-code", record.three_letter_code || "—");
         text("nation-continent", record.continent || "Unavailable");
         text("nation-flag-avatar", getCountryFlag(record.name));
-        text("nation-rep-num", "Unavailable");
-        text("nation-rep-stars", "—");
+        text("nation-rep-num", record.reputation ? `${record.reputation.toLocaleString()} / 10,000` : "Unavailable");
+        text("nation-rep-stars", record.reputation ? getReputationStars(record.reputation) : "—");
+        if (record.youth_rating) {
+          const yr = record.youth_rating;
+          const yrVal = document.getElementById("nation-youth-val");
+          if (yrVal) yrVal.innerText = yr;
+          const yrSlider = document.getElementById("nation-youth-slider");
+          if (yrSlider) yrSlider.value = yr;
+          updateYouthRatingDisplay(yr);
+        }
+        if (record.reputation) {
+          const repInput = document.getElementById("nation-reputation");
+          if (repInput) repInput.value = record.reputation;
+        }
+        if (record.economic_factor) {
+          setNationStatUI("nation-economic", "disp-nation-econ", record.economic_factor);
+        }
+        if (record.state_of_development !== undefined) {
+          const dev = document.getElementById("nation-development");
+          if (dev) dev.value = record.state_of_development;
+        }
       } else {
         text("comp-name", record.name || "Competition unavailable");
         text("comp-short-name", record.short_name || "—");
         text("comp-nation", record.nation_name || "Unavailable");
-        text("comp-rep-num", "Unavailable");
-        text("comp-rep-stars", "—");
+        text("comp-rep-num", record.reputation ? `${record.reputation.toLocaleString()} / 10,000` : "Unavailable");
+        text("comp-rep-stars", record.reputation ? getReputationStars(record.reputation) : "—");
+        if (record.reputation) {
+          const compRep = document.getElementById("comp-reputation");
+          if (compRep) compRep.value = record.reputation;
+        }
       }
       return true;
     }
@@ -4720,32 +4795,45 @@
       markClubUnsaved();
     }
 
+    function promptEditClubFac(sliderId, title) {
+      const slider = document.getElementById(sliderId);
+      if (!slider || slider.disabled) return;
+      const current = slider.value || 10;
+      const input = prompt(`Enter ${title} rating (1 - 20):`, current);
+      if (input !== null) {
+        const val = Math.max(1, Math.min(20, parseInt(input) || current));
+        slider.value = val;
+        updateFacVal(`${sliderId}-disp`, val);
+        markClubUnsaved();
+      }
+    }
+
     async function writeClubChanges() {
       if (!state.activeClub) return false;
       state.clubDirty = true;
 
-      state.activeClub.balance = numberInput(document.getElementById("club-balance").value, 0);
-      state.activeClub.transfer_budget = numberInput(document.getElementById("club-transfer-budget").value, 0);
-      state.activeClub.wage_budget = numberInput(document.getElementById("club-wage-budget").value, 0);
-      state.activeClub.max_wage_allowance = numberInput(document.getElementById("club-max-wage").value, 600000);
-      state.activeClub.stadium_name = (document.getElementById("club-stadium-name").value || "").trim();
-      state.activeClub.stadium_capacity = numberInput(document.getElementById("club-stadium-cap").value, 45000);
-      state.activeClub.stadium_expansion_cap = numberInput(document.getElementById("club-stadium-exp").value, 60000);
+      if (!state.connected) {
+        if (document.getElementById("club-balance")) state.activeClub.balance = numberInput(document.getElementById("club-balance").value, 0);
+        if (document.getElementById("club-transfer-budget")) state.activeClub.transfer_budget = numberInput(document.getElementById("club-transfer-budget").value, 0);
+        if (document.getElementById("club-wage-budget")) state.activeClub.wage_budget = numberInput(document.getElementById("club-wage-budget").value, 0);
+        if (document.getElementById("club-max-wage")) state.activeClub.max_wage_allowance = numberInput(document.getElementById("club-max-wage").value, 600000);
+        if (document.getElementById("club-stadium-name")) state.activeClub.stadium_name = (document.getElementById("club-stadium-name").value || "").trim();
+        if (document.getElementById("club-stadium-cap")) state.activeClub.stadium_capacity = numberInput(document.getElementById("club-stadium-cap").value, 45000);
+        if (document.getElementById("club-stadium-exp")) state.activeClub.stadium_expansion_cap = numberInput(document.getElementById("club-stadium-exp").value, 60000);
+        if (document.getElementById("fac-data-analysis")) state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
+        if (document.getElementById("club-sugar-daddy")) state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
+        if (document.getElementById("club-board-patience")) state.activeClub.board_patience = numberInput(document.getElementById("club-board-patience").value, 15);
+        if (document.getElementById("club-fan-confidence")) state.activeClub.fan_confidence = numberInput(document.getElementById("club-fan-confidence").value, 85);
+        if (document.getElementById("club-board-confidence")) state.activeClub.board_confidence = numberInput(document.getElementById("club-board-confidence").value, 88);
+        if (document.getElementById("club-transfer-retention")) state.activeClub.transfer_retention_pct = numberInput(document.getElementById("club-transfer-retention").value, 100);
+      }
 
-      // 6 Facilities Matrix
-      state.activeClub.training_facilities = numberInput(document.getElementById("fac-training").value, 20);
-      state.activeClub.youth_facilities = numberInput(document.getElementById("fac-youth").value, 20);
-      state.activeClub.youth_recruitment = numberInput(document.getElementById("fac-recruitment").value, 20);
-      state.activeClub.junior_coaching = numberInput(document.getElementById("fac-coaching").value, 20);
-      state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
-      state.activeClub.corporate_facilities = numberInput(document.getElementById("fac-corporate").value, 19);
-
-      // Board & Ownership
-      state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
-      state.activeClub.board_patience = numberInput(document.getElementById("club-board-patience").value, 15);
-      state.activeClub.fan_confidence = numberInput(document.getElementById("club-fan-confidence").value, 85);
-      state.activeClub.board_confidence = numberInput(document.getElementById("club-board-confidence").value, 88);
-      state.activeClub.transfer_retention_pct = numberInput(document.getElementById("club-transfer-retention").value, 100);
+      // 5 verified native facilities
+      if (document.getElementById("fac-training")) state.activeClub.training_facilities = numberInput(document.getElementById("fac-training").value, 20);
+      if (document.getElementById("fac-youth")) state.activeClub.youth_facilities = numberInput(document.getElementById("fac-youth").value, 20);
+      if (document.getElementById("fac-recruitment")) state.activeClub.youth_recruitment = numberInput(document.getElementById("fac-recruitment").value, 20);
+      if (document.getElementById("fac-coaching")) state.activeClub.junior_coaching = numberInput(document.getElementById("fac-coaching").value, 20);
+      if (document.getElementById("fac-corporate")) state.activeClub.corporate_facilities = numberInput(document.getElementById("fac-corporate").value, 19);
 
       const submittedEntity = JSON.stringify(state.activeClub);
       try {
@@ -5499,6 +5587,50 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Contract extension failed");
         showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function terminateContract() {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        if (typeof confirm === "function" && !confirm(`Terminate ${state.activePlayer.name}'s contract and release as free agent?`)) return;
+        const res = await fetch("/api/player/contract/terminate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Contract termination failed");
+        showToast(data.message, "success");
+        if (typeof fetchContext === "function") await fetchContext();
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function terminateLoan() {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        if (typeof confirm === "function" && !confirm(`Recall ${state.activePlayer.name} from loan back to parent club?`)) return;
+        const res = await fetch("/api/player/loan/terminate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Loan termination failed");
+        showToast(data.message, "success");
+        if (typeof fetchContext === "function") await fetchContext();
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function movePlayer() {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        const clubInput = document.getElementById("transfer-target-club-id");
+        const clubId = clubInput ? Number(clubInput.value) : 0;
+        if (!clubId || !Number.isInteger(clubId)) throw new Error("Enter a valid target Club ID");
+        const res = await fetch("/api/transfer/move", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, target_club_id: clubId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Player move failed");
+        showToast(data.message, "success");
+        if (typeof fetchContext === "function") await fetchContext();
       } catch (error) { showToast(error.message, "error"); }
     }
     async function saveSquadNumber() {

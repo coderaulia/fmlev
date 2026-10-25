@@ -252,6 +252,7 @@ pub fn write_live_club(
     _binding_subsystem: usize,
     club_id: i32,
     finances: &ClubFinances,
+    loaded: Option<&ClubFinances>,
 ) -> Result<()> {
     let record = crate::native_club::NativeClubRecord::discover(driver, club_id)?;
     let balance = i64::from(record.read_balance(driver)?);
@@ -280,5 +281,18 @@ pub fn write_live_club(
     if stadium_cap > 0 { baseline.stadium_capacity = stadium_cap; }
     if stadium_exp > 0 { baseline.stadium_expansion_cap = stadium_exp; }
 
-    record.write_club_edits(driver, &baseline, finances)
+    // The UI fills untouched controls from caches and fallbacks. A field equal to the value the
+    // UI was loaded with is not an edit, so it keeps the native value instead of being written.
+    let mut requested = finances.clone();
+    if let Some(loaded) = loaded {
+        macro_rules! keep_native {
+            ($($f:ident),*) => {$( if requested.$f == loaded.$f { requested.$f = baseline.$f.clone(); } )*};
+        }
+        keep_native!(
+            balance, transfer_budget, training_facilities, youth_facilities, junior_coaching,
+            youth_recruitment, data_analysis_facilities, corporate_facilities, reputation,
+            stadium_capacity, stadium_expansion_cap, sugar_daddy_type
+        );
+    }
+    record.write_club_edits(driver, &baseline, &requested)
 }

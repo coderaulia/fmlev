@@ -184,6 +184,24 @@ pub struct ClubMoneyRequest {
     pub transfer_budget: Option<i64>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClubNativeRequest {
+    pub club_id: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NationNativeRequest {
+    pub nation_id: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompetitionNativeRequest {
+    pub competition_id: i32,
+}
+
 /// `number` 1..=99, or null/0 to clear the squad number.
 #[derive(Deserialize)]
 pub struct SquadNumberRequest {

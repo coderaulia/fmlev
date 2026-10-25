@@ -20,4 +20,36 @@ impl GameContextManager {
         self.update_club(club.clone())?;
         Ok(club)
     }
+
+    /// Reads the verified native values (money, facilities, reputation, stadium) of a loaded club and
+    /// makes them the registry copy, so the UI loads real values instead of binding caches.
+    pub fn read_club_native(&mut self, club_id: i32) -> Result<ClubFinances> {
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
+        let mut club = self.club_registry.get(&club_id).cloned()
+            .or_else(|| (self.context.club.club_id == club_id).then(|| self.context.club.clone()))
+            .ok_or_else(|| CoreError::InvalidValue(format!("Club {club_id} is not loaded; open one of its pages in FM26")))?;
+        let driver = &session.driver;
+        let record = crate::native_club::NativeClubRecord::discover(driver, club_id)?;
+        club.balance = i64::from(record.read_balance(driver)?);
+        club.transfer_budget = i64::from(record.read_transfer_budget(driver)?);
+        let (training, youth, coaching, recruitment, corp, analysis) = record.read_facilities(driver)?;
+        for (field, value) in [
+            (&mut club.training_facilities, training),
+            (&mut club.youth_facilities, youth),
+            (&mut club.junior_coaching, coaching),
+            (&mut club.youth_recruitment, recruitment),
+            (&mut club.corporate_facilities, corp),
+            (&mut club.data_analysis_facilities, analysis),
+        ] {
+            if value > 0 { *field = value; }
+        }
+        if let Ok((rep, _)) = record.read_reputations(driver) {
+            if rep > 0 { club.reputation = rep; }
+        }
+        self.club_registry.insert(club_id, club.clone());
+        if self.context.club.club_id == club_id {
+            self.context.club = club.clone();
+        }
+        Ok(club)
+    }
 }

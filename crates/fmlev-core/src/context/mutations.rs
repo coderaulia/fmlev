@@ -219,7 +219,9 @@ impl GameContextManager {
         }
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         let b_sub = resolve_binding_subsystem(session).unwrap_or(0);
-        crate::live_club::write_live_club(&session.driver, b_sub, club_id, &club)?;
+        crate::live_club::write_live_club(
+            &session.driver, b_sub, club_id, &club, self.club_registry.get(&club_id),
+        )?;
         self.user_modified_clubs.insert(club_id);
         self.context.club = club.clone();
         self.club_registry.insert(club_id, club);
@@ -246,14 +248,7 @@ impl GameContextManager {
     }
 
     fn update_live_nation(&mut self, nation: NationDetails) -> Result<()> {
-        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let nation_id = nation.id;
-        let record = crate::native_nation::NativeNationRecord::discover(&session.driver, nation_id)?;
-        let prev = self.nation_registry.get(&nation_id).cloned().unwrap_or_else(|| nation.clone());
-        record.write_nation_edits(&session.driver, &prev, &nation)?;
-        self.context.nation = nation.clone();
-        self.nation_registry.insert(nation_id, nation);
-        Ok(())
+        self.update_live_nation_checked(nation)
     }
 
     pub fn update_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
@@ -276,14 +271,7 @@ impl GameContextManager {
     }
 
     fn update_live_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
-        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let comp_id = comp.id;
-        let record = crate::native_competition::NativeCompetitionRecord::discover(&session.driver, comp_id)?;
-        let prev = self.competition_registry.get(&comp_id).cloned().unwrap_or_else(|| comp.clone());
-        record.write_competition_edits(&session.driver, &prev, &comp)?;
-        self.context.competition = comp.clone();
-        self.competition_registry.insert(comp_id, comp);
-        Ok(())
+        self.update_live_competition_checked(comp)
     }
 
     /// Adds or replaces an affiliate club for a given club ID.
@@ -474,6 +462,25 @@ impl GameContextManager {
             "boost_budget_50m" | "boost_budget" | "50m" | "sugar_daddy" | "wipe_debt" | "clear_debt"
                 | "max_facilities" | "facilities" | "club_max_facilities"
         );
+        let is_record_action = is_club_action
+            || matches!(
+                normalized.as_str(),
+                "golden_generation" | "nation_golden_generation" | "relax_rules" | "competition_relax_rules"
+            );
+        if is_record_action && self.ensure_record_writes_supported().is_err() {
+            // Live session: presets would write UI-binding caches. Only the native facility maximiser is verified.
+            if matches!(normalized.as_str(), "max_facilities" | "facilities" | "club_max_facilities") {
+                let club_id = self.context.club.club_id;
+                let mut club = self.read_club_native(club_id)?;
+                let data_analysis = club.data_analysis_facilities; // unverified natively: keep as is
+                club.max_all_facilities();
+                club.data_analysis_facilities = data_analysis;
+                return self.update_club(club);
+            }
+            return Err(CoreError::InvalidValue(
+                "This preset has no verified native write path on a live session and was not applied. Use the individual native editors.".to_string(),
+            ));
+        }
         if is_club_action {
             self.user_modified_clubs.insert(self.context.club.club_id);
         }

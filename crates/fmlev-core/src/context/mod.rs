@@ -18,6 +18,7 @@ pub mod prizes;
 pub mod squad;
 pub mod registration;
 pub mod club_money;
+pub mod native_sync;
 
 #[cfg(test)]
 mod tests;

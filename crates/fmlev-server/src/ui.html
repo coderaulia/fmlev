@@ -3880,6 +3880,7 @@
         setFacVal("fac-recruitment", "fac-recruitment-disp", record.youth_recruitment || 18);
         setFacVal("fac-coaching", "fac-coaching-disp", record.junior_coaching || 18);
         setFacVal("fac-corporate", "fac-corporate-disp", record.corporate_facilities || 19);
+        syncClubNative(record.club_id);
       } else if (kind === "nation") {
         text("nation-name", record.name || "Nation unavailable");
         text("nation-code", record.three_letter_code || "—");
@@ -3906,6 +3907,7 @@
           const dev = document.getElementById("nation-development");
           if (dev) dev.value = record.state_of_development;
         }
+        syncNationNative(record.id);
       } else {
         text("comp-name", record.name || "Competition unavailable");
         text("comp-short-name", record.short_name || "—");
@@ -3916,6 +3918,7 @@
           const compRep = document.getElementById("comp-reputation");
           if (compRep) compRep.value = record.reputation;
         }
+        syncCompetitionNative(record.id);
       }
       return true;
     }
@@ -4001,6 +4004,75 @@
       const godSquadTarget = document.getElementById("god-squad-target");
       if (godSquadTarget) godSquadTarget.innerText = `Target: ${club.club_name || "Club"} 1st Team`;
       refreshPendingActionIndicators();
+    }
+
+    // The facility sliders start from binding caches. Load the verified native values once per club
+    // (and again after a save) so untouched controls match the game and are never written back.
+    let nativeClubSyncedId = null;
+    async function syncClubNative(clubId) {
+      if (!state.connected || !clubId || nativeClubSyncedId === clubId || state.clubDirty) return;
+      nativeClubSyncedId = clubId;
+      try {
+        const res = await fetch("/api/club/native", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ club_id: clubId })
+        });
+        const data = await res.json();
+        if (!res.ok || state.clubDirty || state.activeClub?.club_id !== clubId) return;
+        const club = data.club;
+        Object.assign(state.activeClub, {
+          training_facilities: club.training_facilities, youth_facilities: club.youth_facilities,
+          junior_coaching: club.junior_coaching, youth_recruitment: club.youth_recruitment,
+          data_analysis_facilities: club.data_analysis_facilities, corporate_facilities: club.corporate_facilities
+        });
+        setFacVal("fac-training", "fac-training-disp", club.training_facilities);
+        setFacVal("fac-youth", "fac-youth-disp", club.youth_facilities);
+        setFacVal("fac-recruitment", "fac-recruitment-disp", club.youth_recruitment);
+        setFacVal("fac-coaching", "fac-coaching-disp", club.junior_coaching);
+        setFacVal("fac-corporate", "fac-corporate-disp", club.corporate_facilities);
+        if (club.data_analysis_facilities > 0) setFacVal("fac-data-analysis", "fac-data-analysis-disp", club.data_analysis_facilities);
+      } catch (e) { nativeClubSyncedId = null; }
+    }
+
+    let nativeNationSyncedId = null, nativeCompetitionSyncedId = null;
+    async function syncNationNative(id) {
+      if (!state.connected || !id || nativeNationSyncedId === id || state.nationDirty) return;
+      nativeNationSyncedId = id;
+      try {
+        const res = await fetch("/api/nation/native", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nation_id: id })
+        });
+        const data = await res.json();
+        if (!res.ok || state.nationDirty || state.activeNation?.id !== id) return;
+        const n = data.nation;
+        Object.assign(state.activeNation, {
+          youth_rating: n.youth_rating, reputation: n.reputation, economic_factor: n.economic_factor,
+          state_of_development: n.state_of_development, population: n.population
+        });
+        const set = (el, v) => { const e = document.getElementById(el); if (e) e.value = v; };
+        set("nation-youth-slider", n.youth_rating);
+        const yv = document.getElementById("nation-youth-val"); if (yv) yv.innerText = n.youth_rating;
+        updateYouthRatingDisplay(n.youth_rating);
+        set("nation-reputation", n.reputation);
+        setNationStatUI("nation-economic", "disp-nation-econ", n.economic_factor);
+        set("nation-development", n.state_of_development);
+      } catch (e) { nativeNationSyncedId = null; }
+    }
+    async function syncCompetitionNative(id) {
+      if (!state.connected || !id || nativeCompetitionSyncedId === id || state.competitionDirty) return;
+      nativeCompetitionSyncedId = id;
+      try {
+        const res = await fetch("/api/competition/native", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competition_id: id })
+        });
+        const data = await res.json();
+        if (!res.ok || state.competitionDirty || state.activeCompetition?.id !== id) return;
+        state.activeCompetition.reputation = data.competition.reputation;
+        const el = document.getElementById("comp-reputation");
+        if (el) el.value = data.competition.reputation;
+      } catch (e) { nativeCompetitionSyncedId = null; }
     }
 
     function setFacVal(sliderId, dispId, val) {
@@ -4854,6 +4926,7 @@
           if (JSON.stringify(state.activeClub) === submittedEntity) {
             state.clubDirty = false;
           }
+          nativeClubSyncedId = null;
           showToast(`Saved ${state.activeClub.club_name} details & facilities!`, "success");
           return true;
         } else {
@@ -5178,6 +5251,7 @@
         if (res.ok) {
           if (JSON.stringify(state.activeNation) === submittedEntity) {
             state.nationDirty = false;
+            nativeNationSyncedId = null;
           }
           if (!isQuiet) showToast(`Saved ${state.activeNation.name} macro & youth factors!`, "success");
           return true;
@@ -5303,6 +5377,7 @@
         if (res.ok) {
           if (JSON.stringify(state.activeCompetition) === submittedEntity) {
             state.competitionDirty = false;
+            nativeCompetitionSyncedId = null;
           }
           showToast(`Saved ${state.activeCompetition.name} rules & prize money!`, "success");
           return true;

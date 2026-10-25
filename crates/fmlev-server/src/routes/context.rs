@@ -1034,6 +1034,40 @@ pub async fn update_club_money(
     }
 }
 
+/// Reads the verified native club values (read-only) so the UI loads real numbers.
+pub async fn read_club_native(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::ClubNativeRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.read_club_native(payload.club_id) {
+        Ok(club) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "club": club }))),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+pub async fn read_nation_native(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::NationNativeRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.read_nation_native(payload.nation_id) {
+        Ok(nation) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "nation": nation }))),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+pub async fn read_competition_native(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::CompetitionNativeRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.read_competition_native(payload.competition_id) {
+        Ok(comp) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "competition": comp }))),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
 /// Sets tactical familiarity to the maximum for a player or his squad (native; same as the game's action).
 pub async fn maximise_familiarity(
     State(state): State<ServerState>,

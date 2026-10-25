@@ -192,3 +192,20 @@ crates/
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 32 passed, 0 failed.
   - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 tests passed, 0 failed.
   - All source files strictly $\le$ 1,223 LOC.
+
+### Phase 9: Native Club Facilities, Nation Macro/Youth, and Competition Live UI Wiring (Completed)
+- **Web UI & Connected Mode Gating (`crates/fmlev-server/src/ui.html`)**:
+  - Connected mode decoupling: decoupled `club-facilities-card`, `nation-youth-card`, `nation-macro-card`, and `competition-reputation-card` as depth-0 direct children with `data-live-editor="true"`.
+  - Live club facilities: enabled inputs for training, youth, junior coaching, youth recruitment, and corporate facilities; unverified data analysis facility remains disabled.
+  - Live nation macro & youth: enabled youth rating slider (1–200), reputation input, state of development, and economic factor controls; unverified FA power/tax/corruption controls remain disabled.
+  - Live competition reputation: added native reputation input and reactive star rating updater (1–200 native scale).
+  - Strict partial write contract: connected-mode saves explicitly declare only verified edited fields, preserving unedited baseline fields to prevent transaction rollback rejections.
+- **Test Suite Updates**:
+  - `live-editors.test.cjs`: verified direct depth-0 hierarchy for all 7 live cards and verified endpoint and function bindings.
+  - `entity-audit.test.cjs`: verified live editor controls remain enabled while unverified controls remain disabled in connected mode.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 120 tests passing (119 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
+  - All source files strictly $\le$ 1,328 LOC.

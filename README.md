@@ -41,10 +41,10 @@
 </p>
 
 * **⚽ Real-Time Memory Synchronization**: Live zero-copy memory reads and writes (`process_vm_readv` / `process_vm_writev`) directly hooked into FM26's Unity 6 IL2CPP memory space.
-* **🌍 Nation Details & Youth Rating**: Modify national youth ratings (1–200), international reputation, economic development, FA financial strength, and corruption metrics.
-* **🏟️ Advanced Club Facilities & Board Suite**: Full 1–20 facilities matrix (training, youth, recruitment, junior coaching, data analysis), sugar daddy ownership, board patience, and stadium expansion.
+* **🌍 Nation Details & Youth Rating** *(offline fixtures; live nation writes not yet verified)*: Modify national youth ratings (1–200), international reputation, economic development, FA financial strength, and corruption metrics.
+* **🏟️ Advanced Club Facilities & Board Suite** *(offline fixtures; live club money is verified, see below)*: Full 1–20 facilities matrix (training, youth, recruitment, junior coaching, data analysis), sugar daddy ownership, board patience, and stadium expansion.
 * **🤝 Multi-Tier Affiliated Clubs**: Configure bilateral affiliate link terms (first-option buy, free loan wages, shared scouting, work permit havens, annual fees).
-* **🏆 Competition Rules & Rules Relaxer**: Adjust match substitution limits (e.g. 5 from 12), VAR activation, prize money, TV rights, and foreign player quotas.
+* **🏆 Competition Rules & Rules Relaxer** *(offline fixtures; live prize money and register-anytime are verified, rules are not)*: Adjust match substitution limits (e.g. 5 from 12), VAR activation, prize money, TV rights, and foreign player quotas.
 * **⚡ Squad God Mode**: One-click condition restoration (100%), match fitness, injury clearance, and morale maximization.
 * **📱 Dual Interfaces**: Rich cyberpunk embedded Web UI (`http://localhost:41789`) plus an ultra-fast in-game Dear ImGui & Terminal HUD overlay.
 
@@ -76,6 +76,27 @@ Get started in seconds! Run the 1-click launcher or install a desktop icon to la
 **FMLE by Vanaila** is the premier open-source live editor engineered specifically for **Football Manager 26's new Unity 6 engine**. 
 
 FM26 made history by transitioning away from Sports Interactive's legacy proprietary C++ engine to Unity 6 (64-bit IL2CPP). `FMLE` reverse-engineers the IL2CPP metadata v31 runtime, extracting runtime symbol tables, data references, and UI singletons to give you unrestricted control over your save game.
+
+### ✅ Verified Live Write Support (against the running game)
+
+Only fields confirmed in FM26 itself are writable while attached; everything else is shown read-only instead of pretending to save. Each write uses identity validation, readback and rollback.
+
+| Area | What you can do live | Notes |
+| --- | --- | --- |
+| **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Open the player's profile first |
+| **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
+| **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
+| **Club money** | Balance and transfer budget (raw GBP) | Reopen Club > Finances; month-end persistence of balance unconfirmed |
+| **Competition prize money** | Edit the per-position prize table | Match the first/last prize shown on Rules (optional tolerance for rounded values); payout source at season end unconfirmed |
+| **Register anytime** | Allow squad registration outside the window per competition | Re-apply after a new season or stage change |
+| **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Bindings only appear while the matching screen is open |
+
+**Not writable yet** (no verified native field): club facilities and board settings, nation reputation / youth rating, competition squad / foreign / substitution rules, squad-numbers-anytime. These controls are fixtures or read-only in live mode.
+
+> ⚠️ **Never edit a player's injury vector.** An emptied vector for an injured player crashes FM26 on the next day and the damage is saved into the career.
+> Always test on a throwaway save, and Save As a new file after live edits.
+
+The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because every route can write game memory.
 
 ### Core Capabilities:
 

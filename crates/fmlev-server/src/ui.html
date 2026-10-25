@@ -2269,22 +2269,6 @@
           </button>
         </div>
 
-        <!-- Live native club money (verified fields only) -->
-        <div class="card" id="club-money-card">
-          <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">💷 Live Club Money (raw GBP)</div>
-          <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
-            Balance and transfer budget are read and written natively and show after you reopen Club &gt; Finances. Balance survives day ticks; month-end persistence is unconfirmed.
-          </p>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <input id="club-money-balance" type="number" class="form-control" placeholder="Balance">
-            <input id="club-money-transfer" type="number" class="form-control" placeholder="Transfer budget">
-          </div>
-          <div style="display: flex; gap: 8px; margin-top: 8px;">
-            <button class="btn" onclick="loadClubMoney()">Load from game</button>
-            <button class="btn btn-emerald" onclick="saveClubMoney()">💾 Save Club Money</button>
-          </div>
-        </div>
-
         <!-- Affiliated Clubs Manager -->
         <div class="card">
           <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
@@ -2340,6 +2324,21 @@
         <button class="btn btn-primary" onclick="switchTab('tab-godmode')">
           ⚡ Open God Mode & Quick Cheats ↗
         </button>
+      </div>
+        <!-- Live native club money (verified fields only) -->
+      <div class="card" id="club-money-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">💷 Live Club Money (raw GBP)</div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Balance and transfer budget are read and written natively and show after you reopen Club &gt; Finances. Balance survives day ticks; month-end persistence is unconfirmed.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <input id="club-money-balance" type="number" class="form-control" placeholder="Balance">
+          <input id="club-money-transfer" type="number" class="form-control" placeholder="Transfer budget">
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button class="btn" onclick="loadClubMoney()">Load from game</button>
+          <button class="btn btn-emerald" onclick="saveClubMoney()">💾 Save Club Money</button>
+        </div>
       </div>
     </section>
 
@@ -2550,7 +2549,7 @@
         </div>
       </div>
 
-      <div class="glass-card" id="registration-card" style="margin-top: 16px; padding: 16px;">
+      <div class="glass-card" id="registration-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
         <h3 style="margin-bottom: 6px;">📝 Register Anytime</h3>
         <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
           Open this competition's Rules page in FM26 once so its unique id is known, then enable. Close and reopen
@@ -2561,7 +2560,7 @@
           <button class="btn" onclick="setRegistration(false)">Restore rules</button>
         </div>
       </div>
-      <div class="glass-card" id="prize-card" style="margin-top: 16px; padding: 16px;">
+      <div class="glass-card" id="prize-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
         <h3 style="margin-bottom: 6px;">🏆 Live Prize Money (raw GBP per position)</h3>
         <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
           Open Competition &gt; Rules in FM26, enter the team count and the first and last prize shown there
@@ -3784,7 +3783,7 @@
       banner.hidden = !state.connected;
       const header = panel.firstElementChild;
       for (const child of panel.children) {
-        if (child === header || child === banner) continue;
+        if (child === header || child === banner || child.hasAttribute("data-live-editor")) continue;
         if (state.connected) {
           if (!child.hasAttribute("data-entity-original-hidden")) {
             child.dataset.entityOriginalHidden = String(child.hidden);

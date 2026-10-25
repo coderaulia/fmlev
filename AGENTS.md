@@ -119,3 +119,9 @@ crates/
 - Verification: 9 synthetic process tests pass with a warnings-as-errors C++ build; workspace check passes; Rust tests 109 passed, 1 ignored; UI tests 32 passed.
 - Read-only FM26 proof: manager-list vector decoded and known manager vtable resolved to `.?AVHUMAN_NON_PLAYER@db@@`, including Proton anonymous PE sections. No live writes or new transfer offsets validated.
 - Usage and limitations: `tools/fmscan/README.md`. Sign/loan/terminate experiments remain separate pending work.
+
+### Phase 5: Screen-independent Native Entity Search (Completed)
+- Added `fmscan entity PID player|club|nation|competition --name TEXT [--related] --json`, with index/UID selectors. Native vtables come from DLL RTTI; names and linked records come from native memory, with no open-screen/UI-binding requirement.
+- Related player chain validates parent-contract ownership, team, club, nation and domestic competition identities. Club searches validate their team-vector bounds and team-owner back-pointer. Missing/invalid links remain explicitly unavailable; loan destinations are not inferred.
+- Live proof without opening game screens: Lamine Yamal Nasraoui (40629/2000256231), Barcelona (1074/1708), Spain (170/796), Spanish First Division (51/67). Independent full scans agreed with the pointer chain. No live writes.
+- Verification: 17 synthetic process tests, warnings-as-errors C++ build, workspace check, Rust 109 passed/1 ignored, and UI 32 passed. All new source files remain below 1,500 LOC.

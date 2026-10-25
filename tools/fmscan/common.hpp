@@ -20,6 +20,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -61,7 +62,7 @@ struct Args {
     std::map<std::string, std::string> opts;
     bool json = false;
     Args(int argc, char** argv) {
-        const std::set<std::string> flags{"--json", "--in", "--out"};
+        const std::set<std::string> flags{"--json", "--in", "--out", "--related"};
         for (int i = 1; i < argc; ++i) {
             std::string a = argv[i];
             if (!a.starts_with("--")) { pos.push_back(a); continue; }

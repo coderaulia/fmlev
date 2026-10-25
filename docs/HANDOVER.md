@@ -36,6 +36,22 @@ vtable resolved to `.?AVHUMAN_NON_PLAYER@db@@`. Proton maps PE sections anonymou
 the RTTI resolver validates the named PE header at the COL-derived image base.
 Sign/loan/terminate investigations below remain pending; tools do not prove safe writes.
 
+### Screen-independent named discovery (2026-10-25)
+`fmscan entity PID player|club|nation|competition --name TEXT [--related] --json`
+now discovers native RTTI types from the DLL and scans loaded records without UI
+bindings, an open profile, a known object address or prior editor calibration.
+`--id` and `--uid` selectors are also supported. Expected type, duplicate UIDs,
+player person/attribute layout and contract ownership are validated. Related links
+carry pointer offsets; missing or invalid targets are explicitly unavailable.
+
+Live proof: Lamine Yamal Nasraoui (index 40629, UID 2000256231) -> native parent
+contract -> team 1279 -> Barcelona (1074/1708) -> Spain (170/796), plus team ->
+Spanish First Division (51/67) -> the same Spain record. Independent full club,
+nation and competition searches agreed. No game screen was opened and no target
+memory was written. The native player scan validated 39,489 records, one matching
+name, with 20 unreadable chunks reported. This is not an exhaustive save census.
+See `tools/fmscan/README.md` for command semantics and version/loan limitations.
+
 ## Next-session targets
 1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.
 2. Terminate: find the scheduled-event queue entry for contract release; or find the release routine in game_plugin.dll.

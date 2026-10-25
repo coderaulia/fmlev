@@ -290,3 +290,15 @@ To get in touch or collaborate, connect via GitHub or email [care@vanaila.com](m
 **[⭐ Star this project on GitHub](https://github.com/coderaulia/fmlev)** • **Made with ❤️ from Jakarta for the Indonesian & Global FM Community! 🇮🇩**
 
 </div>
+
+## Using the editor inside the game (Steam overlay)
+
+No extra tooling is needed if FM26 is launched through Steam with the in-game overlay enabled:
+
+1. Start the server and attach: `./target/release/fmlev-cli serve --port 41789`, then attach to the running game.
+2. In the game press **Shift+Tab** to open the Steam overlay.
+3. Open the overlay **Web Browser** and go to `http://127.0.0.1:41789` (add `?mode=overlay` for the compact layout). Bookmark it in the overlay browser.
+4. Use the editor, then press Shift+Tab again to return to the game.
+
+Requirements: Steam Settings > In Game > "Enable the Steam Overlay while in-game" (also for non-Steam games if launched that way). If the overlay does not appear under Proton, check the game's launch options and that the Steam overlay works for other games. See `docs/OVERLAY_PLAN.md` for custom-hotkey options.
+

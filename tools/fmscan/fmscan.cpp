@@ -3,7 +3,7 @@
 //
 //   fmscan snap  <pid> <file>                         save all rw-private memory to <file>
 //   fmscan diff  <pid> <file> [--save-changed f] [--exclude f] [--near hex[:radius]]
-//                              [--to hex] [--from hex] [--max N]
+//                              [--to hex] [--from hex] [--to32 hex] [--max N]
 //                                                     compare <file> with live memory, 8-byte words
 //   fmscan refs  <pid> <hex_ptr> [--near hex[:radius]]  slots holding a pointer value
 //   fmscan find  <pid> <i32|u32|u64|f32> <value>      slots holding a value (aligned)
@@ -86,7 +86,7 @@ static int cmd_snap(pid_t pid, const char* file) {
 
 static int cmd_diff(pid_t pid, int argc, char** argv) {
     const char* file = argv[0];
-    const char *save = nullptr, *excl = nullptr; Near near; bool hasTo = false, hasFrom = false;
+    const char *save = nullptr, *excl = nullptr; Near near; bool hasTo = false, hasFrom = false, hasTo32 = false; uint32_t to32 = 0;
     uint64_t to = 0, from = 0; size_t max = 400;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -95,6 +95,7 @@ static int cmd_diff(pid_t pid, int argc, char** argv) {
         else if (a == "--near" && i + 1 < argc) near = parse_near(argv[++i]);
         else if (a == "--to" && i + 1 < argc) { to = hexv(argv[++i]); hasTo = true; }
         else if (a == "--from" && i + 1 < argc) { from = hexv(argv[++i]); hasFrom = true; }
+        else if (a == "--to32" && i + 1 < argc) { to32 = (uint32_t)hexv(argv[++i]); hasTo32 = true; }
         else if (a == "--max" && i + 1 < argc) max = strtoull(argv[++i], nullptr, 10);
     }
     std::vector<uint64_t> exclude; if (excl) load_set(excl, exclude);
@@ -114,6 +115,7 @@ static int cmd_diff(pid_t pid, int argc, char** argv) {
             if (!in_near(near, addr)) continue;
             if (hasTo && cur[i] != to) continue;
             if (hasFrom && old[i] != from) continue;
+            if (hasTo32 && !((uint32_t)cur[i] == to32 && (uint32_t)old[i] != to32) && !((uint32_t)(cur[i] >> 32) == to32 && (uint32_t)(old[i] >> 32) != to32)) continue;
             changed++;
             if (shown < max) { printf("%" PRIx64 ": %016" PRIx64 " -> %016" PRIx64 "\n", addr, old[i], cur[i]); shown++; }
         }

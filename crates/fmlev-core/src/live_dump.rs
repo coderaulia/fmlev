@@ -77,11 +77,32 @@ fn describe_value(driver: &LinuxMemoryDriver, tv: usize) -> String {
         }
         Some(DecodedTypedValue::Object(ptr)) => match class_name(driver, ptr) {
             Some((name, _)) if name == "DynamicReference" => describe_dynamic(driver, ptr),
+            Some((name, ns)) if name.starts_with("List`1") => {
+                format!("object {ns}.{name} {}", describe_list(driver, ptr))
+            }
             Some((name, ns)) => format!("object {ns}.{name}"),
             None => "object(unknown)".into(),
         },
         None => "undecodable".into(),
     }
+}
+
+/// Summarises a managed `List<T>`: element count and the class of each element (first 24).
+fn describe_list(driver: &LinuxMemoryDriver, list: usize) -> String {
+    let items = driver.read_ptr(list + 0x10).unwrap_or(0);
+    let size = driver.read::<i32>(list + 0x18).unwrap_or(-1);
+    if !valid_ptr(items) || !(0..=4096).contains(&size) {
+        return "(unreadable)".into();
+    }
+    let classes: Vec<String> = (0..size.min(24) as usize)
+        .map(|i| {
+            let element = driver.read_ptr(items + 0x20 + i * 8).unwrap_or(0);
+            class_name(driver, element)
+                .map(|(n, ns)| format!("{ns}.{n}@{element:#x}"))
+                .unwrap_or_else(|| "?".into())
+        })
+        .collect();
+    format!("size={size} [{}]", classes.join(", "))
 }
 
 /// Enumerates bound properties whose source is a database record reference.
@@ -134,7 +155,7 @@ pub fn dump_bound_properties(
         }
         let reference_id = driver.read::<i32>(ref_obj + 0x20).unwrap_or(0);
         let reference_type = driver.read::<i32>(ref_obj + 0x24).unwrap_or(0);
-        if reference_id <= 0 || !matches!(reference_type, 3 | 5 | 9 | 10 | 21 | 24 | 25) {
+        if reference_id <= 0 {
             continue;
         }
         let property = Il2CppString::read(driver, prop)

@@ -294,5 +294,7 @@ pub fn write_live_club(
             stadium_capacity, stadium_expansion_cap, sugar_daddy_type
         );
     }
+    // Benefactor type has no verified live round trip (read/write labels differ): never written live.
+    requested.sugar_daddy_type = baseline.sugar_daddy_type.clone();
     record.write_club_edits(driver, &baseline, &requested)
 }

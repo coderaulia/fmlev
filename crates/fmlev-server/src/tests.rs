@@ -684,12 +684,13 @@ async fn test_contract_and_transfer_routes() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // 1b. Accelerate transfer with offline state should fail gracefully
+    let accelerate_body = serde_json::json!({ "player_id": 1, "instant": true });
     let response = app
         .clone()
         .oneshot(
             Request::post("/api/transfer/accelerate")
                 .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
+                .body(Body::from(accelerate_body.to_string()))
                 .unwrap(),
         )
         .await

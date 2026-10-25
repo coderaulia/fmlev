@@ -225,6 +225,8 @@ impl GameContextManager {
         self.user_modified_clubs.insert(club_id);
         self.context.club = club.clone();
         self.club_registry.insert(club_id, club);
+        // Store what the game now holds, not the submitted form, so the next save diffs against truth.
+        let _ = self.read_club_native(club_id);
         Ok(())
     }
 
@@ -1051,8 +1053,10 @@ impl GameContextManager {
             let club = self.club_registry.entry(snapshot.id).or_insert_with(unknown_clubfinances);
             club.club_id = snapshot.id;
             club.club_name = snapshot.name.clone();
-            if let Some(bal) = snapshot.balance_game_units { club.balance = bal; }
-            if let Some(tb) = snapshot.transfer_budget_game_units { club.transfer_budget = tb; }
+            if !self.native_synced_clubs.contains(&snapshot.id) {
+                if let Some(bal) = snapshot.balance_game_units { club.balance = bal; }
+                if let Some(tb) = snapshot.transfer_budget_game_units { club.transfer_budget = tb; }
+            }
             if !self.native_synced_clubs.contains(&snapshot.id) {
                 if let Some(tr) = snapshot.training_rating { club.training_facilities = tr; }
                 if let Some(yr) = snapshot.youth_rating { club.youth_facilities = yr; }

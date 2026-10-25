@@ -1007,7 +1007,7 @@ pub async fn accelerate_transfer(
 /// Loan agreement creation is not implemented: loans require complex multi-club loan contract nodes.
 pub async fn transfer_not_implemented() -> impl IntoResponse {
     api_error(
-        StatusCode::BAD_REQUEST,
+        StatusCode::NOT_IMPLEMENTED,
         fmlev_core::CoreError::InvalidValue("Creating new loan agreements via raw memory writes is not supported. Use Move Player or Sign Player instead.".into()),
     )
 }

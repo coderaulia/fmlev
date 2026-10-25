@@ -162,6 +162,7 @@ pub struct SearchQuery {
 
 /// Competition identified by index and unique id (from the live competition overview).
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegistrationRequest {
     pub comp_index: i32,
     pub comp_uid: i32,
@@ -170,6 +171,7 @@ pub struct RegistrationRequest {
 
 /// `squad` true maximises every player sharing the player's squad container.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FamiliarityRequest {
     pub player_id: i32,
     #[serde(default)]
@@ -178,6 +180,7 @@ pub struct FamiliarityRequest {
 
 /// Raw-GBP club money; omit a field to leave it unchanged.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClubMoneyRequest {
     pub club_id: i32,
     pub balance: Option<i64>,
@@ -204,6 +207,7 @@ pub struct CompetitionNativeRequest {
 
 /// `number` 1..=99, or null/0 to clear the squad number.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SquadNumberRequest {
     pub player_id: i32,
     pub number: Option<u8>,
@@ -211,6 +215,7 @@ pub struct SquadNumberRequest {
 
 /// `years` defaults to 1 (1..=10).
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContractExtendRequest {
     pub player_id: i32,
     pub years: Option<i32>,
@@ -227,6 +232,7 @@ pub struct LoanTerminateRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlayerMoveRequest {
     pub player_id: i32,
     pub target_club_id: Option<i32>,
@@ -234,6 +240,7 @@ pub struct PlayerMoveRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlayerSignRequest {
     pub player_id: i32,
     pub target_club_id: Option<i32>,
@@ -243,6 +250,7 @@ pub struct PlayerSignRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TransferAccelerateRequest {
     pub player_id: i32,
     pub new_join_date: Option<u32>,

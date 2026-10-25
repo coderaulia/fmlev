@@ -31,11 +31,13 @@
 //!   - `+0x38`: squad vector `[begin, end, capacity]` containing `ACTUAL_PLAYER` pointers
 
 use std::collections::HashSet;
-use fmlev_mem::LinuxMemoryDriver;
+use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
 use crate::error::{CoreError, Result};
 use crate::native_player::NativePlayerRecord;
 
+/// `.?AVTEAM@db@@` vtable RVA in game_plugin.dll (PE timestamp 0x6a229e8a).
+const TEAM_VTABLE_RVA: usize = 0x44c_13a8;
 pub const SQUAD_VECTOR_OFFSET: usize = 0x38;
 pub const CURRENT_TEAM_OFFSET: usize = 0x130;
 pub const CURRENT_TEAM2_OFFSET: usize = 0x138;
@@ -81,6 +83,18 @@ impl SquadVector {
     pub fn read(driver: &LinuxMemoryDriver, team_address: usize) -> Result<Self> {
         if team_address <= 0x10000 || team_address % 8 != 0 {
             return Err(invalid("Invalid team pointer for squad vector read"));
+        }
+        // The team must carry the TEAM vtable (game_plugin.dll RVA, same pinning as competitions and the
+        // manager object); test processes have no module and skip the pin.
+        if let Some(base) = parse_process_maps(driver.pid())?
+            .iter()
+            .filter(|m| m.pathname.ends_with("game_plugin.dll"))
+            .map(|m| m.start)
+            .min()
+        {
+            if driver.read_ptr(team_address)? != base + TEAM_VTABLE_RVA {
+                return Err(invalid("Target is not a TEAM record (vtable mismatch)"));
+            }
         }
         let begin = driver.read_ptr(team_address + SQUAD_VECTOR_OFFSET)?;
         let end = driver.read_ptr(team_address + SQUAD_VECTOR_OFFSET + 8)?;
@@ -208,12 +222,11 @@ impl SquadVector {
 
 /// Applies a sequence of edits with transactional readback and automatic reverse rollback on any failure.
 pub fn apply_transaction(driver: &LinuxMemoryDriver, edits: &[NativeEdit]) -> Result<()> {
-    let mut applied_count = 0;
+    // Indices are recorded before each write, so a short or failed write is still rolled back
+    // and skipped no-op edits can never shift the rollback range.
+    let mut written: Vec<usize> = Vec::new();
     let write_result = (|| -> Result<()> {
-        for edit in edits {
-            if edit.old == edit.next {
-                continue;
-            }
+        for (index, edit) in edits.iter().enumerate() {
             let mut current = vec![0u8; edit.old.len()];
             if driver.read_bytes(edit.address, &mut current)? != current.len() || current != edit.old {
                 return Err(invalid(&format!(
@@ -221,10 +234,13 @@ pub fn apply_transaction(driver: &LinuxMemoryDriver, edits: &[NativeEdit]) -> Re
                     edit.address, edit.label
                 )));
             }
+            if edit.old == edit.next {
+                continue;
+            }
+            written.push(index);
             if driver.write_bytes(edit.address, &edit.next)? != edit.next.len() {
                 return Err(invalid(&format!("Short write at 0x{:x} ({})", edit.address, edit.label)));
             }
-            applied_count += 1;
             let mut readback = vec![0u8; edit.next.len()];
             if driver.read_bytes(edit.address, &mut readback)? != readback.len() || readback != edit.next {
                 return Err(invalid(&format!(
@@ -238,7 +254,8 @@ pub fn apply_transaction(driver: &LinuxMemoryDriver, edits: &[NativeEdit]) -> Re
 
     if let Err(error) = write_result {
         let mut rollback_errors = Vec::new();
-        for edit in edits[..applied_count].iter().rev() {
+        for &index in written.iter().rev() {
+            let edit = &edits[index];
             if driver.write_bytes(edit.address, &edit.old).is_err() {
                 rollback_errors.push(edit.address);
                 continue;
@@ -301,11 +318,10 @@ pub fn terminate_contract(
     let mut cleared_teams = Vec::new();
 
     for team in candidate_teams {
-        if let Ok(vec) = SquadVector::read(driver, team) {
-            if let Ok(Some(compaction_edits)) = vec.compact_removal_patches(driver, actual_player) {
-                edits.extend(compaction_edits);
-                cleared_teams.push(team);
-            }
+        let vec = SquadVector::read(driver, team)?;
+        if let Some(compaction_edits) = vec.compact_removal_patches(driver, actual_player)? {
+            edits.extend(compaction_edits);
+            cleared_teams.push(team);
         }
     }
 
@@ -392,18 +408,16 @@ pub fn terminate_loan(
     let mut edits = Vec::new();
 
     // 1. Remove player from loan team squad vector
-    if let Ok(loan_vec) = SquadVector::read(driver, loan_team) {
-        if let Ok(Some(removal_edits)) = loan_vec.compact_removal_patches(driver, actual_player) {
-            edits.extend(removal_edits);
-        }
+    let loan_vec = SquadVector::read(driver, loan_team)?;
+    if let Some(removal_edits) = loan_vec.compact_removal_patches(driver, actual_player)? {
+        edits.extend(removal_edits);
     }
 
     // 2. Add player to parent team squad vector if not already present
-    if let Ok(parent_vec) = SquadVector::read(driver, parent_team) {
-        if !parent_vec.contains(driver, actual_player)? {
-            let append_edits = parent_vec.append_patches(driver, actual_player)?;
-            edits.extend(append_edits);
-        }
+    let parent_vec = SquadVector::read(driver, parent_team)?;
+    if !parent_vec.contains(driver, actual_player)? {
+        let append_edits = parent_vec.append_patches(driver, actual_player)?;
+        edits.extend(append_edits);
     }
 
     // 3. Update current team pointers on ACTUAL_PLAYER back to parent_team
@@ -470,20 +484,18 @@ pub fn move_player(
 
     // 1. Remove from current team squad vector if present
     if cur_team > 0x10000 {
-        if let Ok(cur_vec) = SquadVector::read(driver, cur_team) {
-            if let Ok(Some(compaction_edits)) = cur_vec.compact_removal_patches(driver, actual_player) {
-                edits.extend(compaction_edits);
-            }
+        let cur_vec = SquadVector::read(driver, cur_team)?;
+        if let Some(compaction_edits) = cur_vec.compact_removal_patches(driver, actual_player)? {
+            edits.extend(compaction_edits);
         }
     }
 
     // 2. Remove from parent contract team squad vector if different from cur_team
     let parent_team = driver.read_ptr(contract_addr + 0x10)?;
     if parent_team > 0x10000 && parent_team != cur_team && parent_team != target_team {
-        if let Ok(parent_vec) = SquadVector::read(driver, parent_team) {
-            if let Ok(Some(compaction_edits)) = parent_vec.compact_removal_patches(driver, actual_player) {
-                edits.extend(compaction_edits);
-            }
+        let parent_vec = SquadVector::read(driver, parent_team)?;
+        if let Some(compaction_edits) = parent_vec.compact_removal_patches(driver, actual_player)? {
+            edits.extend(compaction_edits);
         }
     }
 
@@ -669,6 +681,12 @@ pub fn sign_free_agent(
     let person_addr = player.address + PERSON_OFFSET;
     let wage = wage_gbp.unwrap_or(1000);
     let expiry = expiry_year.unwrap_or(2027);
+    if wage > i32::MAX as u32 {
+        return Err(invalid("Wage is out of range"));
+    }
+    if !(2000..=2200).contains(&expiry) {
+        return Err(invalid("Contract expiry year must be between 2000 and 2200"));
+    }
 
     let contract_payload = build_full_contract_bytes(vtable, person_addr, target_team, wage, expiry, None);
 
@@ -910,6 +928,19 @@ pub fn accelerate_pending_transfer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_transaction_rolls_back_writes_made_after_a_no_op_edit() {
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut cells = vec![1u64, 2, 3];
+        let base = cells.as_mut_ptr() as usize;
+        let edit = |slot: usize, old: u64, next: u64| NativeEdit::new(base + slot * 8, old.to_le_bytes().to_vec(), next.to_le_bytes().to_vec(), "cell");
+        // A leading no-op must not shift the rollback range; the third edit's old value is wrong.
+        let edits = vec![edit(0, 1, 1), edit(1, 2, 20), edit(2, 99, 30)];
+        let error = apply_transaction(&driver, &edits).unwrap_err().to_string();
+        assert!(error.contains("rolled back cleanly"), "{error}");
+        assert_eq!(cells, vec![1, 2, 3]);
+    }
 
     #[test]
     fn squad_vector_read_and_entries_round_trip() {

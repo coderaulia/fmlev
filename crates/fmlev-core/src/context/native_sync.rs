@@ -66,10 +66,13 @@ impl GameContextManager {
         macro_rules! keep_native {
             ($($f:ident),*) => {$( if requested.$f == loaded.$f { requested.$f = native.$f; } )*};
         }
-        keep_native!(youth_rating, reputation, economic_factor, state_of_development, population);
+        keep_native!(youth_rating, reputation, economic_factor, state_of_development);
+        // Population has no in-game verification and the form default is a fallback: never written live.
+        requested.population = native.population;
         record.write_nation_edits(&session.driver, &native, &requested)?;
         self.context.nation = nation.clone();
         self.nation_registry.insert(nation_id, nation);
+        let _ = self.read_nation_native(nation_id);
         Ok(())
     }
 
@@ -86,6 +89,7 @@ impl GameContextManager {
         record.write_competition_edits(&session.driver, &native, &requested)?;
         self.context.competition = comp.clone();
         self.competition_registry.insert(comp_id, comp);
+        let _ = self.read_competition_native(comp_id);
         Ok(())
     }
 }

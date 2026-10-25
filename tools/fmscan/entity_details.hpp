@@ -144,7 +144,9 @@ inline void club_details(const Memory &m, const NativeCatalog &catalog,
            {"junior_coaching", 0x124,
             "native youth_coaching serializer RVA 0xea6b05"},
            {"youth_recruitment", 0x125,
-            "native youth_recruitment serializer RVA 0xea6e9b"}})
+            "native youth_recruitment serializer RVA 0xea6e9b"},
+           {"data_analysis_facilities", 0x11e,
+            "native data_analysis serializer RVA 0xea7123"}})
     d.number<uint8_t>(m, key, cint + off, 1, 20, proof, cint_ok);
   U finance = pointer_field(m, club, 0x150);
   auto type = object_type(m, finance).name;
@@ -177,6 +179,9 @@ inline void club_details(const Memory &m, const NativeCatalog &catalog,
   d.number<uint8_t>(m, "corporate_facilities", finance + 0x8b5, 1, 20,
                     "native corporate_facilities serializer RVA 0xef46c9",
                     full);
+  d.number<uint8_t>(m, "sugar_daddy_type", finance + 0x3c, 0, 3,
+                    "native sugar_daddy serializer RVA 0x1636ea7",
+                    full);
   U stadium = team ? pointer_field(m, team, 0x78) : 0;
   bool stadium_ok = typed_native(m, stadium, ".?AVSTADIUM@db@@");
   auto stadium_name = stadium_ok ? direct_string(m, stadium, 0x40) : "";
@@ -198,8 +203,7 @@ inline void club_details(const Memory &m, const NativeCatalog &catalog,
                : "",
            training_ground + 0x40);
   for (auto key :
-       {"data_analysis_facilities", "sugar_daddy_type", "board_patience",
-        "fan_confidence", "board_confidence", "affiliates"})
+       {"board_patience", "fan_confidence", "board_confidence", "affiliates"})
     d.missing(key, "no verified native layout for this editor field");
   if (pointer_field(m, club, 0x100) != cint ||
       pointer_field(m, club, 0x150) != finance)
@@ -253,13 +257,16 @@ inline void nation_details(const Memory &m, const NativeCatalog &catalog,
                     "native NATION serializer tag Nsod -> BYTE +0x1ec at RVA "
                     "0xf7cd6b; enum labels not verified",
                     build);
+  d.number<uint32_t>(m, "population", nation + 0x1e4, 1, 2000000000,
+                     "native nation population DWORD at +0x1e4",
+                     build);
   for (auto key :
        {"reputation", "youth_rating", "game_importance", "fa_financial_power"})
     d.missing(key, "use gender-specific men/women fields; nation has no single "
                    "verified value");
   for (auto key : {"state_of_development", "tax_rate", "corruption_index",
                    "youth_facilities_avg", "youth_coaching_avg",
-                   "youth_recruitment_avg", "population", "spoken_languages"})
+                   "youth_recruitment_avg", "spoken_languages"})
     d.missing(key, "no verified screen-independent native layout");
 }
 inline void competition_details(const Memory &m, const NativeCatalog &catalog,

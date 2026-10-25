@@ -104,6 +104,7 @@ pub(crate) fn unknown_nationdetails() -> NationDetails {
         fa_financial_power: 0,
         game_importance: 0,
         tax_rate: 0,
+        population: 0,
         corruption_index: 0,
         youth_facilities_avg: 0,
         youth_coaching_avg: 0,

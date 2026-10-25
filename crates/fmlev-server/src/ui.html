@@ -4827,20 +4827,20 @@
         if (document.getElementById("club-stadium-name")) state.activeClub.stadium_name = (document.getElementById("club-stadium-name").value || "").trim();
         if (document.getElementById("club-stadium-cap")) state.activeClub.stadium_capacity = numberInput(document.getElementById("club-stadium-cap").value, 45000);
         if (document.getElementById("club-stadium-exp")) state.activeClub.stadium_expansion_cap = numberInput(document.getElementById("club-stadium-exp").value, 60000);
-        if (document.getElementById("fac-data-analysis")) state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
-        if (document.getElementById("club-sugar-daddy")) state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
         if (document.getElementById("club-board-patience")) state.activeClub.board_patience = numberInput(document.getElementById("club-board-patience").value, 15);
         if (document.getElementById("club-fan-confidence")) state.activeClub.fan_confidence = numberInput(document.getElementById("club-fan-confidence").value, 85);
         if (document.getElementById("club-board-confidence")) state.activeClub.board_confidence = numberInput(document.getElementById("club-board-confidence").value, 88);
         if (document.getElementById("club-transfer-retention")) state.activeClub.transfer_retention_pct = numberInput(document.getElementById("club-transfer-retention").value, 100);
       }
 
-      // 5 verified native facilities
+      // 6 verified native facilities + sugar daddy
       if (document.getElementById("fac-training")) state.activeClub.training_facilities = numberInput(document.getElementById("fac-training").value, 20);
       if (document.getElementById("fac-youth")) state.activeClub.youth_facilities = numberInput(document.getElementById("fac-youth").value, 20);
       if (document.getElementById("fac-recruitment")) state.activeClub.youth_recruitment = numberInput(document.getElementById("fac-recruitment").value, 20);
       if (document.getElementById("fac-coaching")) state.activeClub.junior_coaching = numberInput(document.getElementById("fac-coaching").value, 20);
+      if (document.getElementById("fac-data-analysis")) state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
       if (document.getElementById("fac-corporate")) state.activeClub.corporate_facilities = numberInput(document.getElementById("fac-corporate").value, 19);
+      if (document.getElementById("club-sugar-daddy")) state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
 
       const submittedEntity = JSON.stringify(state.activeClub);
       try {
@@ -5036,6 +5036,10 @@
       document.getElementById("nation-tax-rate").value = tax;
       document.getElementById("disp-nation-tax").innerText = `${tax}%`;
 
+      if (document.getElementById("nation-population")) {
+        document.getElementById("nation-population").value = nation.population ?? 50000000;
+      }
+
       setNationStatUI("nation-corruption", "disp-nation-corruption", nation.corruption_index ?? 2);
       setNationStatUI("nation-game-importance", "disp-nation-importance", nation.game_importance ?? 18);
 
@@ -5147,11 +5151,13 @@
         state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, state.activeNation.youth_rating || 120);
         state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, state.activeNation.state_of_development ?? 2);
         state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, state.activeNation.economic_factor || 15);
+        state.activeNation.population = numberInput(document.getElementById("nation-population")?.value, state.activeNation.population || 50000000);
       } else {
         state.activeNation.reputation = numberInput(document.getElementById("nation-reputation")?.value, 7500);
         state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, 120);
         state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, 2);
         state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, 15);
+        state.activeNation.population = numberInput(document.getElementById("nation-population")?.value, 50000000);
         state.activeNation.fa_financial_power = numberInput(document.getElementById("nation-fa-power")?.value, 15);
         state.activeNation.tax_rate = numberInput(document.getElementById("nation-tax-rate")?.value, 25);
         state.activeNation.corruption_index = numberInput(document.getElementById("nation-corruption")?.value, 2);

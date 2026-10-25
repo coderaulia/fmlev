@@ -270,3 +270,23 @@ crates/
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
   - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
   - All source files strictly $\le$ 1,076 LOC.
+
+### Phase 11: Frontier 5 — Unmapped Club & Nation Memory Fields (Completed)
+- **Data Analysis Facilities**:
+  - Traced Club Details (`cint = club + 0x100`) offset `+0x11e` (`u8`, range 1..=20) to native serializer RVA `0xea7123` with FourCC tag dispatch `0x4379696d` ("Cyim" at `0xea6aeb`).
+  - Live verified on PID 5945: Barcelona = 18, Real Madrid = 17, Atletico Madrid = 16, Europa Barcelona = 12, Man City = 14.
+  - Implemented transactional read/write with readback and rollback in `native_club.rs`, wired to `write_live_club`, enabled in `LIVE_CLUB_WRITABLE`, and exposed in UI.
+- **Sugar Daddy Benefactor Status**:
+  - Traced `CLUB_FINANCE` (`club + 0x150`) offset `+0x3c` (`u8`, enum 0..=3: 0 = None, 1 = Foreground, 2 = Background, 3 = Underwriter) to native serializer RVA `0x1636ea7` (`movsbl 0x3c(%rsi), %ebx`).
+  - Live verified on PID 5945: Man City = 1, PSG = 1, Chelsea = 3, Barcelona = 0, Real Madrid = 0.
+  - Implemented transactional read/write with readback and rollback in `native_club.rs`, wired to `write_live_club`, enabled in `LIVE_CLUB_WRITABLE`, and exposed in UI.
+- **Nation Population**:
+  - Traced `nation` record offset `+0x1e4` (`u32` / DWORD, range 1..=2,000,000,000).
+  - Live verified on PID 5945: Spain (796) = 49,570,725; England (765) = 57,690,300; Brazil (1651) = 211,998,573; Germany (771) = 83,516,593; France (769) = 68,551,653; Andorra (753) = 81,938; San Marino (792) = 33,977.
+  - Implemented transactional read/write with readback and rollback in `native_nation.rs`, added `population` to `NationDetails` across model, default registries, inspector, and UI.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 123 Rust tests passed (122 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
+  - All modified source files strictly $\le$ 1,333 LOC (hard limit: 1,500 LOC).

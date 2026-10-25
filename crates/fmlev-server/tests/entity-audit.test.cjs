@@ -92,7 +92,7 @@ test('verified live editor controls remain enabled while unverified controls are
     getAttribute() { return null; }
   };
   const unverifiedControl = {
-    id: 'fac-data-analysis', disabled: false, dataset: { unverified: 'true' }, style: {},
+    id: 'club-board-patience', disabled: false, dataset: { unverified: 'true' }, style: {},
     closest(sel) { return sel === '[data-live-editor]' ? {} : null; },
     hasAttribute(attr) { return attr === 'data-unverified'; },
     getAttribute() { return null; }

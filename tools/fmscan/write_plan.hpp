@@ -16,6 +16,8 @@ inline const std::vector<WritePolicy> WRITE_POLICY{
     {"club", "junior_coaching", true},
     {"club", "youth_recruitment", true},
     {"club", "corporate_facilities", true},
+    {"club", "data_analysis_facilities", true},
+    {"club", "sugar_daddy_type", true},
     {"club", "reputation", true},
     {"club", "world_reputation", true},
     {"nation", "men.youth_rating", true},
@@ -23,6 +25,7 @@ inline const std::vector<WritePolicy> WRITE_POLICY{
     {"nation", "men.reputation", true},
     {"nation", "women.reputation", true},
     {"nation", "economic_factor", true},
+    {"nation", "population", true},
     {"competition", "reputation", true}};
 inline const WritePolicy &policy(const std::string &kind,
                                  const std::string &key) {

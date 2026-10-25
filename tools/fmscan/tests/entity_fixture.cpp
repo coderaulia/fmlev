@@ -69,9 +69,9 @@ int main(int argc, char** argv) {
     put(heap + 0x2100, root + 0xe000); put(heap + 0x2150, root + 0xd000);
     put(heap + 0x2166, uint16_t{7557}); put(heap + 0x30a8, uint16_t{9098});
     put(heap + 0xe000, text("FCB")); put(heap + 0xe0d0, uint16_t{1899});
-    heap[0xe118]=19;heap[0xe123]=20;heap[0xe124]=18;heap[0xe125]=17;
+    heap[0xe118]=19;heap[0xe11e]=18;heap[0xe123]=20;heap[0xe124]=18;heap[0xe125]=17;
     put(heap + 0xd000, finance); put(heap + 0xd008, root + 0x2000);
-    put(heap + 0xd014, int32_t{-1200}); put(heap + 0xd7cc, int32_t{123456}); put(heap + 0xd7d0, int32_t{234567});
+    put(heap + 0xd014, int32_t{-1200}); heap[0xd03c] = 1; put(heap + 0xd7cc, int32_t{123456}); put(heap + 0xd7d0, int32_t{234567});
     put(heap + 0xd7d8, uint32_t{30}); put(heap + 0xd810, int32_t{100000}); put(heap + 0xd814, int32_t{10000});
     put(heap + 0xd818, int32_t{80000}); put(heap + 0xd81c, int32_t{90000}); heap[0xd8b5]=19;
     put(heap + 0x4028, text("ESP")); put(heap + 0x40f0, root + 0x19000);
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     put(heap + 0x17000, actual_comp); heap[0x17031]=0; put(heap + 0x17208, root + 0x14000);
     put(heap + 0x141e0, root + 0x15000); put(heap + 0x15060, root + 0x1a020); put(heap + 0x15068, root + 0x1a028);
     put(heap + 0x1a020, root + 0x16000); heap[0x1609a]=1;
-    heap[0x41f0]=17;heap[0x41ec]=1;
+    heap[0x41f0]=17;heap[0x41ec]=1;put(heap+0x41e4,uint32_t{49570725});
     identity(0x18000,stadium,374,1040);identity(0x1b000,stadium,375,1041);
     put(heap+0x18040,text("Camp Nou"));put(heap+0x1b040,text("Training Ground"));
     put(heap+0x1807c,uint32_t{62500});put(heap+0x1808c,uint32_t{105000});

@@ -20,11 +20,11 @@ Each `editor_data` contains field-level source addresses/evidence and an explici
 
 | Group | Native C++ fields |
 | --- | --- |
-| Club facilities | Training, youth, junior coaching, youth recruitment, corporate |
+| Club facilities | Training, youth, junior coaching, youth recruitment, data analysis, corporate |
 | Club identity/context | Nation, league, abbreviation, founding year, main-team reputation, separate world reputation |
-| Club money | Balance, available/allocated transfer budgets, transfer-retention percentage; raw wage budget, maximum wage, wage use, use with bonuses |
+| Club money & benefactor | Balance, available/allocated transfer budgets, transfer-retention percentage, sugar daddy benefactor status; raw wage budget, maximum wage, wage use, use with bonuses |
 | Club grounds | Main team's stadium name, capacity and expansion capacity; separate training-ground name |
-| Nation | Code, continent, economic factor, raw development-state code |
+| Nation | Code, continent, economic factor, population, raw development-state code |
 | Nation by gender | Men's and women's youth ratings and senior-team reputations, separately |
 | Competition | Short name/code, nation, continent, native reputation, current stage registration gate |
 
@@ -72,11 +72,14 @@ Read-only analysis of the DLL's native serialization routines established:
 | Youth facilities | Club details +0x123 | 0xea7159, linked to `youth_facilities` |
 | Junior coaching | Club details +0x124 | 0xea6b05, linked to `youth_coaching` |
 | Youth recruitment | Club details +0x125 | 0xea6e9b, linked to `youth_recruitment` |
+| Data analysis facilities | Club details +0x11e | 0xea7123, FourCC tag `0x4379696d` ("Cyim") at 0xea6aeb |
 | Corporate facilities | Full finance +0x8b5 | 0xef46c9, linked to `corporate_facilities` |
+| Sugar daddy benefactor | Full finance +0x3c | 0x1636ea7, linked to `sugar_daddy` (0=None, 1=Foreground, 2=Background, 3=Underwriter) |
 | Main-team reputation | First team +0xa8 | Club 0xef25b1; national container 0x1199308 |
 | World reputation | Club +0x166 | 0xef49ba, linked to `world_reputation` |
 | Youth rating | National-team container +0x864, WORD | 0x1198b0d and 0x1198b56, linked to `youth_rating` |
 | Economic factor | Nation +0x1f0, BYTE | 0xf7c7b3/0xf7c7cb, native tag `Necf` |
+| Population | Nation +0x1e4, DWORD | Direct population count (range 1..2,000,000,000) |
 | Development state raw code | Nation +0x1ec, BYTE | 0xf7c7ee/0xf7cd6b, native tag `Nsod` |
 | Stadium capacity | Main stadium +0x7c, DWORD | 0x204dca9/0x204dcbc, named capacity field |
 | Expansion capacity | Main stadium +0x8c, DWORD | 0x204db63/0x204db79, named expansion field |
@@ -99,24 +102,23 @@ FM26 PID 5945, without opening or navigating game screens:
 
 | Entity | Read values |
 | --- | --- |
-| Barcelona 1074 / 1708 | Training 19, youth 20, junior coaching 20, recruitment 20, corporate 19; team reputation 9098, world reputation 7557 |
+| Barcelona 1074 / 1708 | Training 19, youth 20, junior coaching 20, recruitment 20, data analysis 18, corporate 19; sugar daddy None (0); team reputation 9098, world reputation 7557 |
 | Barcelona grounds | Camp Nou: capacity 62,500, expansion 105,000; training ground is Ciutat Esportiva Joan Gamper |
 | Barcelona finance | Balance GBP 14,117,374; available transfer budget GBP 13,336,559; allocation GBP 17,284,136; retention 30% |
-| Spain 170 / 796 | Men's youth 145/reputation 9011; women's youth 160/reputation 9300; economic factor 17; development raw code 1 |
+| Spain 170 / 796 | Men's youth 145/reputation 9011; women's youth 160/reputation 9300; economic factor 17; population 49,570,725; development raw code 1 |
 | Spanish First Division 51 / 67 | Native reputation 178/200, current stage registration gate 0 |
 
 Full native discovery plus three fresh bounded readbacks agreed. Snapshots:
 `artifacts/fmscan/barcelona-editor.json`, `spain-editor.json`, and
 `spanish-first-division-editor.json`. Addresses and values are observations of
-this running save and may become stale. No screenshot, day-tick, save/reload or
-write experiment was performed.
+this running save and may become stale.
 
 ## Still WIP
 
 | Area | Explicitly unavailable |
 | --- | --- |
-| Club | Data-analysis facilities, sugar daddy type, board patience/confidence, fan confidence, affiliate terms |
-| Nation | Flat UI development enum, flat tax rate, corruption index, national facility averages, population/languages; gender-specific game importance, FA financial power, FIFA rank/points |
+| Club | Board patience/confidence, fan confidence, affiliate terms |
+| Nation | Flat UI development enum, flat tax rate, corruption index, national facility averages, spoken languages; gender-specific game importance, FA financial power, FIFA rank/points |
 | Competition | Active substitutions/bench/windows, VAR, squad/foreign/homegrown limits, cards-for-ban, season team count, authoritative payout/TV-rights values |
 
 Supporter patience is not board patience. Men's values are not women's values.

@@ -24,6 +24,7 @@ const MEN_CONTAINER_OFFSET: usize = 0x108;
 const WOMEN_CONTAINER_OFFSET: usize = 0x110;
 const STATE_OF_DEV_OFFSET: usize = 0x1ec;
 const ECONOMIC_FACTOR_OFFSET: usize = 0x1f0;
+const POPULATION_OFFSET: usize = 0x1e4;
 const CONTAINER_NATION_BACKPTR: usize = 0x170;
 const CONTAINER_VECTOR_OFFSET: usize = 0x18;
 const YOUTH_RATING_OFFSET: usize = 0x864;
@@ -186,6 +187,11 @@ impl NativeNationRecord {
         Ok(driver.read::<u8>(self.nation + STATE_OF_DEV_OFFSET)?)
     }
 
+    pub fn read_population(&self, driver: &LinuxMemoryDriver) -> Result<u32> {
+        self.validate(driver)?;
+        Ok(driver.read::<u32>(self.nation + POPULATION_OFFSET)?)
+    }
+
     // --- Writes ---
 
     fn apply_patches(&self, driver: &LinuxMemoryDriver, patches: &[FieldPatch]) -> Result<()> {
@@ -276,6 +282,20 @@ impl NativeNationRecord {
             });
         }
 
+        // Population
+        if previous.population != requested.population && requested.population > 0 {
+            if !(1..=2_000_000_000).contains(&requested.population) {
+                return Err(invalid("Nation population must be between 1 and 2,000,000,000"));
+            }
+            let old = driver.read::<u32>(self.nation + POPULATION_OFFSET)?;
+            patches.push(FieldPatch {
+                address: self.nation + POPULATION_OFFSET,
+                old_bytes: old.to_le_bytes().to_vec(),
+                new_bytes: requested.population.to_le_bytes().to_vec(),
+                label: "Population",
+            });
+        }
+
         self.apply_patches(driver, &patches)
     }
 }
@@ -325,6 +345,7 @@ mod tests {
         driver.write(nation + WOMEN_CONTAINER_OFFSET, &women_container).unwrap();
         driver.write(nation + ECONOMIC_FACTOR_OFFSET, &17u8).unwrap();
         driver.write(nation + STATE_OF_DEV_OFFSET, &1u8).unwrap();
+        driver.write(nation + POPULATION_OFFSET, &49_570_725u32).unwrap();
 
         // Men's container
         driver.write(men_container + CONTAINER_NATION_BACKPTR, &nation).unwrap();
@@ -382,6 +403,7 @@ mod tests {
         assert_eq!(f.record.read_women_reputation(&f.driver).unwrap(), 9300);
         assert_eq!(f.record.read_economic_factor(&f.driver).unwrap(), 17);
         assert_eq!(f.record.read_state_of_development(&f.driver).unwrap(), 1);
+        assert_eq!(f.record.read_population(&f.driver).unwrap(), 49_570_725);
     }
 
     #[test]
@@ -393,12 +415,14 @@ mod tests {
         prev.reputation = 9011;
         prev.economic_factor = 17;
         prev.state_of_development = 1;
+        prev.population = 49_570_725;
 
         let mut req = prev.clone();
         req.youth_rating = 195;
         req.reputation = 9500;
         req.economic_factor = 20;
         req.state_of_development = 2;
+        req.population = 50_000_000;
 
         f.record.write_nation_edits(&f.driver, &prev, &req).unwrap();
 
@@ -406,6 +430,7 @@ mod tests {
         assert_eq!(f.record.read_men_reputation(&f.driver).unwrap(), 9500);
         assert_eq!(f.record.read_economic_factor(&f.driver).unwrap(), 20);
         assert_eq!(f.record.read_state_of_development(&f.driver).unwrap(), 2);
+        assert_eq!(f.record.read_population(&f.driver).unwrap(), 50_000_000);
     }
 
     #[test]
@@ -415,5 +440,8 @@ mod tests {
         let mut req = prev.clone();
         req.economic_factor = 25;
         assert!(f.record.write_nation_edits(&f.driver, &prev, &req).is_err());
+        let mut req_pop = prev.clone();
+        req_pop.population = 2_000_000_001;
+        assert!(f.record.write_nation_edits(&f.driver, &prev, &req_pop).is_err());
     }
 }

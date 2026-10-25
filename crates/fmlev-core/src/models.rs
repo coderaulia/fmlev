@@ -642,6 +642,7 @@ fn default_foreign() -> u8 { 17 }
 fn default_hg_club() -> u8 { 4 }
 fn default_hg_nation() -> u8 { 8 }
 fn default_yellow_ban() -> u8 { 5 }
+fn default_population() -> u32 { 50_000_000 }
 
 impl ClubFinances {
     pub fn read(driver: &LinuxMemoryDriver, addr: usize, registry: &OffsetsRegistry) -> Result<Self> {
@@ -887,6 +888,8 @@ pub struct NationDetails {
     pub game_importance: u8,       // 1 - 20
     #[serde(default = "default_tax_rate")]
     pub tax_rate: u8,              // 0 - 100 (%)
+    #[serde(default = "default_population")]
+    pub population: u32,
     #[serde(default = "default_stat_one")]
     pub corruption_index: u8,      // 0 - 20 (match fixing/scandal factor)
     #[serde(default = "default_stat_ten")]
@@ -911,6 +914,7 @@ impl Default for NationDetails {
             fa_financial_power: 18,
             game_importance: 20,
             tax_rate: 45,
+            population: 57_690_300,
             corruption_index: 2,
             youth_facilities_avg: 17,
             youth_coaching_avg: 16,
@@ -986,6 +990,7 @@ impl NationDetails {
             fa_financial_power,
             game_importance,
             tax_rate,
+            population: 50_000_000,
             corruption_index,
             youth_facilities_avg: 12,
             youth_coaching_avg: 12,

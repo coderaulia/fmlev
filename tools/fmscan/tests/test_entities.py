@@ -179,7 +179,8 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(d["currency"], "GBP")
         self.assertIn("unverified", d["wage_period"])
         self.assertIsNone(d["board_patience"])
-        self.assertIsNone(d["data_analysis_facilities"])
+        self.assertEqual(d["data_analysis_facilities"], 18)
+        self.assertEqual(d["sugar_daddy_type"], 1)
 
     def test_nation_gender_specific_youth_and_reputation(self):
         d = self.details("nation", 170)
@@ -190,6 +191,7 @@ class EntityTests(unittest.TestCase):
         self.assertIsNone(d["youth_rating"])
         self.assertEqual(d["economic_factor"], 17)
         self.assertEqual(d["state_of_development_native_code"], 1)
+        self.assertEqual(d["population"], 49570725)
         self.assertIsNone(d["state_of_development"])
         self.assertIsNone(d["men"]["fifa_rank"])
 

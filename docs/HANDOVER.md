@@ -1,0 +1,34 @@
+# FMLE Handover
+
+## State (HEAD 92c1093, tree clean, `cargo check` clean)
+Verified in game, shipped: club balance/transfer budget, squad numbers (swap), tactical familiarity max, register-anytime (manager flag + domestic stage entry+0x9a), competition prizes, contract extend. Details: `AGENTS.md` Phase 3.
+
+Not implemented (endpoints return 501):
+- `POST /api/player/contract/terminate` — expiry=today does not release; FM26 releases via scheduled events.
+- `POST /api/transfer/sign`, `/api/transfer/loan` — game allocates contract (+0x1e8) and loan-agreement (+0x1f0 -> node -> agreement) objects; memory writes cannot create them.
+- Squad-number-anytime gate (bit 0x200 of dword at manager X+0x404) not traced.
+- Never edit a player's injury vector (player+0x248): crashes FM26.
+
+## C++ tooling plan (`tools/fmscan/`, read-only, Rust stays the main tool)
+Existing: `fmscan snap|diff|refs|find|dump` (build: `g++ -O2 -std=c++20 -o fmscan fmscan.cpp`; uses process_vm_readv, rw-private regions, 8-byte words, `--exclude` noise file, `--to32`).
+
+Goal: faster discovery loop than Rust examples; Rust only receives verified offsets.
+
+1. **`fmscan watch <pid> <hex_addr> <len> [--ms N]`** — poll a range, print changed words live (see what a day tick / UI action touches).
+2. **`fmscan struct <pid> <hex_addr> [--depth N]`** — dump record at +0..+0x400 annotating each qword: heap pointer (+ its first qword/vtable), small int, float, date-shaped u32 (year 2000..2200 in high 16). Follow pointers to depth N with cycle guard.
+3. **`fmscan rtti <pid> <hex_vtable|addr>`** — resolve MSVC RTTI type name from vtable (needs module base from /proc/pid/maps of game_plugin.dll) so unknown objects are named.
+4. **`fmscan vec <pid> <hex_addr>`** — decode begin/end/cap triples, element count and stride guess, dump elements.
+5. **`fmscan graph <pid> <hex_obj> --in/--out`** — inbound refs (generalise `refs`, grouped by owning region) and outbound pointers; used to find which lists contain a person/contract (needed for sign/loan list membership).
+6. **`fmscan diffset`** — chain snap/noise/diff in one command (`--action-wait`) and emit a ranked candidate list (address, old->new, nearest vtable).
+7. **JSON output (`--json`)** for all commands so Rust examples/tests can consume results.
+8. Safety rule: C++ tool never writes; any write experiment stays in Rust (`live_write.rs`, readback + rollback).
+
+Suggested order: 2 -> 4 -> 3 -> 5 (unblocks sign/loan), then 1, 6, 7.
+
+## Next-session targets
+1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.
+2. Terminate: find the scheduled-event queue entry for contract release; or find the release routine in game_plugin.dll.
+3. Squad-number-anytime gate (0x200).
+
+## Rules
+Max 1,500 LOC/file; verification trio from `AGENTS.md`; commit locally, never push unless asked; test risky writes on a throwaway save, then Save As.

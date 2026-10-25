@@ -95,6 +95,72 @@ Loan destinations and additional continental/cup competitions are not inferred.
 These are guarded FM26 read layouts, not write authorization or universal schemas
 for future game versions. A structurally incompatible record is rejected.
 
+### Player editor data and Rust comparison
+
+```bash
+# Print every supported editor field in readable text, without opening FM screens.
+./fmscan entity PID player --name "Lamine Yamal" --editor
+# Same export as structured JSON (editor_data inside each match).
+./fmscan entity PID player --name "Lamine Yamal" --editor --json
+
+# Scan by known runtime index and UID, then dump the common native data payload.
+./fmscan player-data PID INDEX UID --json
+# Refresh an already located attribute record (not the ACTUAL_PLAYER object base).
+./fmscan player-data PID INDEX UID --record HEX_NATIVE_RECORD --iterations 1000 --json
+```
+
+The editor export contains the name and IDs, all 60 editor attributes, 15 position
+aptitudes (including SW), feet, CA/PA, nationality, parent-contract club, domestic
+competition, weekly wage in GBP, contract expiry year/packed date and squad number.
+Age, condition, sharpness, morale, injury/suspension state, release clause, squad
+status and happiness are explicitly null/unavailable. The editor's fallback values
+are not substituted for unmapped native fields. Position text is derived from
+aptitudes of at least 18, not copied from a binding. CA stars and recommended-CA UI
+decorations are not native fields and are not exported as game values.
+
+`player-data` is a read-only, guarded identity-based diagnostic. It does not perform
+RTTI name discovery or alter the Rust writer's calibration flags. Its common payload
+is exactly reproduced by `crates/fmlev-core/examples/player_data.rs`, using FMLE's
+real Linux memory driver and production attribute decoder. Both read a 512-byte
+native player snapshot and a 96-byte contract snapshot, validate duplicate IDs,
+vtable code pointers, attribute ranges, date and contract ownership, and reread
+identity/contract pointer before publishing. Invalid attributes/dates fail rather
+than returning a partial record. The benchmark's core payload omits the extra
+RTTI-linked nationality/club/competition fields and all unsupported fields.
+
+From the repository root:
+
+```bash
+python3 tools/fmscan/benchmark_player.py --pid PID --index INDEX --uid UID \
+  --record HEX_NATIVE_RECORD --trials 7 --iterations 1000 \
+  --output artifacts/fmscan/player-benchmark.json
+```
+
+The script builds C++ with `g++ -O3` and Rust with Cargo release (optimization level
+3) before timing. It alternates binaries, excludes one warm-up per mode/binary,
+compares every payload and checksum, and requires identical scanned-byte/error
+counts. Full discovery uses supplied index/UID, matching anonymous/heap mappings,
+1 MiB chunks and aligned identity search in both implementations. The original
+RTTI/name search, HTTP, UI rendering and compilation are outside these timings.
+Known-record reads repeat 1,000 times per trial, with JSON serialization outside
+the internal timer. Process wall times, min/median/max and raw trials are retained.
+These are warm-cache measurements of these implementations, not intrinsic language
+speed or a benchmark of the existing HTTP editor refresh path.
+
+Live results on 2026-10-25 (Intel Core i3-10100; seven trials):
+
+| Matching workload | C++ median | Rust median |
+| --- | ---: | ---: |
+| Full identity scan, internal | 919.67 ms | 799.39 ms |
+| Full scan + output, process wall time | 946.92 ms | 823.57 ms |
+| Located record read/decode, per player | 8.53 us | 9.67 us |
+
+Both scanned 4,716,535,808 readable bytes, reported 20 unreadable chunks and returned
+identical supported data. Rust won the full scan; C++ won the short repeated-read
+loop. Results vary with scheduling, residency, game activity and implementation.
+Live CA/PA were 175/194, wage GBP 280,867/week, expiry year 2031 and squad number 10.
+No game screen was opened, memory written or screenshot parity claimed.
+
 Live read-only proof on 2026-10-25, without opening or navigating any game screen:
 
 | Native entity | Index | UID |

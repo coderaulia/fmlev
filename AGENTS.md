@@ -125,3 +125,9 @@ crates/
 - Related player chain validates parent-contract ownership, team, club, nation and domestic competition identities. Club searches validate their team-vector bounds and team-owner back-pointer. Missing/invalid links remain explicitly unavailable; loan destinations are not inferred.
 - Live proof without opening game screens: Lamine Yamal Nasraoui (40629/2000256231), Barcelona (1074/1708), Spain (170/796), Spanish First Division (51/67). Independent full scans agreed with the pointer chain. No live writes.
 - Verification: 17 synthetic process tests, warnings-as-errors C++ build, workspace check, Rust 109 passed/1 ignored, and UI 32 passed. All new source files remain below 1,500 LOC.
+
+### Phase 6: Native Player Editor Dump and Matched Benchmark (Completed)
+- `entity ... player --editor` prints the 60 native editor attributes, positions/feet, CA/PA, names/identity and supported contract/context fields. Unsupported fields remain unavailable; no UI defaults or screen navigation.
+- Added guarded read-only `player-data` diagnostics in C++ and a Rust example using the actual memory driver and production attribute decoder. Snapshot decoding does not calibrate or authorize writes.
+- Matched optimized benchmark (seven alternating trials, warmups/build excluded): full identity scan C++ 919.67 ms / Rust 799.39 ms; located-record read/decode C++ 8.53 us / Rust 9.67 us. Payloads/checksums and scanned workload matched. This is not the HTTP/UI path or a universal language result.
+- Verification: 21 process tests, warnings-as-errors C++ build, workspace check, Rust 109 passed/1 ignored, and UI 32 passed. Live Yamal CA/PA 175/194 and all 60 attributes agree between readers; no live writes or screenshot/save-reload proof.

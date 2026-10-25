@@ -52,6 +52,24 @@ memory was written. The native player scan validated 39,489 records, one matchin
 name, with 20 unreadable chunks reported. This is not an exhaustive save census.
 See `tools/fmscan/README.md` for command semantics and version/loan limitations.
 
+### Full supported player editor dump and benchmark (2026-10-25)
+`entity ... player --editor` prints name/IDs, 60 attributes, positions/feet,
+CA/PA, nationality, parent-contract club, competition, wage/expiry and squad number.
+Unsupported UI fields are explicitly unavailable; no game screen is required.
+`--json` exports the same supported data. Live Yamal CA/PA 175/194, weekly wage
+GBP 280867, expiry 2031, number 10; all common C++/Rust payload fields matched.
+
+`player-data PID INDEX UID [--record HEX] [--iterations N]` is the common read-only
+identity-scan/read diagnostic. Rust counterpart: example `player_data`; it uses
+the real memory driver and production attribute decoder without changing writer
+calibration. `tools/fmscan/benchmark_player.py` builds both at optimization level 3,
+alternates seven trials, excludes compilation/warmups, verifies payload/checksum
+and scan-work equality, and reports wall and internal times separately.
+Live medians: internal full scan C++ 919.67 ms / Rust 799.39 ms; known-record read
+C++ 8.53 us / Rust 9.67 us. This compares matched diagnostic implementations, not
+the HTTP UI refresh path or RTTI/name discovery, and is not a universal language claim.
+Verification: 21 C++/Rust process tests plus the required workspace/UI trio pass.
+
 ## Next-session targets
 1. Sign/loan: with `struct`/`graph`, snapshot a free-agent signing and a loan-in; list every object that gains a reference (club player list, team list, contract, loan node). Test pointer-swap of an existing contract between teams on a throwaway save.
 2. Terminate: find the scheduled-event queue entry for contract release; or find the release routine in game_plugin.dll.

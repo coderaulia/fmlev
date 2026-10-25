@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -18,6 +19,8 @@ class EntityTests(unittest.TestCase):
                                (ROOT / "tests/entity_fixture.cpp", cls.fixture)]:
             subprocess.run(["g++", "-std=c++20", "-O2", "-Wall", "-Wextra",
                             "-Wpedantic", "-Werror", str(source), "-o", str(output)], check=True)
+        subprocess.run(["cargo", "build", "--release", "-p", "fmlev-core", "--example", "player_data"], cwd=ROOT.parents[1], check=True, capture_output=True)
+        cls.rust = ROOT.parents[1] / "target/release/examples/player_data"
 
     @classmethod
     def tearDownClass(cls):
@@ -103,6 +106,63 @@ class EntityTests(unittest.TestCase):
         for kind, args in [("unknown", []), ("player", ["--max", 0]),
                            ("nation", ["--uid", 4294967296]), ("club", ["--name", ""])]:
             self.assertIn("error", self.scan(kind, *args, ok=False))
+
+    def test_editor_prints_sixty_attributes_and_unknowns(self):
+        p = self.scan("player", "--name", "Lamine", "--editor")["matches"][0]["editor_data"]
+        self.assertEqual(len(p["attributes"]), 60)
+        self.assertEqual(set(p["attributes"].values()), {10})
+        self.assertEqual((p["current_ability"], p["potential_ability"]), (170, 195))
+        self.assertEqual(p["positions"]["left_foot"], 20)
+        self.assertEqual(p["contract"]["wage_per_week"], 280867)
+        self.assertEqual(p["contract"]["expiry_year"], 2031)
+        self.assertEqual((p["nationality"], p["club_name"]), ("Spain", "Barcelona"))
+        for k in ["age", "morale", "condition", "sharpness", "is_injured"]:
+            self.assertIsNone(p[k])
+        self.assertIsNone(p["contract"]["release_clause"])
+
+    def player_data(self, language, located, ok=True):
+        argv = [str(self.binary), "player-data"] if language == "cpp" else [str(self.rust)]
+        argv += [self.pid, "40629", "2000256231", "--iterations", "3", "--json"]
+        if located:
+            argv += ["--record", hex(self.root + 0x148)]
+        else:
+            argv += ["--near", f"{self.root + 0x8000:x}:8000"]
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+        self.assertEqual(proc.returncode == 0, ok, proc.stderr)
+        return json.loads(proc.stdout if ok else proc.stderr)
+
+    def test_cpp_rust_full_scan_and_located_read_parity(self):
+        expected = None
+        for language in ["cpp", "rust"]:
+            for located in [False, True]:
+                result = self.player_data(language, located)
+                if expected is None:
+                    expected = result
+                self.assertEqual(result["player"], expected["player"])
+                self.assertEqual(result["checksum"], expected["checksum"])
+                self.assertEqual(result["iterations"], 3)
+                self.assertEqual(result["scan_ns"] == 0, located)
+                self.assertEqual(result["scanned_bytes"] == 0, located)
+
+    def test_both_readers_reject_bad_attributes_and_dates(self):
+        self.action("bad-attribute")
+        for language in ["cpp", "rust"]:
+            self.player_data(language, True, ok=False)
+        self.action("good-attribute")
+        self.action("bad-date")
+        for language in ["cpp", "rust"]:
+            self.player_data(language, True, ok=False)
+
+    def test_cpp_attribute_schema_matches_production_rust(self):
+        source = (ROOT.parents[1] / "crates/fmlev-core/src/native_player.rs").read_text()
+        fields = {}
+        for group in ["NATIVE_OUTFIELD_ATTRIBUTES", "NATIVE_EXTRA_ATTRIBUTES"]:
+            body = re.search(r"attributes!\s*\{\s*" + group + r";(.*?)\n\}", source, re.S)[1]
+            fields.update({k: (int(o, 16), int(s)) for k, o, s in re.findall(r"(\w+):\s*(0x[0-9a-f]+)\s*=>\s*(\d+)", body)})
+        cpp = (ROOT / "player_data.hpp").read_text()
+        other = {k: (int(o, 16), int(s)) for k, o, s in re.findall(r'\{"(\w+)",\s*(0x[0-9a-f]+),\s*(\d+)\}', cpp)}
+        self.assertEqual(fields, other)
+        self.assertEqual(len(other), 60)
 
 
 if __name__ == "__main__":

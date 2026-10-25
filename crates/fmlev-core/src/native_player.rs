@@ -84,6 +84,12 @@ pub fn native_attributes() -> impl Iterator<Item = &'static NativeAttribute> {
 }
 
 impl NativeAttribute {
+    /// Decode an already read native record for read-only diagnostics. Does not
+    /// calibrate or authorize a NativePlayerRecord or any live write.
+    pub fn decode_snapshot(&self, bytes: &[u8]) -> Result<u8> {
+        self.decode(*bytes.get(self.offset).ok_or_else(|| invalid("Short native attribute snapshot"))?)
+    }
+
     fn decode(&self, raw: u8) -> Result<u8> {
         if self.scale == 5 { displayed_rating(raw) }
         else if raw <= 20 { Ok(raw) }

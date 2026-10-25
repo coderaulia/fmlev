@@ -1,6 +1,6 @@
 // Read-only process memory discovery. Build: g++ -O2 -std=c++20 -o fmscan fmscan.cpp
 #include "scan.hpp"
-#include "entities.hpp"
+#include "player_data.hpp"
 
 static const char* HELP = R"(fmscan: read-only FM26 memory discovery (never writes to the target)
 Usage:
@@ -14,7 +14,8 @@ Usage:
   fmscan vec PID HEX_ADDR [--stride N] [--max N]
   fmscan rtti PID HEX_VTABLE_OR_OBJECT
   fmscan entity PID player|club|nation|competition [--name TEXT] [--id N] [--uid N]
-                    [--related] [--max N] [--near HEX[:RADIUS]]
+                    [--related] [--editor] [--max N] [--near HEX[:RADIUS]]
+  fmscan player-data PID INDEX UID [--record HEX] [--iterations N] [--near HEX[:RADIUS]]
   fmscan graph PID HEX_OBJECT --in|--out [--near HEX[:RADIUS]] [--len N] [--max N]
   fmscan watch PID HEX_ADDR LEN [--ms N] [--count POLLS]
   fmscan diffset PID [--noise-ms N] [--action-wait SECONDS] [--near HEX[:RADIUS]]
@@ -47,6 +48,7 @@ int main(int argc, char** argv) {
         if (cmd == "watch") return cmd_watch(m, a);
         if (cmd == "diffset") return cmd_diffset(m, a);
         if (cmd == "entity") return cmd_entity(m, a);
+        if (cmd == "player-data") return cmd_player_data(m, a);
         throw std::runtime_error("unknown command; use --help");
     } catch (const std::exception& e) {
         if (json) { Json j; j.str("error", e.what()); std::cerr << j.done() << std::endl; }

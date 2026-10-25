@@ -44,6 +44,10 @@ int main(int argc, char** argv) {
     };
     put(heap, player); put(heap + 0x148, native_vt); identity(0x288, person, 40629, 2000256231);
     memset(heap + 0x150, 10, 15); heap[0x177] = 100; heap[0x178] = 50;
+    memset(heap + 0x148 + 0x17, 50, 0x4c - 0x17 + 1);
+    heap[0x177] = 100; heap[0x178] = 50;
+    memset(heap + 0x148 + 0x1b0, 10, 8);
+    put(heap + 0x148 + 0x11c, uint16_t{170}); put(heap + 0x148 + 0x11e, uint16_t{195});
     put(heap + 0xb000, text("Lamine Yamal")); put(heap + 0xb008, text("Nasraoui"));
     put(heap + 0x2d8, root + 0xb000); put(heap + 0x2e0, root + 0xb008);
     put(heap + 0x330, root + 0x6000);
@@ -54,6 +58,8 @@ int main(int argc, char** argv) {
     identity(0x4000, nation, 170, 796); put(heap + 0x4018, text("Spain"));
     identity(0x5000, comp, 51, 67); put(heap + 0x5040, text("Spanish First Division")); put(heap + 0x5060, root + 0x4000);
     put(heap + 0x6000, contract); put(heap + 0x6008, root + 0x288); put(heap + 0x6010, root + 0x3000);
+    put(heap + 0x6020, uint32_t{280867}); put(heap + 0x6048, uint32_t{(2031 << 16) | 181}); heap[0x605d] = 10;
+    put(heap + 0x148 + 0x1a8, root + 0x4000);
     // A stale copy with conflicting UIDs must not be discoverable.
     memcpy(heap + 0x8000, heap, 0x400); put(heap + 0x8298, uint32_t{123});
     if (mprotect(dll, 0x4000, PROT_READ)) return 5;
@@ -65,6 +71,9 @@ int main(int argc, char** argv) {
         if (cmd == "bad-vector-owner") put(heap + 0x3030, root + 0x5000);
         if (cmd == "duplicate") memcpy(heap + 0x8000, heap, 0x400);
         if (cmd == "bad-name") heap[0xc004] = 0xff;
+        if (cmd == "bad-attribute") heap[0x148 + 0x1e] = 101;
+        if (cmd == "good-attribute") heap[0x148 + 0x1e] = 50;
+        if (cmd == "bad-date") put(heap + 0x6048, uint32_t{0});
         std::cout << "ok" << std::endl;
     }
 }

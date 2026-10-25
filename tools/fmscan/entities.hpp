@@ -5,6 +5,8 @@ struct NativeEntity {
     std::string kind, name; U address = 0, record = 0; uint32_t index = 0, uid = 0;
     const NativeType* type = nullptr;
 };
+inline Json editor_player_data(const Memory&, const NativeCatalog&, const NativeEntity&);
+inline void print_player_editor(const Memory&, const NativeCatalog&, const NativeEntity&);
 inline std::optional<NativeEntity> read_entity(const Memory& m, const NativeCatalog& catalog, U address, const std::string& kind) {
     auto type = catalog.at(m, address, kind); if (!type) return {};
     // NativePlayerRecord's calibrated attribute/person view is embedded at ACTUAL_PLAYER+0x148.
@@ -45,13 +47,14 @@ struct EntityRelations {
     const Memory& m; const NativeCatalog& catalog;
     std::vector<std::string> nodes, edges, unavailable;
     std::set<U> seen;
+    std::vector<NativeEntity> records{};
     std::optional<NativeEntity> link(U source, U offset, const std::string& kind, const std::string& label) {
         U target = 0;
         auto entity = m.read(source + offset, target) && target ? read_entity(m, catalog, target, kind) : std::nullopt;
         Json edge; edge.str("relation", label); edge.addr("source", source); edge.num("offset", offset); edge.addr("target", target);
         if (!entity) { edge.str("status", target ? "invalid_or_unmapped_target" : "absent"); unavailable.push_back(edge.done()); return {}; }
         edge.str("status", "native_pointer_and_identity_validated"); edges.push_back(edge.done());
-        if (seen.insert(target).second) nodes.push_back(entity_json(*entity).done());
+        if (seen.insert(target).second) { nodes.push_back(entity_json(*entity).done()); records.push_back(*entity); }
         return entity;
     }
     void club(const NativeEntity& c) {
@@ -96,9 +99,10 @@ struct EntityRelations {
     }
 };
 inline int cmd_entity(const Memory& m, const Args& a) {
-    a.allow({"--name", "--id", "--uid", "--max", "--near", "--related"}, 3);
+    a.allow({"--name", "--id", "--uid", "--max", "--near", "--related", "--editor"}, 3);
     const auto& kind = a.pos[2];
     if (kind != "player" && kind != "club" && kind != "nation" && kind != "competition") throw std::runtime_error("entity kind must be player|club|nation|competition");
+    if (a.has("--editor") && kind != "player") throw std::runtime_error("--editor requires player kind");
     U max = a.val("--max", 20), id = a.val("--id", 0), uid = a.val("--uid", 0);
     if (!max || max > 1000 || id > INT32_MAX || uid > UINT32_MAX || (a.has("--name") && a.get("--name").empty())) throw std::runtime_error("invalid entity selector or max (1..1000)");
     NativeCatalog catalog(m);
@@ -126,6 +130,8 @@ inline int cmd_entity(const Memory& m, const Args& a) {
         auto fresh = read_entity(m, catalog, e.address, e.kind);
         if (!fresh || fresh->index != e.index || fresh->uid != e.uid || fresh->name != e.name) throw std::runtime_error("native identity changed during scan; retry");
         Json j = entity_json(e);
+        if (a.has("--editor")) j.raw("editor_data",editor_player_data(m,catalog,e).done());
+        if (a.has("--editor") && !a.json) print_player_editor(m,catalog,e);
         if (a.has("--related")) {
             EntityRelations links{m, catalog, {}, {}, {}, {}};
             if (e.kind == "player") links.player(e);
@@ -139,5 +145,7 @@ inline int cmd_entity(const Memory& m, const Args& a) {
     out.str("source", "native_database_memory"); out.raw("requires_open_screen", "false"); out.num("validated_records", examined);
     out.num("total_matches", total); out.num("scanned_bytes", stats.bytes); out.num("unreadable_chunks", stats.unreadable);
     out.raw("truncated", total > found.size() ? "true" : "false"); out.raw("matches", array(rows));
-    emit(a, out, out.done()); return 0;
+    if (a.has("--editor") && !a.json) std::cout << total << " matching player(s)\n";
+    else emit(a, out, out.done());
+    return 0;
 }

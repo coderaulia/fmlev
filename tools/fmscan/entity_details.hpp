@@ -1,6 +1,7 @@
 #pragma once
 #include "player_data.hpp"
 #include <tuple>
+#include <type_traits>
 
 // Numeric layouts below were traced/corroborated on this exact native DLL
 // build. A new build must be investigated; range checks alone do not establish
@@ -10,10 +11,17 @@ inline bool entity_layout_build(const Memory &m, const NativeCatalog &c) {
   return m.read(c.base + 0x3c, pe) && pe <= CHUNK &&
          m.read(c.base + pe + 8, stamp) && stamp == 0x6a229e8a;
 }
+struct NativeScalar {
+  U address;
+  size_t width;
+  bool is_signed;
+  int64_t value, low, high;
+};
 struct Details {
   Json fields;
   std::vector<std::string> evidence, unavailable;
   std::vector<std::pair<std::string, std::string>> text;
+  std::map<std::string, NativeScalar> scalars;
   void missing(const std::string &key, const std::string &why) {
     fields.raw(key, "null");
     Json j;
@@ -37,8 +45,15 @@ struct Details {
       missing(key, "native layout/build/ownership not verified");
       return;
     }
-    if (!m.read(address, value) || int64_t(value) < low ||
-        int64_t(value) > high) {
+    if (!m.read(address, value)) {
+      missing(key, "unreadable native scalar");
+      return;
+    }
+    // Keep owner/type metadata for recovery of a partial scalar write, without
+    // publishing an invalid value as readable editor data.
+    scalars.emplace(key, NativeScalar{address, sizeof(T), std::is_signed_v<T>,
+                                      int64_t(value), low, high});
+    if (int64_t(value) < low || int64_t(value) > high) {
       missing(key, "unreadable or outside native field range");
       return;
     }
@@ -190,8 +205,8 @@ inline void club_details(const Memory &m, const NativeCatalog &catalog,
       pointer_field(m, club, 0x150) != finance)
     throw std::runtime_error("club ownership changed during details read");
 }
-inline Json national_container_details(const Memory &m, U nation, U container,
-                                       bool build) {
+inline Details national_container_details(const Memory &m, U nation,
+                                          U container, bool build) {
   Details d;
   bool valid = build &&
                typed_native(m, container, ".?AVNATIONAL_TEAM_CONTAINER@db@@") &&
@@ -210,7 +225,7 @@ inline Json national_container_details(const Memory &m, U nation, U container,
   for (auto key :
        {"game_importance", "fa_financial_power", "fifa_rank", "fifa_points"})
     d.missing(key, "gender-specific native field not yet mapped");
-  return d.done();
+  return d;
 }
 inline void nation_details(const Memory &m, const NativeCatalog &catalog,
                            const NativeEntity &e, Details &d) {
@@ -221,12 +236,14 @@ inline void nation_details(const Memory &m, const NativeCatalog &catalog,
   bool valid = typed_native(m, continent, ".?AVCONTINENT@db@@");
   d.string("continent", valid ? direct_string(m, continent, 0x18) : "",
            continent + 0x18);
-  d.fields.raw("men", national_container_details(
-                          m, nation, pointer_field(m, nation, 0x108), build)
-                          .done());
-  d.fields.raw("women", national_container_details(
-                            m, nation, pointer_field(m, nation, 0x110), build)
-                            .done());
+  for (auto [label, offset] : std::vector<std::pair<std::string, U>>{
+           {"men", 0x108}, {"women", 0x110}}) {
+    auto child = national_container_details(
+        m, nation, pointer_field(m, nation, offset), build);
+    d.fields.raw(label, child.done().done());
+    for (auto &[key, scalar] : child.scalars)
+      d.scalars.emplace(label + "." + key, scalar);
+  }
   d.number<uint8_t>(
       m, "economic_factor", nation + 0x1f0, 1, 20,
       "native NATION serializer tag Necf -> BYTE +0x1f0 at RVA 0xf7c7cb",

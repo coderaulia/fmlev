@@ -223,6 +223,37 @@ pointer, +10 for a zero-to-nonzero change. Ties sort by ascending address. A nea
 vtable is a clue; it does not establish ownership. Changes at sampled noisy slots
 are excluded even if the later action also touches them.
 
+## fmwrite (experimental transactional writer)
+
+`fmscan` stays read-only. `fmwrite` is a separate executable that writes only
+allowlisted scalar fields of a club, nation or competition, using a journaled plan.
+
+```bash
+g++ -O2 -std=c++20 -Wall -Wextra -Wpedantic -Werror -o fmwrite fmwrite.cpp
+./fmwrite plan PID club|nation|competition INDEX UID --set field=value,... --plan NEW_FILE
+./fmwrite show PLAN_FILE
+./fmwrite apply PLAN_FILE [--experimental]
+./fmwrite restore PLAN_FILE
+```
+
+- `plan` is read-only: it needs exactly one native identity match (index + UID),
+  the known DLL build (PE timestamp 0x6a229e8a), an in-range value and a private-heap
+  target. The plan file is created exclusively (never overwritten) and fsynced.
+- `apply` takes a per-process lock, rechecks process start time, identity and field
+  owner, writes each field with `process_vm_writev`, reads it back, then polls three
+  times. Any failure rolls back in reverse order; the journal records
+  `applying/applied/rolled_back/rollback_failed`. `restore` writes the `before`
+  values back and resumes partial scalar writes.
+- Club facility writes are refused unless the club subrecord has a single owner.
+- Allowlist: club `balance`, `transfer_budget` (no flag); club facilities/reputation,
+  nation youth rating/reputation/economic factor and competition reputation need
+  `--experimental` because game visibility and durability are not verified.
+  Strings, pointers, rules/prizes, contracts and transfers are rejected.
+- Use a throwaway save. `plan` and `show` never write; `apply` and `restore` do.
+- Tested by `tests/test_writes.py` against a synthetic process (fault injection in
+  `tests/write_faults.cpp`). Live use so far: one R. Madrid balance apply/restore,
+  restored to the original bytes; not checked on screen.
+
 ## Interpretation limits
 
 Contract/transfer commands, upstream source research, live Endrick/Yamal evidence,

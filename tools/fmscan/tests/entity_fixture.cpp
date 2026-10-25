@@ -117,6 +117,11 @@ int main(int argc, char** argv) {
         if (cmd == "bad-youth") put(heap + 0x10864, uint16_t{300});
         if (cmd == "bad-comp-reputation") put(heap + 0x5188, uint16_t{10000});
         if (cmd == "bad-stage") put(heap + 0x15068, root + 0x1a000);
+        if (cmd == "high-reputation") put(heap+0x30a8,uint16_t{9999});
+        if (cmd == "shared-club") {
+            memcpy(heap+0x1c000,heap+0x2000,0x170);
+            put(heap+0x1c008,uint32_t{1099});put(heap+0x1c00c,uint32_t{1799});put(heap+0x1c010,uint32_t{1799});
+        }
         if (cmd == "unknown-build") {
             mprotect(dll,4096,PROT_READ|PROT_WRITE);put(dll + 0x88, uint32_t{0});mprotect(dll,4096,PROT_READ);
         }

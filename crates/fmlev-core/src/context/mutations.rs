@@ -1053,9 +1053,11 @@ impl GameContextManager {
             club.club_name = snapshot.name.clone();
             if let Some(bal) = snapshot.balance_game_units { club.balance = bal; }
             if let Some(tb) = snapshot.transfer_budget_game_units { club.transfer_budget = tb; }
-            if let Some(tr) = snapshot.training_rating { club.training_facilities = tr; }
-            if let Some(yr) = snapshot.youth_rating { club.youth_facilities = yr; }
-            if let Some(cr) = snapshot.corporate_rating { club.corporate_facilities = cr; }
+            if !self.native_synced_clubs.contains(&snapshot.id) {
+                if let Some(tr) = snapshot.training_rating { club.training_facilities = tr; }
+                if let Some(yr) = snapshot.youth_rating { club.youth_facilities = yr; }
+                if let Some(cr) = snapshot.corporate_rating { club.corporate_facilities = cr; }
+            }
             if let Some(stadium) = &snapshot.stadium_name { club.stadium_name = stadium.clone(); }
             if self.context.club.club_id == snapshot.id {
                 self.context.club = club.clone();

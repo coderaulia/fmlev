@@ -113,7 +113,9 @@ impl NativeNationRecord {
                             women_team: women.and_then(|w| w.1),
                             nation_id,
                         };
-                        if candidate.validate(driver).is_ok() {
+                        // Other record types share the index/uid pattern; a real nation has a validated
+                        // national-team container pointing back at it.
+                        if (men.is_some() || women.is_some()) && candidate.validate(driver).is_ok() {
                             found.push(candidate);
                         }
                     }

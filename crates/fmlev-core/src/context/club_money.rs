@@ -47,6 +47,7 @@ impl GameContextManager {
             if rep > 0 { club.reputation = rep; }
         }
         self.club_registry.insert(club_id, club.clone());
+        self.native_synced_clubs.insert(club_id);
         if self.context.club.club_id == club_id {
             self.context.club = club.clone();
         }

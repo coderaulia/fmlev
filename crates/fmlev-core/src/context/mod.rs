@@ -89,6 +89,8 @@ pub struct GameContextManager {
     pub active_comp_addr: Option<usize>,
     pub user_modified_players: std::collections::HashSet<i32>,
     pub user_modified_clubs: std::collections::HashSet<i32>,
+    /// Clubs whose facilities were read natively; binding-cache ratings must not overwrite them.
+    pub native_synced_clubs: std::collections::HashSet<i32>,
 }
 
 impl Default for GameContextManager {
@@ -162,6 +164,7 @@ impl GameContextManager {
             active_comp_addr: None,
             user_modified_players: std::collections::HashSet::new(),
             user_modified_clubs: std::collections::HashSet::new(),
+            native_synced_clubs: std::collections::HashSet::new(),
         }
     }
 

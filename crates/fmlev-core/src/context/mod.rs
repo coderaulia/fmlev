@@ -16,6 +16,7 @@ pub mod inspector;
 pub mod mutations;
 pub mod prizes;
 pub mod squad;
+pub mod registration;
 pub mod club_money;
 
 #[cfg(test)]
@@ -77,6 +78,8 @@ pub struct GameContextManager {
     pub live_competitions: HashMap<i32, crate::live_competition::LiveCompetitionSnapshot>,
     pub player_memory_bindings: HashMap<i32, usize>,
     pub club_memory_bindings: HashMap<i32, usize>,
+    /// Original registration gate byte per (competition index, uid), for exact restore.
+    pub registration_gates: HashMap<(i32, i32), u8>,
     pub nation_memory_bindings: HashMap<i32, usize>,
     pub competition_memory_bindings: HashMap<i32, usize>,
     pub active_player_addr: Option<usize>,
@@ -149,6 +152,7 @@ impl GameContextManager {
             live_competitions: HashMap::new(),
             player_memory_bindings: HashMap::new(),
             club_memory_bindings: HashMap::new(),
+            registration_gates: HashMap::new(),
             nation_memory_bindings: HashMap::new(),
             competition_memory_bindings: HashMap::new(),
             active_player_addr: None,

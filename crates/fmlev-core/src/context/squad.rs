@@ -11,3 +11,19 @@ impl GameContextManager {
         record.write_squad_number(&session.driver, number)
     }
 }
+
+impl GameContextManager {
+    /// Maximises tactical familiarity for one player, or for his whole squad container.
+    /// Returns (players processed, values changed).
+    pub fn maximise_familiarity(&mut self, id: i32, squad: bool) -> Result<(usize, usize)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let players = if squad { record.teammates(&session.driver)? } else { vec![record] };
+        let (mut changed, mut count) = (0, 0);
+        for player in &players {
+            changed += player.maximise_tactical_familiarity(&session.driver)?;
+            count += 1;
+        }
+        Ok((count, changed))
+    }
+}

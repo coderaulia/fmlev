@@ -1682,6 +1682,12 @@
         <button class="preset-btn" onclick="saveSquadNumber()">💾 Save Squad Number</button>
         <span style="font-size: 11px; color: var(--text-dim);">Shown in FM26 after the next day. A teammate wearing it is swapped.</span>
       </div>
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Tactical Familiarity:</span>
+        <button class="preset-btn" onclick="maxFamiliarity(false)">🎯 Max (this player)</button>
+        <button class="preset-btn" onclick="maxFamiliarity(true)">🎯 Max (whole squad)</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Same change as the game's own action. Reopen the familiarity screen to see it.</span>
+      </div>
 
       <!-- Authentic FM 3-Column Attribute Table -->
       <div class="attributes-columns">
@@ -2544,6 +2550,17 @@
         </div>
       </div>
 
+      <div class="glass-card" id="registration-card" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">📝 Register Anytime</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Open this competition's Rules page in FM26 once so its unique id is known, then enable. Close and reopen
+          Squad &gt; Registration to see it. It stays until a new season or stage change rebuilds the rules (enable again then).
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-emerald" onclick="setRegistration(true)">Allow registration anytime</button>
+          <button class="btn" onclick="setRegistration(false)">Restore rules</button>
+        </div>
+      </div>
       <div class="glass-card" id="prize-card" style="margin-top: 16px; padding: 16px;">
         <h3 style="margin-bottom: 6px;">🏆 Live Prize Money (raw GBP per position)</h3>
         <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
@@ -5437,6 +5454,34 @@
         const body = { balance: read("club-money-balance"), transfer_budget: read("club-money-transfer") };
         if ([body.balance, body.transfer_budget].some(v => v !== null && !Number.isInteger(v))) throw new Error("Amounts must be whole numbers");
         const data = await clubMoneyRequest(body);
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
+
+    async function maxFamiliarity(squad) {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        const res = await fetch("/api/player/familiarity", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, squad })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Familiarity request failed");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
+
+    async function setRegistration(enabled) {
+      try {
+        const comp = state.activeCompetition;
+        const live = comp ? (state.liveCompetitions || {})[comp.id] : null;
+        if (!comp || !live || !live.unique_id) throw new Error("Open the competition's Rules page in FM26 first");
+        const res = await fetch("/api/competition/registration", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comp_index: comp.id, comp_uid: live.unique_id, enabled })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Registration request failed");
         showToast(data.message, "success");
       } catch (error) { showToast(error.message, "error"); }
     }

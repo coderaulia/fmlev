@@ -884,3 +884,43 @@ pub async fn update_club_money(
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }
+
+/// Sets tactical familiarity to the maximum for a player or his squad (native; same as the game's action).
+pub async fn maximise_familiarity(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::FamiliarityRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.maximise_familiarity(payload.player_id, payload.squad) {
+        Ok((players, changed)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": format!("Tactical familiarity maximised for {players} player(s); {changed} values changed. Reopen the familiarity screen to see it."),
+                "players": players,
+                "changed": changed
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Allows or restores squad registration outside the window for one competition.
+pub async fn registration_anytime(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::RegistrationRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.set_registration_anytime(payload.comp_index, payload.comp_uid, payload.enabled) {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": if payload.enabled { "Registration allowed anytime. Close and reopen the Registration screen." } else { "Registration rules restored. Close and reopen the Registration screen." },
+                "manager_flag": result.manager_flag,
+                "competition_gate": result.competition_gate
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}

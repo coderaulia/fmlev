@@ -15,6 +15,8 @@ const UID: usize = PERSON + 12;
 const SQUAD_NUMBER: usize = 0x5d;
 const NO_SQUAD_NUMBER: u8 = 255;
 const CONTRACT_TEAM: usize = 0x10;
+const FAMILIARITY: usize = 0x48; // pointer to the familiarity object lies at record - 0x48
+const FAMILIARITY_MAX: u32 = 10_000;
 
 pub struct NativeAttribute {
     pub name: &'static str,
@@ -408,6 +410,78 @@ impl NativePlayerRecord {
             return Err(invalid(&format!("Squad number Save failed: {error}; rollback failures: {failures:x?}")));
         }
         Ok(holder.map(|(record, _)| record.index))
+    }
+
+    /// Tactical familiarity lives in a lazily allocated object at record - 0x48 holding 8 vectors:
+    /// seven of u32 entries whose low 14 bits are the value (0..=10000), and one of 16-byte
+    /// per-formation entries with a u16 value at +0xe. The game's own "maximise familiarity"
+    /// action sets every value to 10000; this does the same. Verified in game (all bars Fluid).
+    fn familiarity_edits(&self, driver: &LinuxMemoryDriver) -> Result<Vec<NativeEdit>> {
+        self.validate(driver)?;
+        let object = driver.read_ptr(self.address - FAMILIARITY)?;
+        if object == 0 { return Ok(Vec::new()); } // never allocated: the game already treats it as default
+        let maps = parse_process_maps(driver.pid())?;
+        let writable = |p: usize, len: usize| maps.iter().any(|m| m.is_rw_private() && p >= m.start && p.checked_add(len).is_some_and(|e| e <= m.end));
+        if object <= 0x10000 || !writable(object, 0x100) { return Err(invalid("Familiarity object failed memory validation")); }
+        let mut edits = Vec::new();
+        for k in 0..8usize {
+            let (begin, end, cap) = (driver.read_ptr(object + k * 0x20)?, driver.read_ptr(object + k * 0x20 + 8)?, driver.read_ptr(object + k * 0x20 + 0x10)?);
+            if begin == 0 && end == 0 { continue; }
+            let size = end.wrapping_sub(begin);
+            let stride = if k < 7 { 4 } else { 16 };
+            if begin > end || end > cap || size > 0x4000 || size % stride != 0 || !writable(begin, size.max(1)) {
+                return Err(invalid("Familiarity vector failed validation"));
+            }
+            for entry in (begin..end).step_by(stride) {
+                if k < 7 {
+                    let value = driver.read::<u32>(entry)?;
+                    let next = (value & 0xffff_c000) | FAMILIARITY_MAX;
+                    if next != value { edits.push(NativeEdit::capture(driver, entry, next.to_le_bytes().to_vec())?); }
+                } else {
+                    let value = driver.read::<u16>(entry + 0xe)?;
+                    if u32::from(value) != FAMILIARITY_MAX { edits.push(NativeEdit::capture(driver, entry + 0xe, (FAMILIARITY_MAX as u16).to_le_bytes().to_vec())?); }
+                }
+            }
+        }
+        Ok(edits)
+    }
+
+    /// Sets every tactical familiarity value of this player to the maximum. Returns changed values.
+    pub fn maximise_tactical_familiarity(&self, driver: &LinuxMemoryDriver) -> Result<usize> {
+        let edits = self.familiarity_edits(driver)?;
+        if !edits.is_empty() { self.apply_edits(driver, &edits, None)?; }
+        Ok(edits.len())
+    }
+
+    /// Players sharing this player's contract team (the squad container), including this one.
+    pub fn teammates(&self, driver: &LinuxMemoryDriver) -> Result<Vec<Self>> {
+        let contract = self.contract(driver)?;
+        let team = driver.read_ptr(contract.address + CONTRACT_TEAM)?;
+        if team <= 0x10000 { return Err(invalid("Player's contract has no team")); }
+        let mut found = Vec::new();
+        for map in parse_process_maps(driver.pid())?.iter().filter(|m| m.is_rw_private()) {
+            let mut start = map.start;
+            while start < map.end {
+                let len = (map.end - start).min(16 << 20);
+                let mut buf = vec![0u8; len];
+                if driver.read_bytes(start, &mut buf).is_ok() {
+                    for (i, chunk) in buf.chunks_exact(8).enumerate() {
+                        if usize::from_le_bytes(chunk.try_into().unwrap()) != self.player_vtable { continue; }
+                        let address = start + i * 8;
+                        let Ok(c) = driver.read_ptr(address + 0x1e8) else { continue };
+                        if c <= 0x10000
+                            || driver.read_ptr(c + 8).ok() != Some(address + PERSON)
+                            || driver.read_ptr(c + CONTRACT_TEAM).ok() != Some(team)
+                        { continue; }
+                        let Ok(person_vtable) = driver.read_ptr(address + PERSON) else { continue };
+                        let (Ok(index), Ok(uid)) = (driver.read::<i32>(address + INDEX), driver.read::<u32>(address + UID)) else { continue };
+                        found.push(Self { address, pid: self.pid, index, uid, player_vtable: self.player_vtable, person_vtable, attributes_verified: false });
+                    }
+                }
+                start += len;
+            }
+        }
+        Ok(found)
     }
 
     pub fn attributes_verified(&self) -> bool { self.attributes_verified }

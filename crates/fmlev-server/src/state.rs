@@ -160,6 +160,22 @@ pub struct SearchQuery {
     pub q: String,
 }
 
+/// Competition identified by index and unique id (from the live competition overview).
+#[derive(Deserialize)]
+pub struct RegistrationRequest {
+    pub comp_index: i32,
+    pub comp_uid: i32,
+    pub enabled: bool,
+}
+
+/// `squad` true maximises every player sharing the player's squad container.
+#[derive(Deserialize)]
+pub struct FamiliarityRequest {
+    pub player_id: i32,
+    #[serde(default)]
+    pub squad: bool,
+}
+
 /// Raw-GBP club money; omit a field to leave it unchanged.
 #[derive(Deserialize)]
 pub struct ClubMoneyRequest {

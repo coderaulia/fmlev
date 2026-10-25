@@ -209,6 +209,8 @@ the updated release. This follow-up remains uncommitted and unpushed.
 | Club income, expenditure, facilities | Bindings | Not supported: UI caches are overwritten by the game; native sources not located |
 | Competition prize money | Native i32 table (identified by Rules-page values) | Native write with readback/rollback; verified on the Rules page, season-end payout unconfirmed |
 | Competition rules (subs, foreign, squad) | Not located | Not supported |
+| Tactical familiarity | Per-player object at record - 0x48 | Native write to the maximum (same as the game's action); verified for a player and a whole squad |
+| Register anytime | Manager flag + per-competition stage rule byte | Native write, reversible; verified for La Liga and the Champions League |
 | Squad number | Native contract + 0x5d | Native write with teammate swap, readback/rollback; verified in game (visible after next day) |
 
 Never edit a player's injury vector (player + 0x248): a null or emptied vector for an injured player crashes FM26 at `game_plugin.dll+0x33af065` and the damage is saved into the career.

@@ -893,6 +893,15 @@ pub async fn terminate_contract() -> impl IntoResponse {
     )
 }
 
+/// Sign and loan are not implemented: the game allocates a contract (free agent) or a loan
+/// agreement object plus list entries for a transfer, which memory writes cannot create safely.
+pub async fn transfer_not_implemented() -> impl IntoResponse {
+    api_error(
+        StatusCode::NOT_IMPLEMENTED,
+        fmlev_core::CoreError::InvalidValue("Signing and loans are not implemented: they need game-allocated contract and loan objects".into()),
+    )
+}
+
 /// Writes the active club's native balance and/or transfer budget (Club > Finances must be open).
 pub async fn update_club_money(
     State(state): State<ServerState>,

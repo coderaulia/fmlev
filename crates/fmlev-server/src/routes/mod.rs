@@ -5,11 +5,13 @@ pub use context::*;
 pub use memory::*;
 
 use axum::{
-    http::StatusCode,
+    extract::Request,
+    http::{header, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use tower_http::cors::CorsLayer;
 
 use crate::state::ServerState;
 
@@ -53,6 +55,49 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/actions/finances", post(finances_action))
         .route("/api/actions/godmode", post(godmode_action))
         .route("/api/offsets", get(get_offsets))
-        .layer(CorsLayer::permissive())
+        .layer(middleware::from_fn(local_requests_only))
         .with_state(state)
+}
+
+/// True for `localhost`, `127.0.0.1` or `[::1]`, with or without scheme, port and path.
+fn is_local_authority(value: &str) -> bool {
+    let rest = value.split_once("://").map_or(value, |(_, rest)| rest);
+    let authority = rest.split('/').next().unwrap_or("");
+    let host = if authority.starts_with('[') {
+        authority.split(']').next().map(|h| format!("{h}]")).unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or("").to_string()
+    };
+    matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "[::1]")
+}
+
+/// Every route can write FM26 memory, so only the app's own pages and local tools may call it:
+/// a foreign `Origin` (another website) or `Host` (DNS rebinding) is rejected. Requests without
+/// an `Origin` header (curl, scripts) are allowed because the server only listens on 127.0.0.1.
+async fn local_requests_only(request: Request, next: Next) -> Response {
+    let headers = request.headers();
+    let foreign = |name| {
+        headers
+            .get(name)
+            .is_some_and(|v: &axum::http::HeaderValue| !v.to_str().is_ok_and(is_local_authority))
+    };
+    if foreign(header::HOST) || foreign(header::ORIGIN) {
+        return api_error(StatusCode::FORBIDDEN, "Requests are only accepted from the local fmlev UI").into_response();
+    }
+    next.run(request).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local_authority;
+
+    #[test]
+    fn only_loopback_authorities_are_local() {
+        for ok in ["localhost:41789", "http://127.0.0.1:41789", "http://localhost", "[::1]:41789", "http://LOCALHOST:41789/x"] {
+            assert!(is_local_authority(ok), "{ok}");
+        }
+        for bad in ["evil.com", "http://evil.com:41789", "localhost.evil.com", "http://127.0.0.1.evil.com", "null", ""] {
+            assert!(!is_local_authority(bad), "{bad}");
+        }
+    }
 }

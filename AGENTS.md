@@ -31,6 +31,20 @@ cargo test --workspace
 node --test crates/fmlev-server/tests/*.test.cjs
 ```
 
+### 4. C++ Discovery Tooling (`tools/fmscan/`) — HARD RULES
+The C++ scanner proved to be the fastest way to find and validate native offsets (screen-independent entity search, RTTI naming, contract/transfer graphs, editor reads). These rules keep that advantage safe.
+
+1. **Discovery in C++, product in Rust.** New offsets/layouts are found and cross-checked with `fmscan` first. Only Rust (`fmlev-core`/`fmlev-server`) ships features, UI and HTTP routes. Never put C++ in the server/UI runtime path and never shell out to `fmscan` from the product without an explicit user decision.
+2. **`fmscan` is strictly read-only.** It must never gain a write API (`process_vm_writev`, `/proc/pid/mem` write, ptrace poke). It writes only requested snapshot/address files. Writes belong to Rust (`live_write.rs`: readback + rollback) or the separate, opt-in `fmwrite` (plan → apply → restore, allowlisted scalar fields, test save only, `--experimental` gate for unproven fields).
+3. **Evidence ladder before anything reaches the UI.** An offset is promoted only after: (a) identity validated by RTTI/vtable + index + UID + ownership back-pointer (never by address or screen position alone); (b) read agrees between C++ and Rust on a live game; (c) for writes, an in-game screen check after a day tick **and** save/reload on a throwaway save. Missing proof → route returns 501, UI shows "unavailable", docs say "unconfirmed".
+4. **Version guard.** Numeric layouts require the known PE timestamp (currently `0x6a229e8a`) plus object guards (vtable, bounds, back-pointers, ranges). On mismatch fail closed with a reason; never guess or fall back to defaults.
+5. **No invented data.** Unreadable chunks, absent links and unsupported fields are reported explicitly (null + reason). Never substitute zeros or UI defaults. Heuristics (vector stride, date shapes, nearby RTTI) must be labelled heuristic in output and docs.
+6. **UI wiring contract.** Every UI feature backed by a native read/write: Rust function with unit tests → REST route with strict validation (identity selectors, `{enabled/value}` bodies, reject unknown fields) → `ui.html` control showing verified/unverified state → Node DOM test. Writes must be transactional (snapshot, write, readback, rollback on mismatch) and idempotent where possible. Display note: FM26 often shows native changes only after reopening the page or the next day tick.
+7. **Forbidden regions stay forbidden.** Never edit a player's injury vector (player+0x248), never write UI-binding caches or the heap `[allocated, available, .., balance]` block, never null/empty a pointer or vector the game iterates, never create game-allocated objects (contracts, loan agreements) by raw memory writes. Pointer swaps between lists/teams are unverified until mapped with `graph`.
+8. **Tool quality gates.** Build with `g++ -O2 -std=c++20 -Wall -Wextra -Wpedantic -Werror`; every new command/field gets a synthetic-process test (`python3 -m unittest discover -s tools/fmscan/tests -v`) and `--json` output (addresses/64-bit values as hex strings). Source files ≤ 1,500 LOC (headers included). Built binaries (`fmscan`, `fmwrite`) are git-ignored.
+9. **Reproducibility.** Every discovery gets a log entry in this file (or `docs/`): command used, live values observed, what was **not** proven. Benchmarks must be matched workloads, and results must not be generalised ("C++ vs Rust") beyond what was measured.
+10. **Safety on the user's saves.** Any experiment that writes uses a throwaway save, then Save As; keep the plan/restore file; if FM26 behaves oddly after a write, stop and restore before continuing. Stage-end work is committed locally; never push without an explicit request.
+
 ---
 
 ## 🏗️ Architecture & Modular Layout

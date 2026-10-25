@@ -235,3 +235,10 @@ Never edit a player's injury vector (player + 0x248): a null or emptied vector f
 - **Terminate (not implemented):** setting expiry to the in-game date did not release the player after the date passed. The route returns 501.
 - **Sign / loan (not implemented):** a signing allocates a new contract (record + 0x1e8) and an agreement object (record + 0x1e0); a loan adds an agreement object (record + 0x1f0) holding the person, the loan team and start/end dates. Memory writes cannot create these. A contract's team pointer (+0x10) is a team object (first team, B team, U19s), not the club. Both routes return 501.
 - **Diagnostics:** `tools/fmscan` and the `inspect_contract`, `find_refs`, `snapshot_player` examples.
+
+## Native editor saves (Phase 11)
+
+- Editors load verified native values (`/api/{club,nation,competition}/native`) and Save writes only fields changed from the loaded copy; untouched controls never overwrite native data.
+- Verified in game: club facilities, competition reputation (label changes after reopening the page), Register Anytime. Nation youth rating writes persist but have no on-screen label.
+- Transfer actions (terminate, loan recall, move, signing, accelerate) are implemented but **not verified in game**; treat them as experimental and test on a throwaway save only.
+

@@ -290,3 +290,17 @@ crates/
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
   - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
   - All modified source files strictly $\le$ 1,333 LOC (hard limit: 1,500 LOC).
+
+### Phase 11: In-game Verification of Native Editors and Stale-Cache Save Bug (Completed)
+- **C++ `fmwrite`** (`tools/fmscan`, opt-in, plan -> apply -> restore, allowlisted scalars, `--experimental` gate) committed with tests (14 write tests; 57 C++ tests total). Live use: club training facilities 18 -> 10 on R. Madrid (club 1089/1736): label changed to "average", survived a day tick and save/reload. One unintended R. Madrid balance apply/restore happened during a check; restored byte-exact, not screen-checked.
+- **Bug found by in-game test (and fixed)**: the web UI filled facility sliders from binding caches and fallback defaults (e.g. recruitment 0 -> 18, corporate cache 20), and Save wrote every control, changing untouched native fields (corporate 19 -> 20, recruitment 19 -> 18). Also the live sync re-applied binding-cache ratings over native values each tick. Fixes:
+  - `write_live_club`/`update_live_nation_checked`/`update_live_competition_checked` write only fields that differ from the loaded copy; unchanged fields keep the native value.
+  - New read-only routes `POST /api/club/native`, `/api/nation/native`, `/api/competition/native` load verified native values into the editors once per entity (and again after a save). Clubs read natively are excluded from binding-cache overwrites (`native_synced_clubs`).
+  - Live presets (+$50M, Sugar Daddy, Wipe Debt, Golden Generation, Relax Rules) are refused on live sessions (they wrote UI-binding caches); Max Facilities goes through the native club path and leaves data analysis alone.
+  - Limitation: setting a control to exactly the loaded value writes nothing.
+- **Discovery fixes**: nation discovery now requires a validated national-team container (index/uid pattern also matched 19 other record types); competition discovery is pinned to the `.?AVCOMP@db@@` vtable (`game_plugin.dll` + 0x44bfe68, same RVA style as the manager vtable) and a structure check. Diagnostic example `list_id_candidates <id>` lists same-id records with vtables.
+- **Verified in game (screen + day tick)**: club facilities via UI (Youth 19 -> 15 shows "Great youth facilities"; Training to 20 shows "State of the art"); competition reputation via UI/API (178 -> 120 still "Good"; 20 shows "Poor"; restored 178); Register Anytime (user-confirmed).
+- **Written and persisting, no on-screen label to confirm**: nation men's youth rating (145 -> 165, persisted after Continue).
+- **Not yet verified in game**: nation reputation/economic factor/development/population, club reputation and stadium capacity, `fmwrite` nation/competition paths, save/reload for the UI-driven writes, and **all Phase 8 and Phase 10 transfer actions** (terminate contract, loan recall, move, free-agent signing, pending-transfer acceleration). Those actions null/redirect pointers or create game objects by raw writes, which Rule 7 forbids until proven; the README rows are marked unverified.
+- **Verification**: cargo check clean; cargo test passing; Node 37 passed; C++ 57 passed with `-Werror`.
+

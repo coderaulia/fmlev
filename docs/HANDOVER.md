@@ -22,6 +22,8 @@ Verified in game and shipped in Rust production runtime (`fmlev-core` + `fmlev-s
 
 ## Remaining Gaps & Next Targets
 
+0. **Verify transfer actions in game** (terminate, loan recall, move, sign, accelerate) one at a time on a throwaway save; until then they are unverified (AGENTS.md Phase 11).
+
 1. **Creating Loan Agreements from Scratch**:
    - While loan termination/recall is fully supported (`POST /api/player/loan/terminate`), creating a brand-new loan deal between two clubs from scratch involves generating a multi-party `LOAN_CONTRACT` object and linked parent/loanee clause structures.
 2. **In-Match Simulation Rules**:

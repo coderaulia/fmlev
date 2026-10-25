@@ -305,13 +305,25 @@ inline void competition_details(const Memory &m, const NativeCatalog &catalog,
     d.fields.addr("rule_entry_address", entry);
     d.fields.num("stage_index", index);
   }
+  uint8_t squad_cap = 0, homegrown = 255;
+  bool valid_squad_cap = gate && m.read(entry + 0x98, squad_cap) && squad_cap >= 1 && squad_cap <= 99;
+  bool valid_homegrown = gate && m.read(entry + 0x99, homegrown) && homegrown <= 99;
+  d.number<uint8_t>(m, "max_squad_size", entry + 0x98, 1, 99,
+                    "live stage rule entry +0x98 registration squad size cap",
+                    valid_squad_cap);
+  d.number<uint8_t>(m, "min_homegrown_nation", entry + 0x99, 0, 99,
+                    "live stage rule entry +0x99 homegrown quota",
+                    valid_homegrown);
   for (auto key :
        {"max_substitutes", "max_bench_size", "substitution_windows",
-        "var_active", "max_squad_size", "max_foreign_players",
-        "min_homegrown_club", "min_homegrown_nation", "winner_prize_money",
-        "tv_rights_pool", "yellow_cards_for_ban", "number_of_teams"})
-    d.missing(key, "active rule/payout/season ownership not verified; editor "
+        "var_active", "max_foreign_players", "min_homegrown_club",
+        "winner_prize_money", "tv_rights_pool", "yellow_cards_for_ban", "number_of_teams"})
+    d.missing(key, "active match rule/payout ownership not verified; editor "
                    "source nodes and UI caches not substituted");
+  if (!valid_squad_cap)
+    d.missing("max_squad_size", "live stage rule squad cap unavailable");
+  if (!valid_homegrown)
+    d.missing("min_homegrown_nation", "homegrown rule absent or unconstrained");
 }
 inline Details entity_details(const Memory &m, const NativeCatalog &catalog,
                               const NativeEntity &e) {

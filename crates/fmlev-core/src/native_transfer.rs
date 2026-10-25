@@ -44,6 +44,9 @@ pub const AGREEMENT_OFFSET: usize = 0x1e0;
 pub const LOAN_OFFSET: usize = 0x1f0;
 pub const PERSON_OFFSET: usize = 0x140;
 pub const ACTUAL_PLAYER_OFFSET: usize = 0x148;
+pub const CONTRACT_SIZE: usize = 0xc8;
+pub const FULL_CONTRACT_VTABLE_RVA: usize = 0x4334df8;
+pub const FALLBACK_FULL_CONTRACT_VTABLE: usize = 0x6fffdba64df8;
 
 fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
@@ -533,6 +536,377 @@ pub fn move_player(
     Ok((cur_team, target_team))
 }
 
+/// Finds an aligned, verified all-zero 200-byte block in the entity pool mapping.
+pub fn find_zero_contract_slot(driver: &LinuxMemoryDriver, near_addr: usize) -> Result<usize> {
+    let mut check_buf = [0u8; CONTRACT_SIZE];
+
+    // 1. First probe known safe zero block runs near the contract pool: 0x138980000..0x138990000
+    for offset in (0..0x10000).step_by(CONTRACT_SIZE) {
+        let candidate = 0x138980000 + offset;
+        if candidate % 16 != 0 {
+            continue;
+        }
+        if driver.read_bytes(candidate, &mut check_buf).is_ok() && check_buf.iter().all(|&b| b == 0) {
+            return Ok(candidate);
+        }
+    }
+
+    // 2. Fallback: query maps to find the rw-p mapping containing near_addr
+    if let Ok(mappings) = fmlev_mem::parse_process_maps(driver.pid()) {
+        for m in mappings {
+            if m.is_readable() && m.is_writable() && m.start <= near_addr && near_addr < m.end {
+                let scan_start = m.start + (m.end - m.start) / 2;
+                for page in (scan_start..m.end).step_by(4096) {
+                    if driver.read_bytes(page, &mut check_buf).is_ok() && check_buf.iter().all(|&b| b == 0) {
+                        return Ok(page);
+                    }
+                }
+            }
+        }
+    }
+
+    Err(invalid("Unable to locate a verified zeroed contract memory slot in target process"))
+}
+
+/// Resolves the FULL_CONTRACT MSVC vtable pointer dynamically or via fallback.
+pub fn resolve_contract_vtable(driver: &LinuxMemoryDriver) -> usize {
+    if let Ok(mappings) = fmlev_mem::parse_process_maps(driver.pid()) {
+        for m in mappings {
+            if m.pathname.contains("game_plugin.dll")
+                && m.is_readable()
+                && m.is_executable()
+            {
+                let vt = m.start + FULL_CONTRACT_VTABLE_RVA;
+                let mut check = [0u8; 8];
+                if driver.read_bytes(vt, &mut check).is_ok() {
+                    return vt;
+                }
+            }
+        }
+    }
+    FALLBACK_FULL_CONTRACT_VTABLE
+}
+
+/// Constructs a valid 200-byte (0xc8) native FULL_CONTRACT buffer.
+pub fn build_full_contract_bytes(
+    vtable: usize,
+    person_addr: usize,
+    team_addr: usize,
+    wage_gbp: u32,
+    expiry_year: u32,
+    squad_number: Option<u8>,
+) -> Vec<u8> {
+    let mut buf = vec![0u8; CONTRACT_SIZE];
+    buf[0..8].copy_from_slice(&vtable.to_le_bytes());
+    buf[8..16].copy_from_slice(&person_addr.to_le_bytes());
+    buf[16..24].copy_from_slice(&team_addr.to_le_bytes());
+    buf[24..32].copy_from_slice(&team_addr.to_le_bytes());
+    buf[32..36].copy_from_slice(&wage_gbp.to_le_bytes());
+    buf[36..40].copy_from_slice(&0x0001000bu32.to_le_bytes());
+    buf[56..60].copy_from_slice(&0u32.to_le_bytes());
+    buf[60..64].copy_from_slice(&(-1i32).to_le_bytes());
+    buf[64..68].copy_from_slice(&(-1i32).to_le_bytes());
+    buf[68..72].copy_from_slice(&0x07e900c2u32.to_le_bytes()); // start date 2025/194
+    let packed_expiry = (expiry_year << 16) | 181;
+    buf[72..76].copy_from_slice(&packed_expiry.to_le_bytes()); // expiry date (e.g. 30 June)
+    buf[76..80].copy_from_slice(&0x07e900c2u32.to_le_bytes());
+    buf[80..84].copy_from_slice(&0x076c0001u32.to_le_bytes());
+    buf[84..88].copy_from_slice(&0x000b000bu32.to_le_bytes());
+    buf[88..92].copy_from_slice(&0u32.to_le_bytes());
+    let num_byte = squad_number.unwrap_or(255);
+    buf[92..96].copy_from_slice(&[0x14, num_byte, 0x00, 0x00]);
+    buf[96..104].copy_from_slice(&0x200u64.to_le_bytes());
+    buf[176..184].copy_from_slice(&0x076c000100000000u64.to_le_bytes());
+    buf[184..192].copy_from_slice(&0x000007ea00000000u64.to_le_bytes());
+    buf[192..200].copy_from_slice(&0x000000ff01000000u64.to_le_bytes());
+    buf
+}
+
+/// Signs an unemployed free agent to a target team.
+/// Allocates a verified contract block, updates player pointers, and appends the player to the target squad vector.
+pub fn sign_free_agent(
+    driver: &LinuxMemoryDriver,
+    player: &NativePlayerRecord,
+    target_team: usize,
+    wage_gbp: Option<u32>,
+    expiry_year: Option<u32>,
+) -> Result<usize> {
+    let actual_player = player.address - ACTUAL_PLAYER_OFFSET;
+    let existing_contract = driver.read_ptr(player.address + CONTRACT_OFFSET)?;
+    if existing_contract > 0x10000 {
+        return Err(invalid("Player already has an active contract. Use Move Player instead."));
+    }
+
+    if target_team <= 0x10000 || target_team % 8 != 0 {
+        return Err(invalid("Invalid target team pointer"));
+    }
+
+    let target_vec = SquadVector::read(driver, target_team)?;
+    if target_vec.contains(driver, actual_player)? {
+        return Err(invalid("Player is already a member of the target team"));
+    }
+    if target_vec.spare_slots() == 0 {
+        return Err(invalid(
+            "Target team squad vector is at capacity (0 spare slots). Terminate or move an unwanted player from target team first."
+        ));
+    }
+
+    // Check if player has an arranged future transfer agreement already
+    let agreement_ptr = driver.read_ptr(player.address + AGREEMENT_OFFSET).unwrap_or(0);
+    if agreement_ptr > 0x10000 {
+        let (_, completed_team) = complete_pending_transfer(driver, player)?;
+        return Ok(completed_team);
+    }
+
+    let contract_slot = find_zero_contract_slot(driver, player.address)?;
+    let mut old_contract_bytes = vec![0u8; CONTRACT_SIZE];
+    driver.read_bytes(contract_slot, &mut old_contract_bytes)?;
+    if old_contract_bytes.iter().any(|&b| b != 0) {
+        return Err(invalid("Contract memory slot was unexpectedly non-zero"));
+    }
+
+    let vtable = resolve_contract_vtable(driver);
+    let person_addr = player.address + PERSON_OFFSET;
+    let wage = wage_gbp.unwrap_or(1000);
+    let expiry = expiry_year.unwrap_or(2027);
+
+    let contract_payload = build_full_contract_bytes(vtable, person_addr, target_team, wage, expiry, None);
+
+    let cur_team = driver.read_ptr(actual_player + CURRENT_TEAM_OFFSET).unwrap_or(0);
+    let cur_team2 = driver.read_ptr(actual_player + CURRENT_TEAM2_OFFSET).unwrap_or(0);
+
+    let mut edits = Vec::new();
+
+    // 1. Populate the new FULL_CONTRACT block
+    edits.push(NativeEdit::new(
+        contract_slot,
+        old_contract_bytes,
+        contract_payload,
+        "populate FULL_CONTRACT block",
+    ));
+
+    // 2. Point player's record + 0x1e8 to the new contract
+    edits.push(NativeEdit::new(
+        player.address + CONTRACT_OFFSET,
+        existing_contract.to_le_bytes().to_vec(),
+        contract_slot.to_le_bytes().to_vec(),
+        "set parent contract pointer",
+    ));
+
+    // 3. Update ACTUAL_PLAYER team pointers
+    edits.push(NativeEdit::new(
+        actual_player + CURRENT_TEAM_OFFSET,
+        cur_team.to_le_bytes().to_vec(),
+        target_team.to_le_bytes().to_vec(),
+        "set ACTUAL_PLAYER current_team",
+    ));
+    edits.push(NativeEdit::new(
+        actual_player + CURRENT_TEAM2_OFFSET,
+        cur_team2.to_le_bytes().to_vec(),
+        target_team.to_le_bytes().to_vec(),
+        "set ACTUAL_PLAYER current_team copy",
+    ));
+
+    // 4. Append to target squad vector
+    let append_edits = target_vec.append_patches(driver, actual_player)?;
+    edits.extend(append_edits);
+
+    apply_transaction(driver, &edits)?;
+    Ok(target_team)
+}
+
+/// Helper to scan for a transfer queue entry belonging to a person.
+/// Each entry in the queue is 0x30 bytes:
+/// +0x00: u32 tag, u32 id
+/// +0x08: person pointer
+/// +0x10: join date packed (u32)
+/// +0x14: transfer ID (u32)
+pub fn find_queue_entry_for_person(
+    driver: &LinuxMemoryDriver,
+    person_addr: usize,
+) -> Result<Option<(usize, Vec<u8>)>> {
+    let start = 0x2603f0000;
+    let end = 0x260400000;
+    let mut buf = vec![0u8; end - start];
+    if driver.read_bytes(start, &mut buf).is_ok() {
+        let person_bytes = person_addr.to_le_bytes();
+        if let Some(pos) = buf.windows(8).position(|w| w == person_bytes) {
+            if pos >= 8 && pos + 0x28 <= buf.len() {
+                let entry_addr = start + pos - 8;
+                let entry_bytes = buf[pos - 8..pos - 8 + 0x30].to_vec();
+                return Ok(Some((entry_addr, entry_bytes)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Completes an arranged future transfer immediately, moving the player to their agreed future club.
+pub fn complete_pending_transfer(
+    driver: &LinuxMemoryDriver,
+    player: &NativePlayerRecord,
+) -> Result<(usize, usize)> {
+    let actual_player = player.address - ACTUAL_PLAYER_OFFSET;
+    let agreement_slot = driver.read_ptr(player.address + AGREEMENT_OFFSET)?;
+    if agreement_slot <= 0x10000 {
+        return Err(invalid("Player has no arranged future transfer agreement"));
+    }
+
+    let vec_begin = driver.read_ptr(agreement_slot)?;
+    if vec_begin <= 0x10000 {
+        return Err(invalid("Invalid agreement vector begin pointer"));
+    }
+    let agree_entry = driver.read_ptr(vec_begin)?;
+    if agree_entry <= 0x10000 {
+        return Err(invalid("Invalid agreement entry pointer"));
+    }
+
+    let future_contract = driver.read_ptr(agree_entry + 0x10)?;
+    if future_contract <= 0x10000 {
+        return Err(invalid("Agreement has no valid future contract pointer"));
+    }
+
+    let person_owner = driver.read_ptr(future_contract + 8)?;
+    if person_owner != player.address + PERSON_OFFSET {
+        return Err(invalid("Future contract person back-pointer mismatch"));
+    }
+
+    let future_team = driver.read_ptr(future_contract + 0x10)?;
+    if future_team <= 0x10000 {
+        return Err(invalid("Future contract has no valid team pointer"));
+    }
+
+    let future_vec = SquadVector::read(driver, future_team)?;
+    if future_vec.contains(driver, actual_player)? {
+        return Err(invalid("Player is already in future team squad"));
+    }
+    if future_vec.spare_slots() == 0 {
+        return Err(invalid(
+            "Future team squad vector is at capacity (0 spare slots). Terminate or move an unwanted player first."
+        ));
+    }
+
+    let cur_team = driver.read_ptr(actual_player + CURRENT_TEAM_OFFSET)?;
+    let old_contract = driver.read_ptr(player.address + CONTRACT_OFFSET)?;
+
+    let mut edits = Vec::new();
+
+    // 1. Remove from current team squad vector if present
+    if cur_team > 0x10000 {
+        if let Ok(cur_vec) = SquadVector::read(driver, cur_team) {
+            if let Ok(Some(compaction_edits)) = cur_vec.compact_removal_patches(driver, actual_player) {
+                edits.extend(compaction_edits);
+            }
+        }
+    }
+
+    // 2. Append to future team squad vector
+    let append_edits = future_vec.append_patches(driver, actual_player)?;
+    edits.extend(append_edits);
+
+    // 3. Update ACTUAL_PLAYER team pointers
+    edits.push(NativeEdit::new(
+        actual_player + CURRENT_TEAM_OFFSET,
+        cur_team.to_le_bytes().to_vec(),
+        future_team.to_le_bytes().to_vec(),
+        "update ACTUAL_PLAYER current_team to future_team",
+    ));
+    let cur_team2 = driver.read_ptr(actual_player + CURRENT_TEAM2_OFFSET)?;
+    edits.push(NativeEdit::new(
+        actual_player + CURRENT_TEAM2_OFFSET,
+        cur_team2.to_le_bytes().to_vec(),
+        future_team.to_le_bytes().to_vec(),
+        "update ACTUAL_PLAYER current_team copy to future_team",
+    ));
+
+    // 4. Update parent contract pointer to the future_contract
+    edits.push(NativeEdit::new(
+        player.address + CONTRACT_OFFSET,
+        old_contract.to_le_bytes().to_vec(),
+        future_contract.to_le_bytes().to_vec(),
+        "switch parent contract to future_contract",
+    ));
+
+    // 5. Clear agreement slot
+    edits.push(NativeEdit::new(
+        player.address + AGREEMENT_OFFSET,
+        agreement_slot.to_le_bytes().to_vec(),
+        0usize.to_le_bytes().to_vec(),
+        "clear pending agreement slot",
+    ));
+
+    // 6. If transfer queue has a scheduled event for this person, clear it
+    if let Ok(Some((q_addr, q_old))) = find_queue_entry_for_person(driver, player.address + PERSON_OFFSET) {
+        let mut q_new = q_old.clone();
+        q_new[8..16].copy_from_slice(&0u64.to_le_bytes());
+        q_new[16..20].copy_from_slice(&0u32.to_le_bytes());
+        edits.push(NativeEdit::new(
+            q_addr,
+            q_old,
+            q_new,
+            "clear scheduled transfer queue entry",
+        ));
+    }
+
+    apply_transaction(driver, &edits)?;
+    Ok((cur_team, future_team))
+}
+
+/// Accelerates the scheduled join date of a pending future transfer.
+/// Returns (old_date_raw, new_date_raw).
+pub fn accelerate_pending_transfer(
+    driver: &LinuxMemoryDriver,
+    player: &NativePlayerRecord,
+    new_join_date: Option<u32>,
+) -> Result<(u32, u32)> {
+    let agreement_slot = driver.read_ptr(player.address + AGREEMENT_OFFSET)?;
+    if agreement_slot <= 0x10000 {
+        return Err(invalid("Player has no arranged future transfer agreement"));
+    }
+
+    let vec_begin = driver.read_ptr(agreement_slot)?;
+    if vec_begin <= 0x10000 {
+        return Err(invalid("Invalid agreement vector begin pointer"));
+    }
+    let agree_entry = driver.read_ptr(vec_begin)?;
+    if agree_entry <= 0x10000 {
+        return Err(invalid("Invalid agreement entry pointer"));
+    }
+
+    let future_contract = driver.read_ptr(agree_entry + 0x10)?;
+    if future_contract <= 0x10000 {
+        return Err(invalid("Agreement has no valid future contract pointer"));
+    }
+
+    let old_date_raw: u32 = driver.read(future_contract + 0x44)?;
+    let next_date_raw = new_join_date.unwrap_or(0x07e90104);
+
+    let mut edits = Vec::new();
+
+    // 1. Update future contract start date at +0x44
+    edits.push(NativeEdit::new(
+        future_contract + 0x44,
+        old_date_raw.to_le_bytes().to_vec(),
+        next_date_raw.to_le_bytes().to_vec(),
+        "accelerate future contract start date",
+    ));
+
+    // 2. Update transfer queue entry date if found
+    if let Ok(Some((q_addr, q_old))) = find_queue_entry_for_person(driver, player.address + PERSON_OFFSET) {
+        let mut q_new = q_old.clone();
+        q_new[16..20].copy_from_slice(&next_date_raw.to_le_bytes());
+        edits.push(NativeEdit::new(
+            q_addr,
+            q_old,
+            q_new,
+            "accelerate transfer queue entry date",
+        ));
+    }
+
+    apply_transaction(driver, &edits)?;
+    Ok((old_date_raw, next_date_raw))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -609,5 +983,28 @@ mod tests {
         // Verify first was rolled back to 42
         assert_eq!(target[0], 42);
         assert_eq!(target[1], 99);
+    }
+
+    #[test]
+    fn full_contract_bytes_layout_matches_native_spec() {
+        let vtable = 0x6fffdba64df8usize;
+        let person = 0x139480e60usize;
+        let team = 0x12d348970usize;
+        let wage = 5000u32;
+        let expiry_year = 2027u32;
+        let bytes = build_full_contract_bytes(vtable, person, team, wage, expiry_year, Some(10));
+
+        assert_eq!(bytes.len(), CONTRACT_SIZE);
+        assert_eq!(usize::from_le_bytes(bytes[0..8].try_into().unwrap()), vtable);
+        assert_eq!(usize::from_le_bytes(bytes[8..16].try_into().unwrap()), person);
+        assert_eq!(usize::from_le_bytes(bytes[16..24].try_into().unwrap()), team);
+        assert_eq!(usize::from_le_bytes(bytes[24..32].try_into().unwrap()), team);
+        assert_eq!(u32::from_le_bytes(bytes[32..36].try_into().unwrap()), wage);
+        // Expiry year
+        let packed_expiry = u32::from_le_bytes(bytes[72..76].try_into().unwrap());
+        assert_eq!(packed_expiry >> 16, 2027);
+        assert_eq!(packed_expiry & 0x1ff, 181);
+        // Squad number at +0x5d (which is 92 + 1 = 93)
+        assert_eq!(bytes[0x5d], 10);
     }
 }

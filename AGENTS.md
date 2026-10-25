@@ -209,3 +209,64 @@ crates/
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
   - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
   - All source files strictly $\le$ 1,328 LOC.
+
+### Phase 10: Free Agent Signing and Pending Transfer Join Date Acceleration (Completed)
+- **Frontier 1 — Free Agent Signing (`POST /api/transfer/sign`)**:
+  - Dissected exact native layout of `FULL_CONTRACT` (size 200 bytes / 0xc8):
+    - Vtable: `game_plugin.dll + 0x4334df8` (`0x6fffdba64df8`), resolved dynamically via `resolve_contract_vtable`.
+    - Person back-pointer at `+0x08`: validated by RTTI `.?AVFULL_CONTRACT@db@@` and person owner comparison (`actual_player + 0x288`).
+    - Parent team pointers at `+0x10` and `+0x18`: points to target `.?AVTEAM@db@@`.
+    - Weekly wage (GBP) at `+0x20` (u32).
+    - Contract subtype at `+0x24`: `0x0001000b`.
+    - Packed expiry date at `+0x48`: `(year << 16) | 181`.
+    - Squad number at `+0x5d` (255 = none, or 1..99).
+    - Null clause vectors at `+0x68` and `+0x80`: cross-scan across 2,000 contracts proved that 365 native contracts have null `(0, 0, 0)` vectors, establishing that auxiliary heap vector allocations are strictly optional.
+  - Developed `find_zero_contract_slot`: safely locates an aligned 200-byte block of pure zeros in the entity mapping (`0x138980000..0x138990000`) in ~30 microseconds.
+  - Implemented `sign_free_agent`: validates player is an unemployed free agent, verifies destination team has spare capacity (`spare_slots > 0`), populates the 200-byte contract block, points `record + 0x1e8` to the contract, points `ACTUAL_PLAYER + 0x130`/`0x138` to the target team, and appends the player to the target squad vector with atomic readback and reverse rollback.
+  - Live game proof on FM26 (PID 5945): Brad Guzan (2888/980785) signed to FC Lorient (2005) at 5,000 GBP/week, 2027 expiry; verified by `fmscan contract` (`rtti_and_person_back_pointer_validated`) and `fmscan transfer` (squad member matched), then restored 100% cleanly.
+- **Frontier 2 — Pending Transfer Join Date Acceleration (`complete_pending_transfer` & `accelerate_pending_transfer`)**:
+  - Traced arranged transfer pointer chain: `record + 0x1e0` -> agreement vector `0x3bd677f70` -> entry `0x136591288` -> future `FULL_CONTRACT` at `+0x10` (`0x1388da468` for Borja Cortina, Levante -> Real Madrid).
+  - Whole-heap date search located the game's **Transfer Event Queue** at `0x2603fd...`: a chronologically sorted priority queue with stride 0x30 holding `{tag, id, person_ptr, packed_join_date, transfer_id}`.
+  - Implemented `complete_pending_transfer`: instantly switches `record + 0x1e8` to the pre-allocated future contract, clears `record + 0x1e0`, updates `ACTUAL_PLAYER` team pointers, removes from source squad vector, appends to target squad vector, and clears the transfer queue entry.
+  - Implemented `accelerate_pending_transfer`: modifies the scheduled join date in the future contract (+0x44) and in the transfer queue entry (+0x10), accelerating join scheduling.
+  - Live game proof on FM26 (PID 5945): Accelerated join date for Borja Cortina, verified with `fmscan transfer`, and verified exact reverse rollback.
+- **REST API Wiring**:
+  - `POST /api/transfer/sign`: accepts `{ player_id, target_club_id?, target_team_address?, wage_gbp?, expiry_year? }`.
+  - `POST /api/transfer/accelerate`: accepts `{ player_id, new_join_date?, instant? }`.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 118 Rust tests passed (117 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
+  - All source files strictly $\le$ 1,251 LOC (hard limit: 1,500).
+
+### Phase 10: Squad-Number-Anytime Domestic Gate and Active Competition Stage Rules (Completed)
+- **Frontier 3: Squad-Number-Anytime Gate Reversal**:
+  - Reverse engineered squad number gate in `game_plugin.dll`:
+    - Disassembled rejection check at `0x182e2af79`: after testing stage flags (`+0x58` bit 1), max squad number (`+0x60`), and window dates, the game checks human manager `manager + 0x404` bit `0x200` (`test byte ptr [rax + 0x405], 2`).
+    - Bit `0x200` is the authoritative universal override: when set, FM26 jumps directly to `0x182e2ae8a` and executes squad number submission `0x182e3b570`, completely bypassing closed domestic windows.
+    - Traced all 5 checking sites (`+0x2e2af7d`, `+0x2f2fff1`, `+0x2f300b1`, `+0x2f30170`, `+0x2e2a0ce`) across edit sessions and domestic squad handlers.
+  - Implemented `SQUAD_NUMBER_BIT = 0x200` and `set_squad_number_anytime` in `native_registration.rs` with transactional readback verification and rollback.
+  - Unified registration anytime to enable both registration (`0x100`) and squad numbers (`0x200`) on the manager alongside domestic stage gate `+0x9a`.
+- **Frontier 4: Active Competition Stage Rules & Live Simulation Engine**:
+  - Traced complete property getter for live competition stage rule entry at `game_plugin.dll + 0x22e7410`, driven by a 77-entry jump table at RVA `0x45eaddc` in `.edata`.
+  - Discovered live simulation rule layout in `entry` (`comp + 0xb0 -> act + 0x208 -> stage + 0x1e0 -> vec[stage_index]`):
+    - `+0x98`: live squad registration cap (`u8`, 25 in La Liga/EPL/Serie A, 99 in Bundesliga/Scotland/France).
+    - `+0x99`: homegrown player quota (`u8`, 8 in La Liga/EPL/Serie A/Bundesliga, 255 if unconstrained).
+    - `+0x9a`: stage registration gate (`u8`, 1 = open, 0 = closed).
+    - `+0x9b`: max squad number cap (`u8`, 49 in Bundesliga [DFL cap], 255 = standard).
+    - `+0xcd`: competition type (`u8`, 8 = domestic league).
+    - `+0xd6`: secondary squad registration cap (`u8`, synchronized with `+0x98`).
+  - Distinguished live rules engine from static database source:
+    - Editor-format `'sqsr'` and `'ydtm'`/`'strl'` nodes (at `act + 0x38`, `stage + 0xd8..0x3a0`) are static database snapshots read once at game creation.
+    - Stage rule entry at `vec[stage_index]` is the active, dynamic structure queried during match setup and registration processing.
+  - Ported stage squad rules to pure Rust in `crates/fmlev-core/src/native_competition.rs`:
+    - Added `NativeStageSquadRules`, `stage_rule_entry`, `read_stage_squad_rules`, and `write_stage_squad_cap` with atomic dual-location updates (`+0x98` and `+0xd6`) and rollback on mismatch.
+  - Updated C++ scanner `tools/fmscan/entity_details.hpp` to extract `max_squad_size` and `min_homegrown_nation` with field evidence.
+  - Live verified on PID 5945: tested transactional write and readback of squad cap on La Liga (`0x2623a27e0`), restoring values cleanly.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 123 tests passing (122 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
+  - All source files strictly $\le$ 1,076 LOC.

@@ -30,6 +30,7 @@ pub async fn start_server(port: u16) -> anyhow::Result<()> {
                 game_assembly_base: None,
                 unity_player_base: None,
                 fm_exe_base: None,
+                game_plugin_base: None,
             });
             let mut w = initial_state.inner.write().await;
             w.pid = Some(pid);

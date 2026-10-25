@@ -253,6 +253,7 @@ async fn main() -> anyhow::Result<()> {
                     game_assembly_base: None,
                     unity_player_base: None,
                     fm_exe_base: None,
+                    game_plugin_base: None,
                 });
                 overlay.state.update_connection(
                     proc.pid,

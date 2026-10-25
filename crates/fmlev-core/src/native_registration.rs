@@ -13,7 +13,9 @@ use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
 use crate::error::{CoreError, Result};
 
-const REGISTRATION_BIT: u32 = 0x100;
+pub const REGISTRATION_BIT: u32 = 0x100;
+pub const SQUAD_NUMBER_BIT: u32 = 0x200;
+pub const MANAGER_FLAGS_BITS: u32 = REGISTRATION_BIT | SQUAD_NUMBER_BIT;
 const HUMAN_FLAGS: usize = 0x404;
 const HUMAN_VTABLE_RVA: usize = 0x44a_5238;
 const HUMAN_LIST_RVA: usize = 0x4e3_60f8;
@@ -96,12 +98,14 @@ fn gate_byte_address(driver: &LinuxMemoryDriver, comp: usize) -> Result<(usize, 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RegistrationState {
     pub manager_flag: bool,
+    pub squad_number_flag: bool,
     pub competition_gate: bool,
     /// Gate byte before the first change, so disabling restores it exactly.
     pub original_gate: u8,
 }
 
-/// Enables or disables registration-anytime for the managed human and one competition.
+/// Enables or disables registration-anytime and squad-number-anytime for the managed human
+/// and one domestic competition.
 /// `original_gate` must be the value returned when it was first enabled (None on first call).
 pub fn set_registration_anytime(
     driver: &LinuxMemoryDriver,
@@ -120,9 +124,9 @@ pub fn set_registration_anytime(
     let original = original_gate.unwrap_or(current_gate);
     let flags = driver.read::<u32>(human + HUMAN_FLAGS)?;
     let (new_flags, new_gate) = if enabled {
-        (flags | REGISTRATION_BIT, 1u8)
+        (flags | MANAGER_FLAGS_BITS, 1u8)
     } else {
-        (flags & !REGISTRATION_BIT, original)
+        (flags & !MANAGER_FLAGS_BITS, original)
     };
     driver.write(human + HUMAN_FLAGS, &new_flags)?;
     if let Err(error) = driver.write(gate, &new_gate) {
@@ -138,7 +142,56 @@ pub fn set_registration_anytime(
     }
     Ok(RegistrationState {
         manager_flag: new_flags & REGISTRATION_BIT != 0,
+        squad_number_flag: new_flags & SQUAD_NUMBER_BIT != 0,
         competition_gate: new_gate != 0,
         original_gate: original,
     })
+}
+
+/// Toggles the squad-number-anytime manager flag (bit 0x200 at manager + 0x404)
+/// with transactional readback verification and rollback on failure.
+pub fn set_squad_number_anytime(
+    driver: &LinuxMemoryDriver,
+    enabled: bool,
+) -> Result<bool> {
+    let base = module_base(driver)?;
+    let human = human_object(driver, base)?;
+    let flags = driver.read::<u32>(human + HUMAN_FLAGS)?;
+    let new_flags = if enabled {
+        flags | SQUAD_NUMBER_BIT
+    } else {
+        flags & !SQUAD_NUMBER_BIT
+    };
+    if new_flags == flags {
+        return Ok(new_flags & SQUAD_NUMBER_BIT != 0);
+    }
+    driver.write(human + HUMAN_FLAGS, &new_flags)?;
+    if driver.read::<u32>(human + HUMAN_FLAGS)? != new_flags {
+        let _ = driver.write(human + HUMAN_FLAGS, &flags);
+        return Err(invalid("Squad number flag readback mismatch; rolled back"));
+    }
+    Ok(new_flags & SQUAD_NUMBER_BIT != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registration_bits_and_state_flags() {
+        assert_eq!(REGISTRATION_BIT, 0x100);
+        assert_eq!(SQUAD_NUMBER_BIT, 0x200);
+        assert_eq!(MANAGER_FLAGS_BITS, 0x300);
+
+        let state = RegistrationState {
+            manager_flag: true,
+            squad_number_flag: true,
+            competition_gate: true,
+            original_gate: 0,
+        };
+        assert!(state.manager_flag);
+        assert!(state.squad_number_flag);
+        assert!(state.competition_gate);
+        assert_eq!(state.original_gate, 0);
+    }
 }

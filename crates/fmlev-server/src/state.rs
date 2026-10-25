@@ -215,6 +215,23 @@ pub struct PlayerMoveRequest {
     pub target_team_address: Option<usize>,
 }
 
+#[derive(Deserialize)]
+pub struct PlayerSignRequest {
+    pub player_id: i32,
+    pub target_club_id: Option<i32>,
+    pub target_team_address: Option<usize>,
+    pub wage_gbp: Option<u32>,
+    pub expiry_year: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct TransferAccelerateRequest {
+    pub player_id: i32,
+    pub new_join_date: Option<u32>,
+    #[serde(default)]
+    pub instant: bool,
+}
+
 /// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.
 /// Omit `prizes` to read; provide it to write one raw-GBP amount per position.
 #[derive(Deserialize)]

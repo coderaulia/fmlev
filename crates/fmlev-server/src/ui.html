@@ -2214,12 +2214,12 @@
           <span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
         </div>
 
-        <div class="facility-row" style="opacity: 0.6;">
-          <span class="facility-name" title="Unverified in FM26 memory">Data Analysis (Unverified)</span>
-          <button class="stepper-btn" disabled data-unverified="true" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
-          <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" disabled data-unverified="true">
-          <button class="stepper-btn" disabled data-unverified="true" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
-          <span id="fac-data-analysis-disp" class="facility-val tier-elite" style="cursor: not-allowed;">18</span>
+        <div class="facility-row">
+          <span class="facility-name" title="Governs data analysis infrastructure and tactical analytics">Data Analysis Facilities</span>
+          <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
+          <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value); markClubUnsaved();">
+          <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
+          <span id="fac-data-analysis-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-data-analysis', 'Data Analysis Facilities')" title="Click to enter 1-20" style="cursor: pointer;">18</span>
         </div>
 
         <div class="facility-row">
@@ -2238,7 +2238,7 @@
       <!-- Board & Ownership and Affiliated Clubs Manager Grid -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
         <!-- Board & Ownership -->
-        <div class="card">
+        <div class="card" id="club-board-card" data-live-editor="true">
           <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
             <span>👔 Board & Ownership</span>
             <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px; border-color: rgba(139, 92, 246, 0.4); color: #c4b5fd;" onclick="applyInvincibleBoard()">🛡️ Board Immunity</button>
@@ -2260,28 +2260,28 @@
             </div>
           </div>
 
-          <div class="facility-row" style="margin-top: 14px;">
-            <span class="facility-name">Board Patience (1-20)</span>
-            <button class="stepper-btn" onclick="stepPatience(-1)">−</button>
-            <input id="club-board-patience" type="range" min="1" max="20" value="15" class="facility-slider" oninput="updateDisp('disp-patience', this.value); markClubUnsaved();" onchange="autoSaveClub()">
-            <button class="stepper-btn" onclick="stepPatience(1)">+</button>
-            <span id="disp-patience" class="facility-val tier-elite" onclick="promptEditClubFac('club-board-patience', 'Board Patience')" title="Click to enter 1-20" style="cursor: pointer;">15</span>
+          <div class="facility-row" style="margin-top: 14px; opacity: 0.6;">
+            <span class="facility-name">Board Patience (Unverified)</span>
+            <button class="stepper-btn" disabled data-unverified="true" onclick="stepPatience(-1)">−</button>
+            <input id="club-board-patience" type="range" min="1" max="20" value="15" class="facility-slider" disabled data-unverified="true" oninput="updateDisp('disp-patience', this.value); markClubUnsaved();" onchange="autoSaveClub()">
+            <button class="stepper-btn" disabled data-unverified="true" onclick="stepPatience(1)">+</button>
+            <span id="disp-patience" class="facility-val tier-elite" style="cursor: not-allowed;">15</span>
           </div>
 
-          <div style="margin: 14px 0 10px;">
+          <div style="margin: 14px 0 10px; opacity: 0.6;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-              <span>FAN CONFIDENCE</span>
+              <span>FAN CONFIDENCE (Unverified)</span>
               <span id="disp-fan-conf">85%</span>
             </div>
-            <input id="club-fan-confidence" type="range" min="1" max="100" value="85" style="width: 100%; accent-color: var(--accent-emerald);" oninput="document.getElementById('disp-fan-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
+            <input id="club-fan-confidence" type="range" min="1" max="100" value="85" disabled data-unverified="true" style="width: 100%; accent-color: var(--accent-emerald);" oninput="document.getElementById('disp-fan-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
 
-          <div style="margin: 14px 0 10px;">
+          <div style="margin: 14px 0 10px; opacity: 0.6;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-              <span>BOARD CONFIDENCE</span>
+              <span>BOARD CONFIDENCE (Unverified)</span>
               <span id="disp-board-conf">88%</span>
             </div>
-            <input id="club-board-confidence" type="range" min="1" max="100" value="88" style="width: 100%; accent-color: var(--accent-cyan);" oninput="document.getElementById('disp-board-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
+            <input id="club-board-confidence" type="range" min="1" max="100" value="88" disabled data-unverified="true" style="width: 100%; accent-color: var(--accent-cyan);" oninput="document.getElementById('disp-board-conf').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
 
           <div style="margin: 14px 0 10px;">
@@ -2463,6 +2463,13 @@
           <input id="nation-economic" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateDisp('disp-nation-econ', this.value)">
           <button class="stepper-btn" onclick="stepNationStat('economic_factor', 1)">+</button>
           <span id="disp-nation-econ" class="facility-val tier-elite">19</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Population</label>
+          <div class="stepper-input-group">
+            <input id="nation-population" type="number" min="1" max="2000000000" class="form-control" value="50000000" onchange="debouncedSaveNation()">
+          </div>
         </div>
 
         <div class="facility-row" style="opacity: 0.6;">

@@ -39,6 +39,8 @@ const TRAINING_FACILITIES_OFFSET: usize = 0x118;
 const YOUTH_FACILITIES_OFFSET: usize = 0x123;
 const JUNIOR_COACHING_OFFSET: usize = 0x124;
 const YOUTH_RECRUITMENT_OFFSET: usize = 0x125;
+const DATA_ANALYSIS_FACILITIES_OFFSET: usize = 0x11e;
+const SUGAR_DADDY_OFFSET: usize = 0x3c;
 const WORLD_REPUTATION_OFFSET: usize = 0x166;
 const TEAM_REPUTATION_OFFSET: usize = 0xa8;
 #[allow(dead_code)]
@@ -186,7 +188,18 @@ impl NativeClubRecord {
         Ok(driver.read::<u8>(self.finance + CORP_FACILITIES_OFFSET)?)
     }
 
-    pub fn read_facilities(&self, driver: &LinuxMemoryDriver) -> Result<(u8, u8, u8, u8, u8)> {
+    pub fn read_data_analysis_facilities(&self, driver: &LinuxMemoryDriver) -> Result<u8> {
+        self.validate(driver)?;
+        let details = self.details.ok_or_else(|| invalid("Club details subrecord not mapped"))?;
+        Ok(driver.read::<u8>(details + DATA_ANALYSIS_FACILITIES_OFFSET)?)
+    }
+
+    pub fn read_sugar_daddy(&self, driver: &LinuxMemoryDriver) -> Result<u8> {
+        self.validate(driver)?;
+        Ok(driver.read::<u8>(self.finance + SUGAR_DADDY_OFFSET)?)
+    }
+
+    pub fn read_facilities(&self, driver: &LinuxMemoryDriver) -> Result<(u8, u8, u8, u8, u8, u8)> {
         self.validate(driver)?;
         let details = self.details.ok_or_else(|| invalid("Club details subrecord not mapped"))?;
         let training = driver.read::<u8>(details + TRAINING_FACILITIES_OFFSET)?;
@@ -194,7 +207,8 @@ impl NativeClubRecord {
         let coaching = driver.read::<u8>(details + JUNIOR_COACHING_OFFSET)?;
         let recruitment = driver.read::<u8>(details + YOUTH_RECRUITMENT_OFFSET)?;
         let corp = driver.read::<u8>(self.finance + CORP_FACILITIES_OFFSET)?;
-        Ok((training, youth, coaching, recruitment, corp))
+        let analysis = driver.read::<u8>(details + DATA_ANALYSIS_FACILITIES_OFFSET).unwrap_or(0);
+        Ok((training, youth, coaching, recruitment, corp, analysis))
     }
 
     pub fn read_reputations(&self, driver: &LinuxMemoryDriver) -> Result<(u16, u16)> {
@@ -312,6 +326,7 @@ impl NativeClubRecord {
             (previous.youth_facilities, requested.youth_facilities, YOUTH_FACILITIES_OFFSET, "Youth facilities"),
             (previous.junior_coaching, requested.junior_coaching, JUNIOR_COACHING_OFFSET, "Junior coaching"),
             (previous.youth_recruitment, requested.youth_recruitment, YOUTH_RECRUITMENT_OFFSET, "Youth recruitment"),
+            (previous.data_analysis_facilities, requested.data_analysis_facilities, DATA_ANALYSIS_FACILITIES_OFFSET, "Data analysis facilities"),
         ];
 
         let has_details_change = facility_fields.iter().any(|(prev, req, _, _)| *prev != *req && *req > 0);
@@ -344,6 +359,23 @@ impl NativeClubRecord {
                 old_bytes: vec![old],
                 new_bytes: vec![requested.corporate_facilities],
                 label: "Corporate facilities",
+            });
+        }
+
+        // Sugar daddy in finance
+        if previous.sugar_daddy_type != requested.sugar_daddy_type && !requested.sugar_daddy_type.is_empty() {
+            let sd_val: u8 = match requested.sugar_daddy_type.as_str() {
+                "Foreground" | "1" => 1,
+                "Background" | "FrontEnd" | "2" => 2,
+                "Underwriter" | "3" => 3,
+                _ => 0,
+            };
+            let old = driver.read::<u8>(self.finance + SUGAR_DADDY_OFFSET)?;
+            patches.push(FieldPatch {
+                address: self.finance + SUGAR_DADDY_OFFSET,
+                old_bytes: vec![old],
+                new_bytes: vec![sd_val],
+                label: "Sugar daddy",
             });
         }
 
@@ -446,6 +478,7 @@ mod tests {
         driver.write(details + YOUTH_FACILITIES_OFFSET, &19u8).unwrap();
         driver.write(details + JUNIOR_COACHING_OFFSET, &17u8).unwrap();
         driver.write(details + YOUTH_RECRUITMENT_OFFSET, &16u8).unwrap();
+        driver.write(details + DATA_ANALYSIS_FACILITIES_OFFSET, &14u8).unwrap();
 
         // Finance header
         driver.write(finance + 8, &club).unwrap();
@@ -453,6 +486,7 @@ mod tests {
         driver.write(finance + TRANSFER_OFFSET, &30_000_000i32).unwrap();
         driver.write(finance + RETENTION_OFFSET, &100u32).unwrap();
         driver.write(finance + CORP_FACILITIES_OFFSET, &15u8).unwrap();
+        driver.write(finance + SUGAR_DADDY_OFFSET, &1u8).unwrap();
 
         // Team header
         driver.write(team + TEAM_BACKPTR_OFFSET, &club).unwrap();
@@ -490,7 +524,9 @@ mod tests {
         let f = mock_club();
         assert_eq!(f.record.read_balance(&f.driver).unwrap(), 50_000_000);
         assert_eq!(f.record.read_transfer_budget(&f.driver).unwrap(), 30_000_000);
-        assert_eq!(f.record.read_facilities(&f.driver).unwrap(), (18, 19, 17, 16, 15));
+        assert_eq!(f.record.read_facilities(&f.driver).unwrap(), (18, 19, 17, 16, 15, 14));
+        assert_eq!(f.record.read_data_analysis_facilities(&f.driver).unwrap(), 14);
+        assert_eq!(f.record.read_sugar_daddy(&f.driver).unwrap(), 1);
         assert_eq!(f.record.read_reputations(&f.driver).unwrap(), (8800, 7500));
         assert_eq!(f.record.read_stadium_capacities(&f.driver).unwrap(), (65_000, 100_000));
     }
@@ -507,6 +543,8 @@ mod tests {
         prev.junior_coaching = 17;
         prev.youth_recruitment = 16;
         prev.corporate_facilities = 15;
+        prev.data_analysis_facilities = 14;
+        prev.sugar_daddy_type = "Foreground".to_string();
         prev.reputation = 8800;
         prev.stadium_capacity = 65_000;
         prev.stadium_expansion_cap = 100_000;
@@ -519,6 +557,8 @@ mod tests {
         req.junior_coaching = 20;
         req.youth_recruitment = 20;
         req.corporate_facilities = 20;
+        req.data_analysis_facilities = 20;
+        req.sugar_daddy_type = "Underwriter".to_string();
         req.reputation = 9500;
         req.stadium_capacity = 80_000;
         req.stadium_expansion_cap = 110_000;
@@ -527,7 +567,9 @@ mod tests {
 
         assert_eq!(f.record.read_balance(&f.driver).unwrap(), 75_000_000);
         assert_eq!(f.record.read_transfer_budget(&f.driver).unwrap(), 45_000_000);
-        assert_eq!(f.record.read_facilities(&f.driver).unwrap(), (20, 20, 20, 20, 20));
+        assert_eq!(f.record.read_facilities(&f.driver).unwrap(), (20, 20, 20, 20, 20, 20));
+        assert_eq!(f.record.read_data_analysis_facilities(&f.driver).unwrap(), 20);
+        assert_eq!(f.record.read_sugar_daddy(&f.driver).unwrap(), 3);
         assert_eq!(f.record.read_reputations(&f.driver).unwrap(), (9500, 7500));
         assert_eq!(f.record.read_stadium_capacities(&f.driver).unwrap(), (80_000, 110_000));
     }

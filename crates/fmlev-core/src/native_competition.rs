@@ -17,6 +17,21 @@ const CHUNK: usize = 16 << 20;
 const MAX_PRIZE: i32 = 2_000_000_000;
 const REPUTATION_OFFSET: usize = 0x188;
 
+const STAGE_SQUAD_CAP_PRIMARY: usize = 0x98;
+const STAGE_HOMEGROWN_OFFSET: usize = 0x99;
+const STAGE_REGISTRATION_GATE_OFFSET: usize = 0x9a;
+const STAGE_SQUAD_NUM_CAP_OFFSET: usize = 0x9b;
+const STAGE_SQUAD_CAP_SECONDARY: usize = 0xd6;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct NativeStageSquadRules {
+    pub max_squad_size: u8,
+    pub min_homegrown: u8,
+    pub registration_gate: u8,
+    pub max_squad_number: u8,
+    pub rule_entry_address: usize,
+}
+
 fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
 }
@@ -196,6 +211,72 @@ impl NativeCompetitionRecord {
         Ok(())
     }
 
+    /// Locates the active competition stage rule entry in the simulation engine.
+    pub fn stage_rule_entry(&self, driver: &LinuxMemoryDriver) -> Result<usize> {
+        self.validate(driver)?;
+        let act = driver.read_ptr(self.comp + 0xb0)?;
+        if act <= 0x10000 {
+            return Err(invalid("Competition ACTUAL_COMP is missing or null"));
+        }
+        let stage = driver.read_ptr(act + 0x208)?;
+        let vec_obj = driver.read_ptr(stage + 0x1e0)?;
+        let (begin, end) = (driver.read_ptr(vec_obj + 0x60)?, driver.read_ptr(vec_obj + 0x68)?);
+        let stage_index = driver.read::<u8>(act + 0x31)?;
+        if stage <= 0x10000 || vec_obj <= 0x10000 || begin == 0 || begin >= end
+            || (end - begin) % 8 != 0 || stage_index == 0xff || usize::from(stage_index) >= (end - begin) / 8
+        {
+            return Err(invalid("Competition stage rules failed validation"));
+        }
+        let entry = driver.read_ptr(begin + usize::from(stage_index) * 8)?;
+        if entry <= 0x10000 {
+            return Err(invalid("Competition stage rule entry is missing"));
+        }
+        Ok(entry)
+    }
+
+    /// Reads live squad registration and number rules from the active simulation stage rule entry.
+    pub fn read_stage_squad_rules(&self, driver: &LinuxMemoryDriver) -> Result<NativeStageSquadRules> {
+        let entry = self.stage_rule_entry(driver)?;
+        let max_squad_size = driver.read::<u8>(entry + STAGE_SQUAD_CAP_PRIMARY)?;
+        let min_homegrown = driver.read::<u8>(entry + STAGE_HOMEGROWN_OFFSET)?;
+        let registration_gate = driver.read::<u8>(entry + STAGE_REGISTRATION_GATE_OFFSET)?;
+        let max_squad_number = driver.read::<u8>(entry + STAGE_SQUAD_NUM_CAP_OFFSET)?;
+        Ok(NativeStageSquadRules {
+            max_squad_size,
+            min_homegrown,
+            registration_gate,
+            max_squad_number,
+            rule_entry_address: entry,
+        })
+    }
+
+    /// Atomically updates the stage registration squad size limit (both primary +0x98 and secondary +0xd6)
+    /// with verification and automatic rollback on mismatch.
+    pub fn write_stage_squad_cap(&self, driver: &LinuxMemoryDriver, new_cap: u8) -> Result<()> {
+        if !(1..=99).contains(&new_cap) {
+            return Err(invalid("Squad size limit must be between 1 and 99"));
+        }
+        let entry = self.stage_rule_entry(driver)?;
+        let old_primary = driver.read::<u8>(entry + STAGE_SQUAD_CAP_PRIMARY)?;
+        let old_secondary = driver.read::<u8>(entry + STAGE_SQUAD_CAP_SECONDARY)?;
+        if old_primary == new_cap && old_secondary == new_cap {
+            return Ok(());
+        }
+        driver.write(entry + STAGE_SQUAD_CAP_PRIMARY, &new_cap)?;
+        if let Err(e) = driver.write(entry + STAGE_SQUAD_CAP_SECONDARY, &new_cap) {
+            let _ = driver.write(entry + STAGE_SQUAD_CAP_PRIMARY, &old_primary);
+            return Err(e.into());
+        }
+        let verified = driver.read::<u8>(entry + STAGE_SQUAD_CAP_PRIMARY)? == new_cap
+            && driver.read::<u8>(entry + STAGE_SQUAD_CAP_SECONDARY)? == new_cap;
+        if !verified {
+            let _ = driver.write(entry + STAGE_SQUAD_CAP_PRIMARY, &old_primary);
+            let _ = driver.write(entry + STAGE_SQUAD_CAP_SECONDARY, &old_secondary);
+            return Err(invalid("Stage squad cap readback mismatch; rolled back"));
+        }
+        Ok(())
+    }
+
     pub fn write_competition_edits(&self, driver: &LinuxMemoryDriver, previous: &CompetitionDetails, requested: &CompetitionDetails) -> Result<()> {
         self.validate(driver)?;
         if previous.reputation != requested.reputation && requested.reputation > 0 {
@@ -252,5 +333,68 @@ mod tests {
         assert_eq!(record.read_reputation(&driver).unwrap(), 195);
 
         assert!(record.write_reputation(&driver, 250).is_err());
+    }
+
+    #[test]
+    fn competition_stage_squad_rules_read_write() {
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut comp_data = vec![0u8; 0x300];
+        let mut act_data = vec![0u8; 0x300];
+        let mut stage_data = vec![0u8; 0x300];
+        let mut vec_obj_data = vec![0u8; 0x100];
+        let mut entry_data = vec![0u8; 0x100];
+
+        let comp = comp_data.as_mut_ptr() as usize;
+        let act = act_data.as_mut_ptr() as usize;
+        let stage = stage_data.as_mut_ptr() as usize;
+        let vec_obj = vec_obj_data.as_mut_ptr() as usize;
+        let entry = entry_data.as_mut_ptr() as usize;
+
+        let comp_id = 51i32;
+        let uid = 67i32;
+
+        driver.write(comp + 8, &comp_id).unwrap();
+        driver.write(comp + 0xc, &uid).unwrap();
+        driver.write(comp + 0x10, &uid).unwrap();
+        driver.write(comp + 0xb0, &act).unwrap();
+
+        driver.write(act + 0x31, &0u8).unwrap();
+        driver.write(act + 0x208, &stage).unwrap();
+
+        driver.write(stage + 0x1e0, &vec_obj).unwrap();
+
+        let mut ptr_vec = vec![entry];
+        let begin = ptr_vec.as_mut_ptr() as usize;
+        let end = begin + 8;
+        driver.write(vec_obj + 0x60, &begin).unwrap();
+        driver.write(vec_obj + 0x68, &end).unwrap();
+
+        driver.write(entry + STAGE_SQUAD_CAP_PRIMARY, &25u8).unwrap();
+        driver.write(entry + STAGE_HOMEGROWN_OFFSET, &8u8).unwrap();
+        driver.write(entry + STAGE_REGISTRATION_GATE_OFFSET, &0u8).unwrap();
+        driver.write(entry + STAGE_SQUAD_NUM_CAP_OFFSET, &255u8).unwrap();
+        driver.write(entry + STAGE_SQUAD_CAP_SECONDARY, &25u8).unwrap();
+
+        let record = NativeCompetitionRecord {
+            pid: driver.pid(),
+            comp,
+            comp_id,
+        };
+
+        let rules = record.read_stage_squad_rules(&driver).unwrap();
+        assert_eq!(rules.max_squad_size, 25);
+        assert_eq!(rules.min_homegrown, 8);
+        assert_eq!(rules.registration_gate, 0);
+        assert_eq!(rules.max_squad_number, 255);
+        assert_eq!(rules.rule_entry_address, entry);
+
+        record.write_stage_squad_cap(&driver, 30).unwrap();
+        let updated = record.read_stage_squad_rules(&driver).unwrap();
+        assert_eq!(updated.max_squad_size, 30);
+        assert_eq!(driver.read::<u8>(entry + STAGE_SQUAD_CAP_SECONDARY).unwrap(), 30);
+
+        // Clamping / bounds check:
+        assert!(record.write_stage_squad_cap(&driver, 0).is_err());
+        assert!(record.write_stage_squad_cap(&driver, 100).is_err());
     }
 }

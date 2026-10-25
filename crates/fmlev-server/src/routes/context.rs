@@ -944,12 +944,71 @@ pub async fn move_player(
     }
 }
 
-/// Sign for unemployed free agents is not implemented: the game allocates a contract object with
-/// complex internal simulation queues, which raw memory writes cannot create safely.
+/// Signs an unemployed free agent to a target club squad.
+pub async fn sign_player(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::PlayerSignRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    match w.context_mgr.sign_free_agent(
+        payload.player_id,
+        payload.target_club_id,
+        payload.target_team_address,
+        payload.wage_gbp,
+        payload.expiry_year,
+    ) {
+        Ok(team_ptr) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": "Player signed successfully to target club squad.",
+                "target_team": format!("0x{:x}", team_ptr),
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Accelerates the scheduled join date of an arranged pending transfer or completes it instantly.
+pub async fn accelerate_transfer(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::TransferAccelerateRequest>,
+) -> impl IntoResponse {
+    let mut w = state.inner.write().await;
+    if payload.instant {
+        match w.context_mgr.complete_pending_transfer(payload.player_id) {
+            Ok((from_team, to_team)) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "success",
+                    "message": "Pending transfer completed immediately. Player moved to destination squad.",
+                    "from_team": format!("0x{:x}", from_team),
+                    "to_team": format!("0x{:x}", to_team),
+                })),
+            ),
+            Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+        }
+    } else {
+        match w.context_mgr.accelerate_pending_transfer(payload.player_id, payload.new_join_date) {
+            Ok((old_date, new_date)) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "success",
+                    "message": "Pending transfer join date accelerated.",
+                    "old_join_date": format!("0x{:x}", old_date),
+                    "new_join_date": format!("0x{:x}", new_date),
+                })),
+            ),
+            Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+        }
+    }
+}
+
+/// Loan agreement creation is not implemented: loans require complex multi-club loan contract nodes.
 pub async fn transfer_not_implemented() -> impl IntoResponse {
     api_error(
         StatusCode::BAD_REQUEST,
-        fmlev_core::CoreError::InvalidValue("Signing an unemployed free agent requires game-allocated contract objects. Use Move Player for contracted players instead.".into()),
+        fmlev_core::CoreError::InvalidValue("Creating new loan agreements via raw memory writes is not supported. Use Move Player or Sign Player instead.".into()),
     )
 }
 
@@ -1008,6 +1067,7 @@ pub async fn registration_anytime(
                 "status": "success",
                 "message": if payload.enabled { "Registration allowed anytime. Close and reopen the Registration screen." } else { "Registration rules restored. Close and reopen the Registration screen." },
                 "manager_flag": result.manager_flag,
+                "squad_number_flag": result.squad_number_flag,
                 "competition_gate": result.competition_gate
             })),
         ),

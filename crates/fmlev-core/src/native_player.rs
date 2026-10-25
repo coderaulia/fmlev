@@ -886,6 +886,34 @@ impl NativePlayerRecord {
         self.validate(driver)?;
         crate::native_transfer::move_player(driver, self, target_team)
     }
+
+    /// Signs an unemployed free agent to a target team.
+    pub fn sign_free_agent(
+        &self,
+        driver: &LinuxMemoryDriver,
+        target_team: usize,
+        wage_gbp: Option<u32>,
+        expiry_year: Option<u32>,
+    ) -> Result<usize> {
+        self.validate(driver)?;
+        crate::native_transfer::sign_free_agent(driver, self, target_team, wage_gbp, expiry_year)
+    }
+
+    /// Completes an arranged future transfer immediately.
+    pub fn complete_pending_transfer(&self, driver: &LinuxMemoryDriver) -> Result<(usize, usize)> {
+        self.validate(driver)?;
+        crate::native_transfer::complete_pending_transfer(driver, self)
+    }
+
+    /// Accelerates the scheduled join date of a pending future transfer.
+    pub fn accelerate_pending_transfer(
+        &self,
+        driver: &LinuxMemoryDriver,
+        new_join_date: Option<u32>,
+    ) -> Result<(u32, u32)> {
+        self.validate(driver)?;
+        crate::native_transfer::accelerate_pending_transfer(driver, self, new_join_date)
+    }
 }
 
 #[cfg(test)]

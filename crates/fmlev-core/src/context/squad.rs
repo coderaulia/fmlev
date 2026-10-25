@@ -76,4 +76,50 @@ impl GameContextManager {
         let _ = self.sync_live_context();
         Ok(res)
     }
+
+    /// Signs an unemployed free agent to a target club's first team (or specific team address).
+    pub fn sign_free_agent(
+        &mut self,
+        id: i32,
+        target_club_id: Option<i32>,
+        target_team_address: Option<usize>,
+        wage_gbp: Option<u32>,
+        expiry_year: Option<u32>,
+    ) -> Result<usize> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let team_addr = match (target_team_address, target_club_id) {
+            (Some(addr), _) => addr,
+            (None, Some(club_id)) => {
+                let club = crate::native_club::NativeClubRecord::discover(&session.driver, club_id)?;
+                club.first_team.ok_or_else(|| CoreError::InvalidValue("Target club has no valid first team".into()))?
+            }
+            (None, None) => return Err(CoreError::InvalidValue("Either target_club_id or target_team_address must be provided".into())),
+        };
+        let res = record.sign_free_agent(&session.driver, team_addr, wage_gbp, expiry_year)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
+
+    /// Completes an arranged future transfer immediately.
+    pub fn complete_pending_transfer(&mut self, id: i32) -> Result<(usize, usize)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let res = record.complete_pending_transfer(&session.driver)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
+
+    /// Accelerates the scheduled join date of a pending future transfer.
+    pub fn accelerate_pending_transfer(
+        &mut self,
+        id: i32,
+        new_join_date: Option<u32>,
+    ) -> Result<(u32, u32)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let res = record.accelerate_pending_transfer(&session.driver, new_join_date)?;
+        let _ = self.sync_live_context();
+        Ok(res)
+    }
 }

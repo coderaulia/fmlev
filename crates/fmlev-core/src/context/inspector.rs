@@ -1286,7 +1286,7 @@ pub(crate) fn decode_base64_simple(input: &str) -> Option<Vec<u8>> {
 }
 
 /// Club fields with a live write path. Everything else is a UI-only or fixture value.
-const LIVE_CLUB_WRITABLE: [&str; 12] = [
+const LIVE_CLUB_WRITABLE: [&str; 14] = [
     "balance",
     "transfer_budget",
     "training_facilities",
@@ -1294,6 +1294,8 @@ const LIVE_CLUB_WRITABLE: [&str; 12] = [
     "junior_coaching",
     "youth_recruitment",
     "corporate_facilities",
+    "data_analysis_facilities",
+    "sugar_daddy_type",
     "reputation",
     "stadium_capacity",
     "stadium_expansion_cap",

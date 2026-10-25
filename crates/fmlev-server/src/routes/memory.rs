@@ -49,6 +49,7 @@ pub async fn attach_process(
                 game_assembly_base: None,
                 unity_player_base: None,
                 fm_exe_base: None,
+                game_plugin_base: None,
             });
 
             let mut w = state.inner.write().await;

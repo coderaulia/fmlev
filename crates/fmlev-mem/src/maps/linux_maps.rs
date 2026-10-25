@@ -62,6 +62,7 @@ pub struct ModuleBases {
     pub game_assembly_base: Option<usize>,
     pub unity_player_base: Option<usize>,
     pub fm_exe_base: Option<usize>,
+    pub game_plugin_base: Option<usize>,
 }
 
 impl ModuleBases {
@@ -182,6 +183,7 @@ pub fn find_module_bases(pid: i32) -> Result<ModuleBases> {
     let mut game_assembly_base = None;
     let mut unity_player_base = None;
     let mut fm_exe_base = None;
+    let mut game_plugin_base = None;
 
     for map in mappings {
         let path_lower = map.pathname.to_lowercase();
@@ -196,6 +198,11 @@ pub fn find_module_bases(pid: i32) -> Result<ModuleBases> {
         {
             debug!("Found fm.exe at 0x{:x}", map.start);
             fm_exe_base = Some(map.start);
+        } else if (path_lower.ends_with("game_plugin.dll") || path_lower.contains("game_plugin.dll"))
+            && game_plugin_base.is_none()
+        {
+            debug!("Found game_plugin.dll at 0x{:x}", map.start);
+            game_plugin_base = Some(map.start);
         }
     }
 
@@ -203,5 +210,6 @@ pub fn find_module_bases(pid: i32) -> Result<ModuleBases> {
         game_assembly_base,
         unity_player_base,
         fm_exe_base,
+        game_plugin_base,
     })
 }

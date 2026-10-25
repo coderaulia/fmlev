@@ -669,13 +669,27 @@ async fn test_contract_and_transfer_routes() {
         inner: Arc::new(RwLock::new(app_state)),
     });
 
-    // 1. Sign free agent should return informative bad request
+    // 1. Sign free agent with offline state should fail gracefully (no live session)
+    let body = serde_json::json!({ "player_id": 1, "target_club_id": 1 });
     let response = app
         .clone()
         .oneshot(
             Request::post("/api/transfer/sign")
                 .header("content-type", "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // 1b. Accelerate transfer with offline state should fail gracefully
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/transfer/accelerate")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
                 .unwrap(),
         )
         .await

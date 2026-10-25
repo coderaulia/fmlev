@@ -256,7 +256,8 @@ pub fn write_live_club(
     let record = crate::native_club::NativeClubRecord::discover(driver, club_id)?;
     let balance = i64::from(record.read_balance(driver)?);
     let transfer = i64::from(record.read_transfer_budget(driver)?);
-    let (training, youth, coaching, recruitment, corp) = record.read_facilities(driver).unwrap_or((0, 0, 0, 0, 0));
+    let (training, youth, coaching, recruitment, corp, data_analysis) = record.read_facilities(driver).unwrap_or((0, 0, 0, 0, 0, 0));
+    let sugar_daddy = record.read_sugar_daddy(driver).unwrap_or(0);
     let (rep, _world_rep) = record.read_reputations(driver).unwrap_or((0, 0));
     let (stadium_cap, stadium_exp) = record.read_stadium_capacities(driver).unwrap_or((0, 0));
 
@@ -268,6 +269,13 @@ pub fn write_live_club(
     if coaching > 0 { baseline.junior_coaching = coaching; }
     if recruitment > 0 { baseline.youth_recruitment = recruitment; }
     if corp > 0 { baseline.corporate_facilities = corp; }
+    if data_analysis > 0 { baseline.data_analysis_facilities = data_analysis; }
+    baseline.sugar_daddy_type = match sugar_daddy {
+        1 => "Foreground".to_string(),
+        2 => "Background".to_string(),
+        3 => "Underwriter".to_string(),
+        _ => "None".to_string(),
+    };
     if rep > 0 { baseline.reputation = rep; }
     if stadium_cap > 0 { baseline.stadium_capacity = stadium_cap; }
     if stadium_exp > 0 { baseline.stadium_expansion_cap = stadium_exp; }

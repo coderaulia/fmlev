@@ -622,6 +622,14 @@ impl NativePlayerRecord {
         Ok(())
     }
 
+    /// Read-only diagnostic: the raw contract record bytes (`len` <= 0x200) and its address.
+    pub fn contract_dump(&self, driver: &LinuxMemoryDriver, len: usize) -> Result<(usize, Vec<u8>)> {
+        let contract = self.contract(driver)?;
+        let mut bytes = vec![0u8; len.min(0x200)];
+        driver.read_bytes(contract.address, &mut bytes)?;
+        Ok((contract.address, bytes))
+    }
+
     pub fn has_contract(&self, driver: &LinuxMemoryDriver) -> bool { self.contract(driver).is_ok() }
 
     /// Apply changed positions/attributes in one checked transaction. Keep exact old

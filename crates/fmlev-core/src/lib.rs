@@ -2,6 +2,7 @@ pub mod actions;
 pub mod context;
 pub mod error;
 pub mod live_write;
+pub mod native_club;
 pub mod live_club;
 pub mod live_nation;
 pub mod live_competition;

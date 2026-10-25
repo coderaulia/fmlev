@@ -243,141 +243,48 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
     output
 }
 
-/// Writes editable club finances and facilities ratings to live UI bindings in `BindingSubsystem`.
-/// Edits are verified by readback, and rolled back if verification fails.
+/// Writes the club values that have a verified native path. Binding values are only UI caches
+/// the game overwrites, so they are never written. Currently only the transfer budget is native
+/// (verified in game); balance and facility ratings are rejected rather than reported as saved.
 pub fn write_live_club(
     driver: &LinuxMemoryDriver,
     binding_subsystem: usize,
     club_id: i32,
     finances: &ClubFinances,
 ) -> Result<()> {
-    let rows = extract_rows(driver, binding_subsystem);
-    let mut balance_tv: Option<usize> = None;
-    let mut transfer_tv: Option<usize> = None;
-    let mut training_obj: Option<usize> = None;
-    let mut youth_obj: Option<usize> = None;
-    let mut corporate_obj: Option<usize> = None;
-
-    for (kind, id, prop, tv) in rows {
-        if kind == 3 && id == club_id {
-            match prop.as_str() {
-                "OverallBalance" => balance_tv = Some(tv),
-                "TransferBudget" => transfer_tv = Some(tv),
-                "TrainingFacilityRating" => training_obj = object_value(driver, tv),
-                "YouthFacilityRating" => youth_obj = object_value(driver, tv),
-                "CorporateFacilityRating" => corporate_obj = object_value(driver, tv),
-                _ => {}
-            }
+    let snapshot = read_live_clubs(driver, binding_subsystem)
+        .into_iter()
+        .find(|club| club.id == club_id)
+        .ok_or_else(|| CoreError::InvalidValue(format!(
+            "No live bindings found for club {club_id}; open Club > Finances in FM26"
+        )))?;
+    let mut unsupported = Vec::new();
+    if snapshot.balance_game_units.is_some_and(|v| v != finances.balance) {
+        unsupported.push("balance (derived by the game, no verified native field)");
+    }
+    for (name, live, requested) in [
+        ("training_facilities", snapshot.training_rating, finances.training_facilities),
+        ("youth_facilities", snapshot.youth_rating, finances.youth_facilities),
+        ("corporate_facilities", snapshot.corporate_rating, finances.corporate_facilities),
+    ] {
+        if requested > 0 && live.is_some_and(|v| v != requested) {
+            unsupported.push(name);
         }
     }
-
-    if balance_tv.is_none() && transfer_tv.is_none() && training_obj.is_none() && youth_obj.is_none() && corporate_obj.is_none() {
-        return Err(CoreError::InvalidValue(format!("No writable bindings found for club {club_id}; open Club > Finances or Club > Facilities in FM26")));
+    if !unsupported.is_empty() {
+        return Err(CoreError::InvalidValue(format!(
+            "No verified native write path for: {}. No fields were written. Only the transfer budget can be saved.",
+            unsupported.join(", ")
+        )));
     }
-
-    // Helper to resolve commonInts pool from any valid TV
-    let find_common_ints = || -> Option<usize> {
-        let sample_tv = balance_tv.or(transfer_tv)?;
-        let mut klass = driver.read_ptr(sample_tv).ok()?;
-        for _ in 0..8 {
-            if let Ok(c) = fmlev_il2cpp::Il2CppClass::read(driver, klass) {
-                if c.name == "TypedValue" && c.namespaze == "SI.Core" {
-                    if let Ok(arr) = c.read_static_field_ptr(driver, 0x40) {
-                        if driver.read::<u64>(arr + 0x18).ok() == Some(102) {
-                            return Some(arr);
-                        }
-                    }
-                }
-            }
-            klass = driver.read_ptr(klass + 0x58).ok()?;
-        }
-        None
+    let (Some(transfer), Some(balance)) = (snapshot.transfer_budget_game_units, snapshot.balance_game_units) else {
+        return Err(CoreError::InvalidValue(
+            "Open Club > Finances in FM26 so the transfer budget can be located".into(),
+        ));
     };
-
-    let common_array = find_common_ints();
-
-    // Money slots are plain numeric payloads. They must never be one of the shared
-    // `TypedValue.s_commonInts` objects, or every other binding using that constant changes.
-    let write_money = |tv_opt: Option<usize>, target: i64, label: &str| -> Result<()> {
-        let Some(tv) = tv_opt else { return Ok(()); };
-        let Some(arr) = common_array else {
-            return Err(CoreError::InvalidValue(format!(
-                "Cannot prove {label} is not a shared constant (common-int pool unavailable); not written"
-            )));
-        };
-        for i in 0..102 {
-            if driver.read_ptr(arr + 0x20 + i * 8)? == tv {
-                return Err(CoreError::InvalidValue(format!(
-                    "{label} binding is a shared constant; not written"
-                )));
-            }
-        }
-        if object_class(driver, tv) != Some(("NumericTypedValue".into(), "SI.Core".into()))
-            || driver.read::<i32>(tv + 0x20)? != 0
-        {
-            return Err(CoreError::InvalidValue(format!("{label} binding is not a signed numeric value; not written")));
-        }
-        let old: i64 = driver.read(tv + 0x18)?;
-        if old == target {
-            return Ok(());
-        }
-        driver.write(tv + 0x18, &target)?;
-        if driver.read::<i64>(tv + 0x18)? != target {
-            let _ = driver.write(tv + 0x18, &old);
-            return Err(CoreError::InvalidValue(format!(
-                "{label} read-back verification failed; rolled back to previous value"
-            )));
-        }
-        Ok(())
-    };
-    write_money(balance_tv, finances.balance, "Club balance")?;
-    write_money(transfer_tv, finances.transfer_budget, "Transfer budget")?;
-
-    // Helper to write facility rating key 0x3235_2020 in a DynamicReference
-    let write_facility_rating = |obj_opt: Option<usize>, target_rating: u8| -> Result<()> {
-        if !(1..=20).contains(&target_rating) {
-            return Err(CoreError::InvalidValue(format!("Facility rating {target_rating} must be between 1 and 20")));
-        }
-        let Some(obj) = obj_opt else { return Ok(()); };
-        let Some(arr) = common_array else { return Ok(()); };
-        let replacement = driver.read_ptr(arr + 0x20 + (target_rating as usize + 1) * 8)?;
-        if !ptr(replacement) {
-            return Err(CoreError::InvalidValue("Invalid common integer pointer".into()));
-        }
-
-        let entries = driver.read_ptr(obj + 0x18)?;
-        if !ptr(entries) { return Ok(()); }
-        let count = driver.read::<usize>(entries + 0x18)?;
-        for i in 0..count.min(64) {
-            let entry = entries + 0x20 + i * 24;
-            let key = driver.read::<u32>(entry + 8)?;
-            if key == 0x3235_2020 {
-                let old_ptr = driver.read_ptr(entry + 16)?;
-                if old_ptr != replacement {
-                    driver.write(entry + 16, &replacement)?;
-                    let readback = driver.read_ptr(entry + 16)?;
-                    if readback != replacement {
-                        let _ = driver.write(entry + 16, &old_ptr);
-                        return Err(CoreError::InvalidValue(
-                            "Facility rating pointer verification failed; rolled back".into(),
-                        ));
-                    }
-                }
-                break;
-            }
-        }
-        Ok(())
-    };
-
-    if finances.training_facilities > 0 {
-        write_facility_rating(training_obj, finances.training_facilities)?;
+    if transfer == finances.transfer_budget {
+        return Ok(());
     }
-    if finances.youth_facilities > 0 {
-        write_facility_rating(youth_obj, finances.youth_facilities)?;
-    }
-    if finances.corporate_facilities > 0 {
-        write_facility_rating(corporate_obj, finances.corporate_facilities)?;
-    }
-
-    Ok(())
+    let block = crate::native_club::NativeClubFinance::discover(driver, transfer, balance)?;
+    block.write_transfer_budget(driver, finances.transfer_budget)
 }

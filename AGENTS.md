@@ -93,3 +93,10 @@ crates/
   - `cargo test --workspace`: 108 tests passing.
   - `node --test crates/fmlev-server/tests/*.test.cjs`: 26 passed, 0 failed.
   - All files strictly $\le$ 1,328 LOC.
+
+### Phase 3: Club Native Transfer Budget, Binding Diagnostics, Injury Crash Postmortem (Completed)
+- **Club writes**: UI-binding writes are caches the game overwrites (verified in game: balance and transfer budget reverted). Only the transfer budget has a verified native path (`native_club.rs`: `[transfer, transfer, a, b, c, balance]` i32 block found by shape + live bindings). The balance word is derived by the game and must not be written; balance should be edited through income/expenditure once those native fields are mapped. Facility ratings and other club fields are rejected rather than reported as saved.
+- **Removed**: the fake "Clear Promises" action (it only set condition/sharpness).
+- **Diagnostics (read-only)**: `live_dump.rs` + examples `dump_live_bindings`, `probe_native_record`, `inspect_injury`.
+- **Competitions**: native record found by vtable + index + unique ID (index at +0x8, uid at +0xc/+0x10, name pointers at +0x40/+0x48/+0x50, record stride 0x1c0). Rules/prize values are not in the UI bindings and not yet mapped.
+- **NEVER edit a player's injury vector** (player + 0x248, begin +0x18 / end +0x20). A nulled/emptied vector for a player with a current injury crashes FM26 on the next day processing (`game_plugin.dll+0x33af065`, `mov rcx,[begin]`) and the damage is saved into the career. Repair used: point the vector at a healed record copied from another player's list, Continue, then Save As a new file.

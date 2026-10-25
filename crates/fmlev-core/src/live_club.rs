@@ -9,7 +9,7 @@ use fmlev_mem::LinuxMemoryDriver;
 use serde::Serialize;
 
 use crate::context::{DecodedTypedValue, read_typed_value};
-use crate::error::{CoreError, Result};
+use crate::error::Result;
 use crate::models::ClubFinances;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -244,47 +244,33 @@ pub fn read_live_clubs(driver: &LinuxMemoryDriver, binding_subsystem: usize) -> 
 }
 
 /// Writes the club values that have a verified native path. Binding values are only UI caches
-/// the game overwrites, so they are never written. Currently only the transfer budget is native
-/// and the balance (native finance object, both verified in game; balance month-end persistence
-/// unconfirmed); facility ratings are rejected rather than reported as saved.
+/// the game overwrites, so they are never written. Native balance, transfer budget,
+/// facilities (training, youth, coaching, recruitment, corporate), reputation, and stadium capacities
+/// are saved natively.
 pub fn write_live_club(
     driver: &LinuxMemoryDriver,
-    binding_subsystem: usize,
+    _binding_subsystem: usize,
     club_id: i32,
     finances: &ClubFinances,
 ) -> Result<()> {
-    // Facility ratings can only be compared while their bindings are visible.
-    let snapshot = read_live_clubs(driver, binding_subsystem)
-        .into_iter()
-        .find(|club| club.id == club_id)
-        .unwrap_or_default();
-    let mut unsupported = Vec::new();
-    for (name, live, requested) in [
-        ("training_facilities", snapshot.training_rating, finances.training_facilities),
-        ("youth_facilities", snapshot.youth_rating, finances.youth_facilities),
-        ("corporate_facilities", snapshot.corporate_rating, finances.corporate_facilities),
-    ] {
-        if requested > 0 && live.is_some_and(|v| v != requested) {
-            unsupported.push(name);
-        }
-    }
-    if !unsupported.is_empty() {
-        return Err(CoreError::InvalidValue(format!(
-            "No verified native write path for: {}. No fields were written. Only the balance and transfer budget can be saved.",
-            unsupported.join(", ")
-        )));
-    }
-    // Native values are authoritative; bindings lag until the screen refreshes.
-    let record = crate::native_club::NativeClubFinance::discover(driver, club_id)?;
-    let (balance, transfer) = (record.read_balance(driver)?, record.read_transfer_budget(driver)?);
-    if i64::from(transfer) != finances.transfer_budget {
-        record.write_transfer_budget(driver, finances.transfer_budget)?;
-    }
-    if i64::from(balance) != finances.balance {
-        if let Err(error) = record.write_balance(driver, finances.balance) {
-            let _ = record.write_transfer_budget(driver, i64::from(transfer));
-            return Err(error);
-        }
-    }
-    Ok(())
+    let record = crate::native_club::NativeClubRecord::discover(driver, club_id)?;
+    let balance = i64::from(record.read_balance(driver)?);
+    let transfer = i64::from(record.read_transfer_budget(driver)?);
+    let (training, youth, coaching, recruitment, corp) = record.read_facilities(driver).unwrap_or((0, 0, 0, 0, 0));
+    let (rep, _world_rep) = record.read_reputations(driver).unwrap_or((0, 0));
+    let (stadium_cap, stadium_exp) = record.read_stadium_capacities(driver).unwrap_or((0, 0));
+
+    let mut baseline = finances.clone();
+    baseline.balance = balance;
+    baseline.transfer_budget = transfer;
+    if training > 0 { baseline.training_facilities = training; }
+    if youth > 0 { baseline.youth_facilities = youth; }
+    if coaching > 0 { baseline.junior_coaching = coaching; }
+    if recruitment > 0 { baseline.youth_recruitment = recruitment; }
+    if corp > 0 { baseline.corporate_facilities = corp; }
+    if rep > 0 { baseline.reputation = rep; }
+    if stadium_cap > 0 { baseline.stadium_capacity = stadium_cap; }
+    if stadium_exp > 0 { baseline.stadium_expansion_cap = stadium_exp; }
+
+    record.write_club_edits(driver, &baseline, finances)
 }

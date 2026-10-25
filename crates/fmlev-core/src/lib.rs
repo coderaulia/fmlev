@@ -4,6 +4,7 @@ pub mod error;
 pub mod live_write;
 pub mod native_club;
 pub mod native_competition;
+pub mod native_nation;
 pub mod native_registration;
 pub mod live_club;
 pub mod live_nation;

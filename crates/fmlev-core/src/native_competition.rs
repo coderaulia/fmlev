@@ -1,16 +1,21 @@
-//! Competition prize-money table. FM26 keeps the league prize list as a plain `i32` array of one
+//! Competition prize-money table and native competition record.
+//!
+//! Prize-money: FM26 keeps the league prize list as a plain `i32` array of one
 //! raw-GBP amount per finishing position. Editing it changes what the
 //! competition Rules page shows (verified in game by reopening Competition > Rules).
 //!
-//! CAVEAT: the array lies among UI model entries. It is not proven that season-end payouts read
-//! the same table, so treat edits as display-verified only until a season rolls over.
+//! Native competition record:
+//! - vtable, i32 index at +8, uid twice at +0xC/+0x10.
+//! - +0x188: native competition reputation (u16, 1..=200 native scale).
 
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
 use crate::error::{CoreError, Result};
+use crate::models::CompetitionDetails;
 
 const CHUNK: usize = 16 << 20;
 const MAX_PRIZE: i32 = 2_000_000_000;
+const REPUTATION_OFFSET: usize = 0x188;
 
 fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
@@ -116,6 +121,97 @@ impl PrizeTable {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NativeCompetitionRecord {
+    pub pid: i32,
+    pub comp: usize,
+    pub comp_id: i32,
+}
+
+impl NativeCompetitionRecord {
+    /// Finds the native competition record for `comp_id`.
+    pub fn discover(driver: &LinuxMemoryDriver, comp_id: i32) -> Result<Self> {
+        if comp_id <= 0 {
+            return Err(invalid("A live competition id is required"));
+        }
+        let maps = parse_process_maps(driver.pid())?;
+        let readonly = |p: usize| maps.iter().any(|m| m.is_readable() && !m.is_writable() && p >= m.start && p < m.end);
+        let mut found = Vec::new();
+        for map in maps.iter().filter(|m| m.is_rw_private()) {
+            let mut start = map.start;
+            while start < map.end {
+                let len = (map.end - start).min(CHUNK);
+                let mut buf = vec![0u8; len];
+                if driver.read_bytes(start, &mut buf).is_ok() {
+                    for i in (8..len.saturating_sub(12)).step_by(8) {
+                        let word = |at: usize| i32::from_le_bytes(buf[at..at + 4].try_into().unwrap());
+                        if word(i) != comp_id || word(i + 4) != word(i + 8) || word(i + 4) == 0 {
+                            continue;
+                        }
+                        let comp = start + i - 8;
+                        let Ok(vtable) = driver.read_ptr(comp) else { continue };
+                        if readonly(vtable) {
+                            found.push(Self { pid: driver.pid(), comp, comp_id });
+                        }
+                    }
+                }
+                start += len;
+            }
+        }
+        match found.as_slice() {
+            [record] => Ok(*record),
+            other => Err(invalid(&format!("Expected one native competition record for competition {comp_id}, found {}", other.len()))),
+        }
+    }
+
+    pub fn validate(&self, driver: &LinuxMemoryDriver) -> Result<()> {
+        if driver.pid() != self.pid
+            || driver.read::<i32>(self.comp + 8)? != self.comp_id
+            || driver.read::<i32>(self.comp + 0xc)? != driver.read::<i32>(self.comp + 0x10)?
+        {
+            return Err(invalid("Native competition record identity mismatch"));
+        }
+        Ok(())
+    }
+
+    pub fn read_reputation(&self, driver: &LinuxMemoryDriver) -> Result<u16> {
+        self.validate(driver)?;
+        Ok(driver.read::<u16>(self.comp + REPUTATION_OFFSET)?)
+    }
+
+    pub fn write_reputation(&self, driver: &LinuxMemoryDriver, value: u16) -> Result<()> {
+        if !(1..=200).contains(&value) {
+            return Err(invalid("Competition reputation must be between 1 and 200 (native scale)"));
+        }
+        self.validate(driver)?;
+        let old = self.read_reputation(driver)?;
+        if old == value {
+            return Ok(());
+        }
+        driver.write(self.comp + REPUTATION_OFFSET, &value)?;
+        if self.read_reputation(driver).ok() != Some(value) {
+            let _ = driver.write(self.comp + REPUTATION_OFFSET, &old);
+            return Err(invalid("Competition reputation readback mismatch; rolled back"));
+        }
+        Ok(())
+    }
+
+    pub fn write_competition_edits(&self, driver: &LinuxMemoryDriver, previous: &CompetitionDetails, requested: &CompetitionDetails) -> Result<()> {
+        self.validate(driver)?;
+        if previous.reputation != requested.reputation && requested.reputation > 0 {
+            let native_val = if requested.reputation > 200 {
+                // Map from 1..10000 UI fixture scale to 1..200 native scale
+                let scaled = ((f64::from(requested.reputation) / 10000.0) * 200.0).round() as u16;
+                scaled.clamp(1, 200)
+            } else {
+                requested.reputation
+            };
+            self.write_reputation(driver, native_val)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,5 +225,32 @@ mod tests {
         assert!(is_prize_table(&[165, 160, 155, 7], 3, 165, 155, 0));
         assert!(!is_prize_table(&[165, 160, 150, 0], 3, 165, 155, 0));
         assert!(!is_prize_table(&[165, 0, 155, 0], 3, 165, 155, 0));
+    }
+
+    #[test]
+    fn competition_native_reputation_read_write() {
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let mut comp_data = vec![0u8; 0x300];
+        let comp = comp_data.as_mut_ptr() as usize;
+        let comp_id = 51i32;
+        let uid = 67i32;
+
+        driver.write(comp + 8, &comp_id).unwrap();
+        driver.write(comp + 0xc, &uid).unwrap();
+        driver.write(comp + 0x10, &uid).unwrap();
+        driver.write(comp + REPUTATION_OFFSET, &178u16).unwrap();
+
+        let record = NativeCompetitionRecord {
+            pid: driver.pid(),
+            comp,
+            comp_id,
+        };
+
+        assert_eq!(record.read_reputation(&driver).unwrap(), 178);
+
+        record.write_reputation(&driver, 195).unwrap();
+        assert_eq!(record.read_reputation(&driver).unwrap(), 195);
+
+        assert!(record.write_reputation(&driver, 250).is_err());
     }
 }

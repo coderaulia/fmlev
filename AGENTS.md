@@ -157,3 +157,15 @@ crates/
 - Native serialization code identifies the new field offsets. Main stadium and training ground are distinct; men's/women's values remain separate; native competition reputation is 1..200. Unsupported editor fields stay null with reasons. No extra Rust/UI write support.
 - Live screen-independent proof: Barcelona training 19/youth 20/corporate 19, Camp Nou 62500/105000 capacity/expansion; Spain men youth 145/women 160, reputations 9011/9300; Spanish First Division reputation 178 and stage gate 0. Three native readbacks agreed, with no game-memory writes.
 - Verification: 12 new entity tests, current combined suite 43 passed, workspace check passes, Rust 109 passed/1 ignored, UI 32 passed. Coverage, evidence and remaining WIP: `docs/NATIVE_ENTITY_READS.md`.
+
+### Phase 7: Porting Verified Native Club, Nation and Competition Writes to Rust (Completed)
+- Ported verified native layouts from C++ (`tools/fmscan/entity_details.hpp` and `write_transaction.hpp`) into pure Rust `crates/fmlev-core`:
+  - `native_club.rs`: Expanded `NativeClubRecord` to read/write details facilities (training +0x118, youth +0x123, junior coaching +0x124, youth recruitment +0x125), corporate facilities (+0x8b5), reputations (main-team +0xa8, world +0x166), and stadium capacities (+0x7c/+0x8c) with full transactional rollback.
+  - `native_nation.rs`: Added native nation discovery, dual men's/women's container resolution (+0x108/+0x110), container youth rating (+0x864, u16 1..200), national team reputation (+0xa8), economic factor (+0x1f0), and development code (+0x1ec).
+  - `native_competition.rs`: Added `NativeCompetitionRecord` to read/write native competition reputation (+0x188, u16 1..200) with scale mapping and rollback.
+  - `context/mutations.rs` & `live_club.rs`: Wired native club facilities, nation details, and competition reputation into `GameContextManager` live mutations.
+- Verification:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 116 tests passing (115 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 32 passed, 0 failed.
+  - All source files strictly $\le$ 1,328 LOC.

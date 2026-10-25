@@ -246,11 +246,15 @@ impl GameContextManager {
         Ok(())
     }
 
-    fn update_live_nation(&mut self, _nation: NationDetails) -> Result<()> {
+    fn update_live_nation(&mut self, nation: NationDetails) -> Result<()> {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let _ = resolve_binding_subsystem(session)
-            .ok_or_else(|| CoreError::InvalidValue("Live nation bindings are unavailable; open this nation's screen in FM26".into()))?;
-        return Err(CoreError::InvalidValue("Authoritative live nation writes are not yet calibrated for this screen".into()));
+        let nation_id = nation.id;
+        let record = crate::native_nation::NativeNationRecord::discover(&session.driver, nation_id)?;
+        let prev = self.nation_registry.get(&nation_id).cloned().unwrap_or_else(|| nation.clone());
+        record.write_nation_edits(&session.driver, &prev, &nation)?;
+        self.context.nation = nation.clone();
+        self.nation_registry.insert(nation_id, nation);
+        Ok(())
     }
 
     pub fn update_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
@@ -272,11 +276,15 @@ impl GameContextManager {
         Ok(())
     }
 
-    fn update_live_competition(&mut self, _comp: CompetitionDetails) -> Result<()> {
+    fn update_live_competition(&mut self, comp: CompetitionDetails) -> Result<()> {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let _ = resolve_binding_subsystem(session)
-            .ok_or_else(|| CoreError::InvalidValue("Live competition bindings are unavailable; open this competition's screen in FM26".into()))?;
-        return Err(CoreError::InvalidValue("Authoritative live competition writes are not yet calibrated for this screen".into()));
+        let comp_id = comp.id;
+        let record = crate::native_competition::NativeCompetitionRecord::discover(&session.driver, comp_id)?;
+        let prev = self.competition_registry.get(&comp_id).cloned().unwrap_or_else(|| comp.clone());
+        record.write_competition_edits(&session.driver, &prev, &comp)?;
+        self.context.competition = comp.clone();
+        self.competition_registry.insert(comp_id, comp);
+        Ok(())
     }
 
     /// Adds or replaces an affiliate club for a given club ID.

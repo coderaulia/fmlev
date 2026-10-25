@@ -5,6 +5,7 @@ pub mod live_write;
 pub mod live_club;
 pub mod live_nation;
 pub mod live_competition;
+pub mod live_dump;
 pub mod models;
 pub mod native_player;
 pub mod session;

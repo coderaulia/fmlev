@@ -167,6 +167,9 @@ pub struct PrizeRequest {
     pub teams: usize,
     pub first_prize: i32,
     pub last_prize: i32,
+    /// Raw-GBP slack for rounded displays (default 0 = exact).
+    #[serde(default)]
+    pub tolerance: i32,
     pub prizes: Option<Vec<i32>>,
 }
 

@@ -2529,10 +2529,11 @@
           (in the game's display currency, as raw amounts), then Load. Changes appear on the Rules page after you leave
           and reopen it. <strong>Caveat:</strong> the season-end payout source is unconfirmed; this edits the table the Rules page reads.
         </p>
-        <div class="form-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+        <div class="form-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
           <input id="prize-teams" type="number" min="2" max="64" class="form-control" placeholder="Teams (18)">
           <input id="prize-first" type="number" min="1" class="form-control" placeholder="First prize (165000)">
           <input id="prize-last" type="number" min="1" class="form-control" placeholder="Last prize (80000)">
+          <input id="prize-tol" type="number" min="0" class="form-control" placeholder="Tolerance (0; 60000 if rounded like £53.1M)">
         </div>
         <textarea id="prize-list" class="form-control" rows="4" style="margin-top: 8px;" placeholder="One amount per line, position 1 first"></textarea>
         <div style="display: flex; gap: 8px; margin-top: 8px;">
@@ -5394,7 +5395,8 @@
       const body = {
         teams: Number(document.getElementById("prize-teams").value),
         first_prize: Number(document.getElementById("prize-first").value),
-        last_prize: Number(document.getElementById("prize-last").value)
+        last_prize: Number(document.getElementById("prize-last").value),
+        tolerance: Number(document.getElementById("prize-tol").value || 0)
       };
       if (prizes) body.prizes = prizes;
       const res = await fetch("/api/competition/prizes", {

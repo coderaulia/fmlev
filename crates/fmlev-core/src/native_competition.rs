@@ -1,5 +1,5 @@
 //! Competition prize-money table. FM26 keeps the league prize list as a plain `i32` array of one
-//! raw-GBP amount per finishing position, followed by a zero word. Editing it changes what the
+//! raw-GBP amount per finishing position. Editing it changes what the
 //! competition Rules page shows (verified in game by reopening Competition > Rules).
 //!
 //! CAVEAT: the array lies among UI model entries. It is not proven that season-end payouts read
@@ -17,12 +17,11 @@ fn invalid(message: &str) -> CoreError {
 }
 
 /// True when `words` begins with a plausible prize table of `teams` entries: non-increasing
-/// positive amounts starting at `first`, ending at `last`, followed by a zero terminator.
-fn is_prize_table(words: &[i32], teams: usize, first: i32, last: i32) -> bool {
+/// positive amounts starting at `first`, ending at `last`, (the word after it is not constrained: it is zero for some leagues and unrelated data for others).
+fn is_prize_table(words: &[i32], teams: usize, first: i32, last: i32, tolerance: i32) -> bool {
     words.len() > teams
-        && words[0] == first
-        && words[teams - 1] == last
-        && words[teams] == 0
+        && (words[0] - first).abs() <= tolerance
+        && (words[teams - 1] - last).abs() <= tolerance
         && words[..teams].iter().all(|v| *v > 0)
         && words[..teams].windows(2).all(|pair| pair[0] >= pair[1])
 }
@@ -35,10 +34,11 @@ pub struct PrizeTable {
 }
 
 impl PrizeTable {
-    /// Finds the single table matching the first and last prize shown on the Rules page.
+    /// Finds the single table matching the first and last prize shown on the Rules page (within
+    /// `tolerance` raw GBP, for rounded displays such as £53.1M).
     /// Zero or several matches are rejected; no address is compiled in.
-    pub fn discover(driver: &LinuxMemoryDriver, teams: usize, first: i32, last: i32) -> Result<Self> {
-        if !(2..=64).contains(&teams) || first <= 0 || last <= 0 || last > first {
+    pub fn discover(driver: &LinuxMemoryDriver, teams: usize, first: i32, last: i32, tolerance: i32) -> Result<Self> {
+        if !(2..=64).contains(&teams) || first <= 0 || last <= 0 || last > first || !(0..=1_000_000).contains(&tolerance) {
             return Err(invalid("Provide the team count and the first and last prize shown on the Rules page"));
         }
         let mut found = Vec::new();
@@ -53,7 +53,7 @@ impl PrizeTable {
                         .map(|c| i32::from_le_bytes(c.try_into().unwrap()))
                         .collect();
                     for i in 0..words.len().saturating_sub(teams) {
-                        if words[i] == first && is_prize_table(&words[i..], teams, first, last) {
+                        if (words[i] - first).abs() <= tolerance && is_prize_table(&words[i..], teams, first, last, tolerance) {
                             found.push(start + i * 4);
                         }
                     }
@@ -81,7 +81,7 @@ impl PrizeTable {
 
     pub fn read(&self, driver: &LinuxMemoryDriver) -> Result<Vec<i32>> {
         let words = self.read_words(driver)?;
-        if words[self.teams] != 0 || words[..self.teams].iter().any(|v| *v <= 0) {
+        if words[..self.teams].iter().any(|v| *v <= 0) {
             return Err(invalid("Prize table changed; reopen Competition > Rules and retry"));
         }
         Ok(words[..self.teams].to_vec())
@@ -96,6 +96,7 @@ impl PrizeTable {
             return Err(invalid("Prize amounts must be between 0 and 2,000,000,000"));
         }
         let old = self.read(driver)?;
+        let old_tail = self.read_words(driver)?[self.teams];
         if old == prizes {
             return Ok(());
         }
@@ -107,7 +108,7 @@ impl PrizeTable {
         };
         put(prizes)?;
         let after = self.read_words(driver);
-        if !after.as_ref().is_ok_and(|w| w[..self.teams] == *prizes && w[self.teams] == 0) {
+        if !after.as_ref().is_ok_and(|w| w[..self.teams] == *prizes && w[self.teams] == old_tail) {
             let rollback = put(&old);
             return Err(invalid(&format!("Prize readback failed; rollback: {rollback:?}")));
         }
@@ -120,12 +121,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn table_shape_requires_descending_amounts_and_terminator() {
+    fn table_shape_requires_descending_positive_amounts() {
         let table = [165, 160, 155, 0, 9];
-        assert!(is_prize_table(&table, 3, 165, 155));
-        assert!(!is_prize_table(&[165, 170, 155, 0], 3, 165, 155));
-        assert!(!is_prize_table(&[165, 160, 155, 7], 3, 165, 155));
-        assert!(!is_prize_table(&[165, 160, 150, 0], 3, 165, 155));
-        assert!(!is_prize_table(&[165, 0, 155, 0], 3, 165, 155));
+        assert!(is_prize_table(&table, 3, 165, 155, 0));
+        assert!(is_prize_table(&table, 3, 166, 154, 1));
+        assert!(!is_prize_table(&[165, 170, 155, 0], 3, 165, 155, 0));
+        assert!(is_prize_table(&[165, 160, 155, 7], 3, 165, 155, 0));
+        assert!(!is_prize_table(&[165, 160, 150, 0], 3, 165, 155, 0));
+        assert!(!is_prize_table(&[165, 0, 155, 0], 3, 165, 155, 0));
     }
 }

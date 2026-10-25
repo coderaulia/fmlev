@@ -824,7 +824,8 @@ pub async fn competition_prizes(
         payload.teams,
         payload.first_prize,
         payload.last_prize,
-        payload.prizes,
+        payload.tolerance,
+        payload.prizes
     ) {
         Ok(prizes) => (
             StatusCode::OK,

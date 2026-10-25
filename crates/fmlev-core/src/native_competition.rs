@@ -13,6 +13,7 @@ use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 use crate::error::{CoreError, Result};
 use crate::models::CompetitionDetails;
 
+const COMP_VTABLE_RVA: usize = 0x44b_fe68;
 const CHUNK: usize = 16 << 20;
 const MAX_PRIZE: i32 = 2_000_000_000;
 const REPUTATION_OFFSET: usize = 0x188;
@@ -151,6 +152,14 @@ impl NativeCompetitionRecord {
         }
         let maps = parse_process_maps(driver.pid())?;
         let readonly = |p: usize| maps.iter().any(|m| m.is_readable() && !m.is_writable() && p >= m.start && p < m.end);
+        // `.?AVCOMP@db@@` vtable (game_plugin.dll RVA, traced on PE timestamp 0x6a229e8a). Other record
+        // types share the index/uid pattern, so the vtable pins the type. Test processes have no module.
+        let comp_vtable = maps
+            .iter()
+            .filter(|m| m.pathname.ends_with("game_plugin.dll"))
+            .map(|m| m.start)
+            .min()
+            .map(|base| base + COMP_VTABLE_RVA);
         let mut found = Vec::new();
         for map in maps.iter().filter(|m| m.is_rw_private()) {
             let mut start = map.start;
@@ -165,7 +174,13 @@ impl NativeCompetitionRecord {
                         }
                         let comp = start + i - 8;
                         let Ok(vtable) = driver.read_ptr(comp) else { continue };
-                        if readonly(vtable) {
+                        // Other record types share the index/uid pattern. A real competition record has name
+                        // pointers (+0x40/+0x48/+0x50), the ACTUAL_COMP pointer (+0xb0) and a 1..=200 reputation.
+                        let structured = [0x40usize, 0x48, 0x50, 0xb0]
+                            .iter()
+                            .all(|o| driver.read_ptr(comp + o).is_ok_and(|p| p > 0x10000))
+                            && driver.read::<u16>(comp + REPUTATION_OFFSET).is_ok_and(|r| (1..=200).contains(&r));
+                        if readonly(vtable) && structured && comp_vtable.is_none_or(|expected| vtable == expected) {
                             found.push(Self { pid: driver.pid(), comp, comp_id });
                         }
                     }

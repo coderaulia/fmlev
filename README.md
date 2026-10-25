@@ -86,23 +86,24 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Open the player's profile first |
 | **Contract extension** | Extend expiry by 1–10 years (`POST /api/player/contract/extend`) | Same date, later year; loaned-out players extend the parent contract; shows after the next day |
 | **Contract termination** | Release player as free agent (`POST /api/player/contract/terminate`) | Multi-object detachment: compacts squad vectors, nulls `0x1e8` contract and `0x130`/`0x138` team pointers |
+| **Free agent signing** | Sign unemployed free agents (`POST /api/transfer/sign`) | Formats aligned 200-byte `FULL_CONTRACT` object, sets RTTI/wage/expiry/team pointers, and appends to target squad |
 | **Loan recall** | Recall player from loan (`POST /api/player/loan/terminate`) | Compacts loan squad vector, returns team to parent club, clears `+0x1f0` loan node |
 | **Player transfers** | Move player between clubs (`POST /api/transfer/move`) | Compacts source squad vector, appends to destination team (verifying spare capacity), updates team pointers |
+| **Pending transfer acceleration** | Accelerate or instantly complete arranged transfers (`POST /api/transfer/accelerate`) | Updates scheduled join dates in future contract and transfer queue, or switches contract immediately |
 | **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
 | **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
-| **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/corporate facilities, reputations, stadium capacity | Reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
-| **Nation macro & youth** | Youth rating (1–200), international reputation (1–10,000), economic factor, state of development | Native container architecture (`NativeNationRecord`); live slider updates youth rating |
+| **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/data analysis/corporate facilities, sugar daddy status, reputations, stadium capacity | Reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
+| **Nation macro, youth & population** | Youth rating (1–200), international reputation (1–10,000), economic factor, state of development, population | Native container architecture (`NativeNationRecord`); live slider updates youth rating |
 | **Competition reputation** | Native league reputation (1–200 scale) | Saved natively via `NativeCompetitionRecord` |
+| **Competition stage rules** | Dynamic registration squad cap (`POST /api/competition/stage-rules`) | Queries and edits active simulation engine `stage_rule_entry` (`+0x98`/`+0xd6`) |
 | **Competition prize money** | Edit the per-position prize table | Match first/last prize on Rules; payout source at season end unconfirmed |
-| **Register anytime** | Allow squad registration outside the window per competition | Toggles manager flag bit `0x100` and domestic stage gate byte `0x9a=1` |
+| **Register anytime** | Allow squad registration outside the window per competition | Toggles manager flag bit `0x100`, manager squad-number bit `0x200`, and domestic stage gate byte `0x9a=1` |
 | **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Screen-independent discovery via native records |
 
-**Remaining gaps & what is not writable yet**:
-1. **Signing unemployed free agents** (`/api/transfer/sign` returns 400 with explanation): Creating a brand-new contract for an unemployed free agent requires allocating a new `FULL_CONTRACT` object in the engine's custom heap, which external memory writes cannot safely instantiate.
-2. **Pending transfer join date**: The join date of an arranged future transfer is not stored in the agreement node (`+0x1e0`); the `AgreementOffset` lookup table remains unmapped.
-3. **Squad-number-anytime gate**: Domestic leagues check squad numbers against transfer windows; human manager bit `0x200` was identified, but its check routine in `game_plugin.dll` is not yet traced.
-4. **Active competition match/squad rules**: In-match rules (substitutions, bench size, VAR) and squad constraints (foreign player limits, squad size caps) exist as static 'sqsr' data nodes, but modifying them does not alter the active simulation engine.
-5. **Unmapped club & nation fields**: Club data analysis facilities, sugar daddy status, board patience, and fan confidence remain unmapped. Nation tax rates, corruption index, languages, population, and FIFA rank points are unmapped.
+**Remaining frontiers & limits**:
+1. **Creating loans from scratch**: Recalling loans is fully supported (`/api/player/loan/terminate`), but establishing a brand-new loan agreement between two clubs from scratch requires instantiating the game's complex `LOAN_CONTRACT` object graph with multi-party clauses.
+2. **In-match simulation rules**: Dynamic stage registration caps are writable, but matchday in-play rules (substitutions count, bench slots, VAR toggles) reside in static competition rule blueprints.
+3. **Unmapped club & nation fields**: Club board patience and fan confidence remain unmapped. Nation tax rate, corruption index, languages, and FIFA world ranking points are unmapped.
 
 > ⚠️ **Never edit a player's injury vector.** An emptied vector for an injured player crashes FM26 on the next day and the damage is saved into the career.
 > Always test on a throwaway save, and Save As a new file after live edits.

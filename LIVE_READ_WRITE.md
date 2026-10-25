@@ -14,17 +14,21 @@ used test-layout offsets against those handles. They must not be used for live e
 | CA/PA | Validated native u16 fields; 1..200 | Native writes with readback/rollback |
 | Contract wages and expiry | Ownership-checked full contract; weekly wage in GBP | Weekly wage and expiry year, preserving month/day/flags |
 | Contract termination | Native full contract, team squad vectors | Multi-object detachment releasing player as free agent with rollback |
+| Free agent signing | Formatted 200-byte contract block, team pointers | Instantiates valid contract block with RTTI, sets team pointers, appends to squad |
 | Loan recall | Native loan node and squad vector | Recalls player from loan, restores parent team pointers, clears loan node |
 | Player move between clubs | Source and target team squad vectors, contract team pointers | Moves contracted player between squads (requires destination spare capacity) |
+| Pending transfer acceleration | Agreement node future contract and priority event queue | Modifies scheduled join date in future contract (+0x44) and queue, or completes immediately |
 | Squad numbers | Contract team and player squad number (+0x5d) | Sets squad number (1-99) and atomically swaps with teammate wearing it |
 | Tactical familiarity | 8 native vectors at player -0x48 | Sets all vectors to 10000 (game's MAXIMISE action) |
 | Condition & sharpness | Native player +0xc0 / +0xc8 | Restores condition and match sharpness to 10,000 units (safe heal) |
 | Club balance & transfer budget | Native finance object at club +0x150 | Direct transactional write to balance (+0x14) and transfer budget (+0x7cc) |
-| Club facilities | Club details +0x100 and finance +0x8b5 | Training, youth, coaching, recruitment, and corporate facilities (1-20) |
+| Club facilities | Club details +0x100 and finance +0x8b5 | Training, youth, coaching, recruitment, data analysis (+0x11e), and corporate facilities (1-20) |
+| Club benefactor (Sugar Daddy) | Club finance +0x3c | Benefactor status (0=None, 1=Foreground, 2=Background, 3=Underwriter) |
 | Club reputations & stadium | First team +0xa8, club +0x166, stadium +0x7c/+0x8c | First-team/world reputations (1-10000) and stadium capacity/expansion |
-| Nation youth rating & macro | Containers at nation +0x108/+0x110, nation +0x1f0/+0x1ec | Youth rating (1-200), reputation (1-10000), economic factor, development code |
+| Nation youth rating, macro & population | Containers at nation +0x108/+0x110, nation +0x1f0/+0x1ec/+0x1e4 | Youth rating (1-200), reputation (1-10000), economic factor, development code, population |
 | Competition reputation & prizes | Native comp +0x188, raw GBP prize table | Reputation (1-200 native scale), league finishing position prize table |
-| Register anytime | Human manager +0x404, comp stage rule entry +0x9a | Toggles manager bit 0x100 and domestic stage gate byte 0x9a=1 |
+| Competition stage squad rules | Stage rule entry at stage +0x1e0 vec | Live registration squad cap (+0x98 and +0xd6) |
+| Register & squad numbers anytime | Human manager +0x404, comp stage rule entry +0x9a | Toggles manager registration bit 0x100, manager squad-number bit 0x200, and domestic stage gate byte 0x9a=1 |
 | Raw memory tools | Explicit address and type | Explicit address/type, range and transfer validation |
 | Offline demonstration data | Fixtures | Fixtures only; does not modify FM26 |
 
@@ -76,9 +80,9 @@ its pool index. Changing bindings does not itself persist simulation data.
 
 ## Verification result
 
-- Workspace/all-targets: 88 Rust tests passed.
-- Embedded UI: 13 JavaScript behavioral tests passed, including forced manual
-  save, queued presets, entity identity, and failed-save recovery.
+- Workspace/all-targets: 123 Rust tests passed (122 passed, 1 ignored, 0 failed).
+- Embedded UI: 37 Node DOM / JavaScript tests passed.
+- C++ scanner synthetic suite: 57 tests passed with warnings-as-errors build.
 - Native direct and context save/poll/readback/restore passed against the live game.
 - `git diff --check` passed.
 

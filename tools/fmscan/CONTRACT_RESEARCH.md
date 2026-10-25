@@ -146,4 +146,5 @@ sign, loan, terminate or pending-join experiment in this stage.
   - `POST /api/player/contract/terminate` `{ player_id }`
   - `POST /api/player/loan/terminate` `{ player_id }`
   - `POST /api/transfer/move` `{ player_id, target_club_id?, target_team_address? }`
-  - `POST /api/transfer/sign`: returns 400 Bad Request explaining that signing an unemployed free agent requires game-allocated contract objects.
+  - `POST /api/transfer/sign` `{ player_id, target_club_id?, target_team_address?, wage_gbp?, expiry_year? }`: signs unemployed free agents by formatting an aligned 200-byte `FULL_CONTRACT` object (resolved vtable `game_plugin.dll + 0x4334df8`), linking `record + 0x1e8` and `ACTUAL_PLAYER + 0x130`/`0x138`, and appending to destination squad vector.
+  - `POST /api/transfer/accelerate` `{ player_id, new_join_date?, instant? }`: accelerates scheduled join date in future agreement contract and transfer event priority queue, or instantly executes future contract and squad vector swap.

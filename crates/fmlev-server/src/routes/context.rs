@@ -863,6 +863,36 @@ pub async fn update_squad_number(
     }
 }
 
+/// Extends a player's native contract expiry (default 1 year).
+pub async fn extend_contract(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::ContractExtendRequest>,
+) -> impl IntoResponse {
+    let years = payload.years.unwrap_or(1);
+    let mut w = state.inner.write().await;
+    match w.context_mgr.extend_contract(payload.player_id, years) {
+        Ok((old, new)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "success",
+                "message": format!("Contract extended from {old} to {new}. FM26 shows it after the next day."),
+                "old_year": old,
+                "new_year": new
+            })),
+        ),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Terminate is unverified: setting the expiry to today did not release the player in game
+/// (FM26 releases through scheduled events), so nothing is written.
+pub async fn terminate_contract() -> impl IntoResponse {
+    api_error(
+        StatusCode::NOT_IMPLEMENTED,
+        fmlev_core::CoreError::InvalidValue("Terminate is not implemented: expiring the contract on the current date does not release the player".into()),
+    )
+}
+
 /// Writes the active club's native balance and/or transfer budget (Club > Finances must be open).
 pub async fn update_club_money(
     State(state): State<ServerState>,

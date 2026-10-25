@@ -1683,6 +1683,11 @@
         <span style="font-size: 11px; color: var(--text-dim);">Shown in FM26 after the next day. A teammate wearing it is swapped.</span>
       </div>
       <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Contract:</span>
+        <button class="preset-btn" onclick="extendContract(1)">📅 Extend 1 year</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Moves the expiry date one year later. Shown in FM26 after the next day.</span>
+      </div>
+      <div class="presets-bar">
         <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Tactical Familiarity:</span>
         <button class="preset-btn" onclick="maxFamiliarity(false)">🎯 Max (this player)</button>
         <button class="preset-btn" onclick="maxFamiliarity(true)">🎯 Max (whole squad)</button>
@@ -5481,6 +5486,18 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Registration request failed");
+        showToast(data.message, "success");
+      } catch (error) { showToast(error.message, "error"); }
+    }
+    async function extendContract(years) {
+      try {
+        if (!state.activePlayer) throw new Error("Select a player first");
+        const res = await fetch("/api/player/contract/extend", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, years })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Contract extension failed");
         showToast(data.message, "success");
       } catch (error) { showToast(error.message, "error"); }
     }

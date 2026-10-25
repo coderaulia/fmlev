@@ -27,3 +27,13 @@ impl GameContextManager {
         Ok((count, changed))
     }
 }
+
+impl GameContextManager {
+    /// Extends a player's contract by `years` (native expiry at contract + 0x48).
+    /// Returns (old expiry year, new expiry year).
+    pub fn extend_contract(&mut self, id: i32, years: i32) -> Result<(i32, i32)> {
+        let record = self.verified_native_player(id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        record.extend_contract(&session.driver, years)
+    }
+}

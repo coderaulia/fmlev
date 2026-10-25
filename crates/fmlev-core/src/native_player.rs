@@ -630,6 +630,23 @@ impl NativePlayerRecord {
         Ok((contract.address, bytes))
     }
 
+    /// Moves the contract expiry `years` calendar years later (u32 at contract + 0x48, same date,
+    /// leap-day clamped). Readback-verified with rollback. Returns (old year, new year).
+    /// The contract found at +0x1e8 is the parent contract: a loaned-out player's loan is not
+    /// stored here, so this extends the parent deal.
+    pub fn extend_contract(&self, driver: &LinuxMemoryDriver, years: i32) -> Result<(i32, i32)> {
+        if !(1..=10).contains(&years) {
+            return Err(invalid("Extension must be between 1 and 10 years"));
+        }
+        let contract = self.contract(driver)?;
+        let old = driver.read::<u32>(contract.address + 0x48)?;
+        let old_year = (old >> 16) as i32;
+        let next = expiry_with_year(old, old_year + years)?;
+        let edit = NativeEdit::capture(driver, contract.address + 0x48, next.to_le_bytes().to_vec())?;
+        self.apply_edits(driver, &[edit], Some(contract))?;
+        Ok((old_year, (next >> 16) as i32))
+    }
+
     pub fn has_contract(&self, driver: &LinuxMemoryDriver) -> bool { self.contract(driver).is_ok() }
 
     /// Apply changed positions/attributes in one checked transaction. Keep exact old

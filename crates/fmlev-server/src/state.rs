@@ -191,6 +191,13 @@ pub struct SquadNumberRequest {
     pub number: Option<u8>,
 }
 
+/// `years` defaults to 1 (1..=10).
+#[derive(Deserialize)]
+pub struct ContractExtendRequest {
+    pub player_id: i32,
+    pub years: Option<i32>,
+}
+
 /// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.
 /// Omit `prizes` to read; provide it to write one raw-GBP amount per position.
 #[derive(Deserialize)]

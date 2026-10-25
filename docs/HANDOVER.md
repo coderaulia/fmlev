@@ -3,7 +3,9 @@
 ## State (Completed 2026-10-25)
 
 Verified in game and shipped in Rust production runtime (`fmlev-core` + `fmlev-server` + `ui.html`):
-- **Player & Medical**: 60 attributes, positions & feet, CA/PA, weekly wage, contract extension, safe heal (10,000 condition/sharpness units without touching injury vector `+0x248`).
+- **Screen-Independent Discovery**: Full database discovery (`NativePlayerRecord::discover_by_index` and `NativeClubRecord::discover`) enables selecting, inspecting, and editing any player or club (including opposition teams, scouted players, and free agents) without needing their profile or page to be open on screen in FM26.
+- **Player & Medical**: 60 attributes, positions & feet, CA/PA, weekly wage, contract extension, safe heal (10,000 condition/sharpness units without touching injury vector `+0x248`). Native attributes verified directly (`verify_native_attributes`) and contract-team-club pointers automatically resolved.
+- **Opposition Club Details & Facilities**: Auto-synced when viewing any player or via `jumpToPlayerClub()`. Balance, transfer budget, training/youth/coaching/recruitment/data analysis/corporate facilities, reputations, and stadium capacities are editable live.
 - **Contract & Squads**: Contract extension (`POST /api/player/contract/extend`), squad number assignment & teammate swapping (`POST /api/player/squad-number`), tactical familiarity max (`POST /api/player/familiarity`).
 - **Contract Termination & Transfers**:
   - `POST /api/player/contract/terminate`: Releases player as free agent via multi-object detachment (nulls `record + 0x1e8`, clears `0x130`/`0x138`, compacts all owning squad vectors `team + 0x38`, clears agreement/loan slots).

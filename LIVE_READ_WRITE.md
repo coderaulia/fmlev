@@ -8,11 +8,11 @@ used test-layout offsets against those handles. They must not be used for live e
 
 | Feature | Live reads | Live writes |
 | --- | --- | --- |
-| Player names, IDs, profile data | Bindings plus bounded native first/surname reads for discovery | Not supported |
-| Player attributes | Native values take precedence after layout calibration | 60 technical/mental/physical/GK/hidden/personality fields |
-| Position aptitudes and feet | Numeric bindings; validated native records take precedence | Native record write, identity validation, readback and rollback |
-| CA/PA | Validated native u16 fields; 1..200 | Native writes with readback/rollback |
-| Contract wages and expiry | Ownership-checked full contract; weekly wage in GBP | Weekly wage and expiry year, preserving month/day/flags |
+| Player names, IDs, profile data | Screen-independent native database reads (`discover_by_index`) & length-prefixed UTF-8 names | Not supported (names are pooled references) |
+| Player attributes | Screen-independent direct layout verification (`verify_native_attributes`) | 60 technical/mental/physical/GK/hidden/personality fields with readback/rollback |
+| Position aptitudes and feet | Native database record; validated native aptitudes & scaled feet | Native record write, identity validation, readback and rollback |
+| CA/PA | Screen-independent validated native u16 fields; 1..200 | Native writes with readback/rollback |
+| Contract wages and expiry | Ownership-checked full contract; weekly wage in GBP, auto team/club resolution | Weekly wage and expiry year, preserving month/day/flags |
 | Contract termination | Native full contract, team squad vectors | Multi-object detachment releasing player as free agent with rollback |
 | Free agent signing | Formatted 200-byte contract block, team pointers | Instantiates valid contract block with RTTI, sets team pointers, appends to squad |
 | Loan recall | Native loan node and squad vector | Recalls player from loan, restores parent team pointers, clears loan node |
@@ -21,8 +21,8 @@ used test-layout offsets against those handles. They must not be used for live e
 | Squad numbers | Contract team and player squad number (+0x5d) | Sets squad number (1-99) and atomically swaps with teammate wearing it |
 | Tactical familiarity | 8 native vectors at player -0x48 | Sets all vectors to 10000 (game's MAXIMISE action) |
 | Condition & sharpness | Native player +0xc0 / +0xc8 | Restores condition and match sharpness to 10,000 units (safe heal) |
-| Club balance & transfer budget | Native finance object at club +0x150 | Direct transactional write to balance (+0x14) and transfer budget (+0x7cc) |
-| Club facilities | Club details +0x100 and finance +0x8b5 | Training, youth, coaching, recruitment, data analysis (+0x11e), and corporate facilities (1-20) |
+| Club balance & transfer budget | Native finance object at club +0x150 (user & opposition clubs) | Direct transactional write to balance (+0x14) and transfer budget (+0x7cc) |
+| Club facilities | Club details +0x100 and finance +0x8b5 (user & opposition clubs) | Training, youth, coaching, recruitment, data analysis (+0x11e), and corporate facilities (1-20) |
 | Club benefactor (Sugar Daddy) | Club finance +0x3c | Benefactor status (0=None, 1=Foreground, 2=Background, 3=Underwriter) |
 | Club reputations & stadium | First team +0xa8, club +0x166, stadium +0x7c/+0x8c | First-team/world reputations (1-10000) and stadium capacity/expansion |
 | Nation youth rating, macro & population | Containers at nation +0x108/+0x110, nation +0x1f0/+0x1ec/+0x1e4 | Youth rating (1-200), reputation (1-10000), economic factor, development code, population |

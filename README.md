@@ -52,9 +52,12 @@
 
 Live player writes support positions, foot ratings, all 60 exposed attributes
 (technical, mental, physical, goalkeeper and hidden/personality), CA/PA,
-and validated weekly wages (GBP) and contract expiry years. Open one Attributes profile in FM26, then use
-**Scan Loaded Players** to index native records for name search and editing without
-opening every profile. The live scan indexed 49,467 players in the tested save.
+and validated weekly wages (GBP) and contract expiry years. The engine features
+**screen-independent native entity discovery**: any player or club in the database
+(including opposition players, scouted players, and free agents) can be selected,
+inspected, and edited live without needing to open their profile on screen in FM26.
+You can also use **Scan Loaded Players** to bulk-index native records for instant
+global search (indexing ~49,500 players in ~1 second).
 Other entity saves return an explicit unsupported error until their native layouts
 are verified. See [live verification and limitations](LIVE_READ_WRITE.md).
 
@@ -83,7 +86,7 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 
 | Area | What you can do live | Notes |
 | --- | --- | --- |
-| **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Open the player's profile first |
+| **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Screen-independent discovery for any player (user & opposition); no need to open profile on screen |
 | **Contract extension** | Extend expiry by 1–10 years (`POST /api/player/contract/extend`) | Same date, later year; loaned-out players extend the parent contract; shows after the next day |
 | **Contract termination** | Release player as free agent (`POST /api/player/contract/terminate`) | Multi-object detachment: compacts squad vectors, nulls `0x1e8` contract and `0x130`/`0x138` team pointers **UNVERIFIED in game; see AGENTS.md Phase 11** |
 | **Free agent signing** | Sign unemployed free agents (`POST /api/transfer/sign`) | Formats aligned 200-byte `FULL_CONTRACT` object, sets RTTI/wage/expiry/team pointers, and appends to target squad **UNVERIFIED in game; see AGENTS.md Phase 11** |
@@ -92,7 +95,7 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | **Pending transfer acceleration** | Accelerate or instantly complete arranged transfers (`POST /api/transfer/accelerate`) | Updates scheduled join dates in future contract and transfer queue, or switches contract immediately **UNVERIFIED in game; see AGENTS.md Phase 11** |
 | **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
 | **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
-| **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/data analysis/corporate facilities, sugar daddy status, reputations, stadium capacity | Reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
+| **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/data analysis/corporate facilities, sugar daddy status, reputations, stadium capacity | User & opposition clubs supported; reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
 | **Nation macro, youth & population** | Youth rating (1–200), international reputation (1–10,000), economic factor, state of development, population | Native container architecture (`NativeNationRecord`); live slider updates youth rating |
 | **Competition reputation** | Native league reputation (1–200 scale) | Saved natively via `NativeCompetitionRecord` |
 | **Competition stage rules** | Dynamic registration squad cap (`POST /api/competition/stage-rules`) | Queries and edits active simulation engine `stage_rule_entry` (`+0x98`/`+0xd6`) |

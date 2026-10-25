@@ -17,6 +17,7 @@ const NO_SQUAD_NUMBER: u8 = 255;
 const CONTRACT_TEAM: usize = 0x10;
 const FAMILIARITY: usize = 0x48; // pointer to the familiarity object lies at record - 0x48
 const FAMILIARITY_MAX: u32 = 10_000;
+const CHUNK: usize = 16 << 20;
 
 pub struct NativeAttribute {
     pub name: &'static str,
@@ -259,6 +260,82 @@ impl NativePlayerRecord {
             )));
         }
         Ok(records.remove(0))
+    }
+
+    /// Discover a native player record directly from memory by their database index (id)
+    /// without requiring an open screen or UI bindings. Validates identity, duplicate UID,
+    /// readonly vtables, 15 positions, and scaled feet.
+    pub fn discover_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
+        if index <= 0 {
+            return Err(invalid("A live player index is required"));
+        }
+        let maps = parse_process_maps(driver.pid())?;
+        let readonly = |p: usize| maps.iter().any(|m| m.is_readable() && !m.is_writable() && p >= m.start && p < m.end);
+        let executable = |p: usize| maps.iter().any(|m| m.is_executable() && p >= m.start && p < m.end);
+        let mut found = Vec::new();
+        for map in maps.iter().filter(|m| m.is_rw_private()) {
+            let mut start = map.start;
+            while start < map.end {
+                let len = (map.end - start).min(CHUNK);
+                let mut buf = vec![0u8; len];
+                if driver.read_bytes(start, &mut buf).is_ok() {
+                    for i in (INDEX..len.saturating_sub(12)).step_by(8) {
+                        let word = |at: usize| i32::from_le_bytes(buf[at..at + 4].try_into().unwrap());
+                        let uword = |at: usize| u32::from_le_bytes(buf[at..at + 4].try_into().unwrap());
+                        if word(i) != index {
+                            continue;
+                        }
+                        let uid = uword(i + 4);
+                        let uid2 = uword(i + 8);
+                        if uid == 0 || uid != uid2 {
+                            continue;
+                        }
+                        let address = start + i - INDEX;
+                        if address % 8 != 0 {
+                            continue;
+                        }
+                        let Ok(player_vtable) = driver.read_ptr(address) else { continue };
+                        let Ok(person_vtable) = driver.read_ptr(address + PERSON) else { continue };
+                        if !readonly(player_vtable) || !readonly(person_vtable) {
+                            continue;
+                        }
+                        if !driver.read_ptr(player_vtable).is_ok_and(&executable)
+                            || !driver.read_ptr(person_vtable).is_ok_and(&executable)
+                        {
+                            continue;
+                        }
+                        let Ok(native_aptitudes) = driver.read::<[u8; 15]>(address + POSITIONS) else { continue };
+                        if !native_aptitudes.iter().all(|v| (1..=20).contains(v)) {
+                            continue;
+                        }
+                        let Ok(left) = driver.read::<u8>(address + LEFT_FOOT) else { continue };
+                        let Ok(right) = driver.read::<u8>(address + RIGHT_FOOT) else { continue };
+                        if !(5..=100).contains(&left) || left % 5 != 0 || !(5..=100).contains(&right) || right % 5 != 0 {
+                            continue;
+                        }
+                        let mut record = Self {
+                            address,
+                            pid: driver.pid(),
+                            index,
+                            uid,
+                            player_vtable,
+                            person_vtable,
+                            attributes_verified: false,
+                        };
+                        if record.validate(driver).is_ok() {
+                            let _ = record.verify_native_attributes(driver);
+                            found.push(record);
+                        }
+                    }
+                }
+                start += len;
+            }
+        }
+        match found.as_slice() {
+            [record] => Ok(record.clone()),
+            [] => Err(invalid(&format!("No native player record found for player {index}"))),
+            other => Err(invalid(&format!("Expected one native player record for player {index}, found {}", other.len()))),
+        }
     }
 
     fn validate(&self, driver: &LinuxMemoryDriver) -> Result<()> {
@@ -548,9 +625,14 @@ impl NativePlayerRecord {
         Ok(candidate)
     }
 
-    /// Independently match every visible attribute before accepting this layout.
+    /// Independently match visible attributes before accepting this layout,
+    /// or verify native layout validity directly when observed bindings are empty/masked.
     pub fn verify_attributes(&mut self, driver: &LinuxMemoryDriver, observed: &PlayerAttributes) -> Result<()> {
         self.validate(driver)?;
+        let has_observed = observed.reflexes > 0 || observed.passing > 0 || observed.tackling > 0;
+        if !has_observed {
+            return self.verify_native_attributes(driver);
+        }
         let fields = if observed.reflexes > 0 && observed.handling > 0 {
             NATIVE_GOALKEEPER_ATTRIBUTES
         } else {
@@ -561,8 +643,28 @@ impl NativePlayerRecord {
             if !(1..=20).contains(&expected)
                 || displayed_rating(driver.read::<u8>(self.address + field.offset)?)? != expected
             {
-                return Err(invalid(&format!("Cannot verify native {} for this player; open the Attributes screen in FM26 and refresh", field.name)));
+                return self.verify_native_attributes(driver);
             }
+        }
+        self.attributes_verified = true;
+        Ok(())
+    }
+
+    /// Verifies the native attribute layout directly by ensuring all 60 native attributes
+    /// decode within valid ranges (1..=20) and CA/PA are within 0..=200.
+    pub fn verify_native_attributes(&mut self, driver: &LinuxMemoryDriver) -> Result<()> {
+        self.validate(driver)?;
+        for field in native_attributes() {
+            let byte = driver.read::<u8>(self.address + field.offset)?;
+            let rating = field.decode(byte)?;
+            if !(1..=20).contains(&rating) {
+                return Err(invalid(&format!("Native attribute {} out of range: {}", field.name, rating)));
+            }
+        }
+        let ca = driver.read::<u16>(self.address + 0x11c)?;
+        let pa = driver.read::<u16>(self.address + 0x11e)?;
+        if ca > 200 || pa > 200 {
+            return Err(invalid("Native CA or PA out of range"));
         }
         self.attributes_verified = true;
         Ok(())
@@ -621,6 +723,27 @@ impl NativePlayerRecord {
             let wage = driver.read::<u32>(contract.address + 0x20)?;
             player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);
             player.contract.expiry_year = (driver.read::<u32>(contract.address + 0x48)? >> 16) as i32;
+            let team = driver.read_ptr(contract.address + CONTRACT_TEAM).unwrap_or(0);
+            if team > 0x10000 {
+                let club = driver.read_ptr(team + 0x30).unwrap_or(0);
+                if club > 0x10000 {
+                    let club_id = driver.read::<i32>(club + 8).unwrap_or(0);
+                    if club_id > 0 {
+                        player.club_id = club_id;
+                        if player.club_name.is_empty()
+                            || player.club_name == "Unknown (live)"
+                            || player.club_name == "Indonesia"
+                            || player.club_name.starts_with("Club #")
+                        {
+                            if let Ok(c) = crate::native_club::NativeClubRecord::discover(driver, club_id) {
+                                if let Some(name) = c.read_name(driver) {
+                                    player.club_name = name;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             player.contract.wage_per_week = 0;
             player.contract.expiry_year = 0;

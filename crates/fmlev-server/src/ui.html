@@ -4379,7 +4379,13 @@
         showToast("No active player loaded", "warning");
         return;
       }
+      const clubId = state.activePlayer.club_id;
       const clubName = state.activePlayer.club_name;
+      if (clubId && clubId > 0) {
+        showToast(`Loading club details for ${clubName || "Club #" + clubId}...`, "info");
+        await selectSearchedClub(clubId);
+        return;
+      }
       if (!clubName || clubName === "Free Agent" || clubName === "Unknown (live)") {
         showToast("Player club is not exposed or player is Free Agent", "info");
         return;

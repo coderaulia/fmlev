@@ -27,9 +27,18 @@ impl GameContextManager {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
         let mut club = self.club_registry.get(&club_id).cloned()
             .or_else(|| (self.context.club.club_id == club_id).then(|| self.context.club.clone()))
-            .ok_or_else(|| CoreError::InvalidValue(format!("Club {club_id} is not loaded; open one of its pages in FM26")))?;
+            .unwrap_or_else(|| {
+                let mut c = super::inspector::unknown_clubfinances();
+                c.club_id = club_id;
+                c
+            });
         let driver = &session.driver;
         let record = crate::native_club::NativeClubRecord::discover(driver, club_id)?;
+        if club.club_name.is_empty() || club.club_name == "Unknown (live)" || club.club_name == "Indonesia" || club.club_name.starts_with("Club #") {
+            if let Some(name) = record.read_name(driver) {
+                club.club_name = name;
+            }
+        }
         club.balance = i64::from(record.read_balance(driver)?);
         club.transfer_budget = i64::from(record.read_transfer_budget(driver)?);
         let (training, youth, coaching, recruitment, corp, analysis) = record.read_facilities(driver)?;
@@ -45,6 +54,18 @@ impl GameContextManager {
         }
         if let Ok((rep, _)) = record.read_reputations(driver) {
             if rep > 0 { club.reputation = rep; }
+        }
+        if let Ok((cap, exp)) = record.read_stadium_capacities(driver) {
+            if cap > 0 { club.stadium_capacity = cap; }
+            if exp > 0 { club.stadium_expansion_cap = exp; }
+        }
+        if let Ok(sd) = record.read_sugar_daddy(driver) {
+            club.sugar_daddy_type = match sd {
+                1 => "Foreground".to_string(),
+                2 => "Background".to_string(),
+                3 => "Underwriter".to_string(),
+                _ => "None".to_string(),
+            };
         }
         self.club_registry.insert(club_id, club.clone());
         self.native_synced_clubs.insert(club_id);

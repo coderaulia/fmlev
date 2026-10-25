@@ -230,6 +230,23 @@ impl NativeClubRecord {
         Ok((cap, exp))
     }
 
+    /// Reads length-prefixed UTF-8 club name from `club + 0xc0`.
+    pub fn read_name(&self, driver: &LinuxMemoryDriver) -> Option<String> {
+        let str_ptr = driver.read_ptr(self.club + 0xc0).ok()?;
+        if str_ptr <= 0x10000 {
+            return None;
+        }
+        let len = driver.read::<u32>(str_ptr).ok()? as usize;
+        if len == 0 || len > 256 {
+            return None;
+        }
+        let mut buf = vec![0u8; len];
+        if driver.read_bytes(str_ptr + 4, &mut buf).ok()? != len {
+            return None;
+        }
+        String::from_utf8(buf).ok()
+    }
+
     // --- Writes ---
 
     fn apply_patches(&self, driver: &LinuxMemoryDriver, patches: &[FieldPatch]) -> Result<()> {

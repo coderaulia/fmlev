@@ -310,3 +310,37 @@ crates/
 - **Known issues (not fixed, from the audits)**: handlers hold the global write lock during full-process scans, so polling can stall other requests; raw `write_memory`/heal/finances routes have no ownership or rollback guard; `attach` accepts a malformed body; terminate and sign write pointers/objects the game also references elsewhere (club registrations, transfer lists), a crash risk that day-tick tests so far did not show; `find_zero_contract_slot` and the transfer-queue lookup use run-specific hardcoded address ranges; register-anytime disable clears both manager bits regardless of the original; player-tab controls without a native path (release clause, happiness, name/age) are enabled and fail the whole save; god-mode presets are always enabled; update_* routes return 500 for validation errors. Treat the transfer actions as experimental and use a backup save.
 - Overlay plan: `docs/OVERLAY_PLAN.md`.
 
+### Phase 12: Screen-Independent Native Player Discovery, CA/PA, 60 Attributes & Opposition Player Editing (Completed)
+- **Target**: Enable screen-independent reading and editing of CA/PA, all 60 native attributes, positions, contract details, and club associations for ANY player in FM26 (including opposition players, scouted players, and free agents without requiring their profile to be open on screen in FM26).
+- **Root Cause**:
+  - `verified_native_player(id)` in `crates/fmlev-core/src/context/mutations.rs` previously relied entirely on `read_person_native_fingerprint`, which reads Unity/IL2CPP `BindingSubsystem`. Opposition players not open on screen in FM26 have no `UniqueId`/`Footedness` in `BindingSubsystem`, returning `Error: InvalidValue("Open the player's profile: required UniqueId binding unavailable")`.
+  - `verify_attributes` previously required `observed` attributes from UI bindings to match native memory. If `observed` was empty or masked, `verify_attributes` failed, leaving `attributes_verified = false`.
+  - With `attributes_verified = false`, reading CA and PA was blocked, leaving CA/PA at 0 (`—`), and player writes were rejected with `"Open this player's Attributes screen in FM26"`.
+  - In addition, the running server process had not been restarted with the latest release binary.
+- **Implementations**:
+  - `crates/fmlev-core/src/native_player.rs`:
+    - Added `discover_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self>`: Scans `rw-p` memory for `index` at `0x148`, validates duplicate UID at `0x14c`/`0x150`, validates readonly/executable player and person vtables, 15 positions in `1..=20`, and scaled feet in `5..=100`.
+    - Added `verify_native_attributes(driver: &LinuxMemoryDriver) -> Result<()>`: Directly decodes and validates all 60 native attributes in `1..=20` and checks CA/PA in `0..=200`, setting `attributes_verified = true`.
+    - Updated `verify_attributes`: If observed UI bindings are empty/masked, automatically falls back to `verify_native_attributes(driver)`.
+    - Updated `refresh_player_fields`: Decodes contract `team -> club` pointer chain (`contract + 0x10 -> team + 0x30 -> club`), resolving authoritative `club_id` and native `club_name` automatically.
+  - `crates/fmlev-core/src/native_club.rs`:
+    - Added `read_name(&self, driver: &LinuxMemoryDriver) -> Option<String>` to read length-prefixed UTF-8 strings from `club + 0xc0`.
+  - `crates/fmlev-core/src/context/club_money.rs`:
+    - Updated `read_club_native`: If the club is not yet in `club_registry`, instantiates template `ClubFinances`, populates native name via `record.read_name(driver)`, balance, transfer budget, all 6 facilities, reputations, stadium capacities, and sugar daddy status.
+  - `crates/fmlev-core/src/context/mutations.rs`:
+    - Updated `verified_native_player`: Tries live bindings first; if absent, cleanly falls back to screen-independent `NativePlayerRecord::discover_by_index(&session.driver, id)`.
+  - `crates/fmlev-core/src/context/mod.rs`:
+    - Updated `select_player(id)`: In live FM26 mode, if not yet in `player_registry`, creates template player and resolves native record, refreshing positions, all 60 attributes, CA, PA, and native name. Automatically loads the player's club natively via `select_club(player.club_id)`.
+    - Updated `select_club(id)`: In live FM26 mode, automatically invokes `read_club_native(id)` so opposition clubs are discovered and populated natively.
+  - `crates/fmlev-server/src/ui.html`:
+    - Updated `jumpToPlayerClub()`: Directly checks if `state.activePlayer.club_id` is present (> 0) and invokes `selectSearchedClub(clubId)` directly.
+- **Verification**:
+  - `cargo check --workspace --all-targets --examples`: 0 warnings, 0 errors.
+  - `cargo test --workspace`: 124 Rust tests passed (123 passed, 1 ignored, 0 failed).
+  - `node --test crates/fmlev-server/tests/*.test.cjs`: 37 passed, 0 failed.
+  - `python3 -m unittest discover -s tools/fmscan/tests -v`: 57 passed, 0 failed.
+  - All modified files strictly $\le$ 1,374 LOC (hard limit: 1,500 LOC).
+  - Live game tests on PID 6152:
+    - Maarten Paes (21493): Discovered screen-independently with CA 129, PA 140, all 60 attributes, AFC Ajax (574). Live write: handling 11 -> 12, CA 129 -> 130 succeeded, read back verified, restored cleanly to 11 / 129.
+    - Ole Romeny (21787): Discovered screen-independently with CA 110, PA 124, Finishing 9, Pace 12, Oxford United (386), balance £1,046,570, transfer budget £687,792.
+

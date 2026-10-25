@@ -312,11 +312,13 @@ impl GameContextManager {
     pub fn select_player(&mut self, id: i32) -> Result<Player> {
         self.failed_native_fingerprints.remove(&id);
         self.active_player_addr = self.player_memory_bindings.get(&id).copied();
-        let mut player = self
-            .player_registry
-            .get(&id)
-            .cloned()
-            .ok_or(CoreError::PlayerNotFound(id))?;
+        let mut player = match self.player_registry.get(&id).cloned() {
+            Some(p) => p,
+            None if self.session.as_ref().is_some_and(|s| s.driver.pid() != std::process::id() as i32) => {
+                build_template_live_player(id, format!("Player #{}", id), String::new())
+            }
+            None => return Err(CoreError::PlayerNotFound(id)),
+        };
 
         if let Some(&addr) = self.player_memory_bindings.get(&id) {
             self.active_player_addr = Some(addr);
@@ -339,16 +341,24 @@ impl GameContextManager {
         }
 
         if self.session.as_ref().is_some_and(|session| session.driver.pid() != std::process::id() as i32)
-            && !self.native_player_records.contains_key(&id)
+            && !self.native_player_records.get(&id).is_some_and(|r| r.attributes_verified())
         {
             // Discovery is read-only and attempted on selection, not every polling tick.
-            // An unopened profile may not yet expose the complete validation fingerprint.
             let _ = self.verified_native_player(id);
         }
         if let (Some(record), Some(session)) = (self.native_player_records.get(&id), self.session.as_ref()) {
             player.positions = record.read_positions(&session.driver)?;
             player.position = player.positions.to_position_string();
-            if record.attributes_verified() { record.refresh_player_fields(&session.driver, &mut player)?; }
+            if record.attributes_verified() {
+                record.refresh_player_fields(&session.driver, &mut player)?;
+            }
+            if player.name.is_empty() || player.name.starts_with("Player #") {
+                if let Ok(native_name) = record.name(&session.driver) {
+                    player.name = native_name;
+                }
+            }
+        } else if !self.player_registry.contains_key(&id) {
+            return Err(CoreError::PlayerNotFound(id));
         }
 
         // The selected response and subsequent delta-save baseline must be identical.
@@ -358,6 +368,10 @@ impl GameContextManager {
         if player.club_id != 0 {
             if let Some(club) = self.club_registry.get(&player.club_id).cloned() {
                 self.context.club = club;
+            } else if self.session.as_ref().is_some_and(|s| s.driver.pid() != std::process::id() as i32) {
+                if let Ok(club) = self.select_club(player.club_id) {
+                    self.context.club = club;
+                }
             }
         } else if !player.club_name.is_empty() {
             if let Some(club) = self
@@ -381,22 +395,30 @@ impl GameContextManager {
     /// Selects a club by ID, populating context and syncing from memory if mapped.
     pub fn select_club(&mut self, id: i32) -> Result<ClubFinances> {
         self.active_club_addr = self.club_memory_bindings.get(&id).copied();
-        let mut club = self
-            .club_registry
-            .get(&id)
-            .cloned()
-            .ok_or_else(|| CoreError::InvalidValue(format!("Club with ID {} not found", id)))?;
+        let club = if self.session.as_ref().is_some_and(|s| s.driver.pid() != std::process::id() as i32) {
+            match self.read_club_native(id) {
+                Ok(c) => c,
+                Err(_) => self.club_registry.get(&id).cloned().ok_or_else(|| CoreError::InvalidValue(format!("Club with ID {} not found", id)))?,
+            }
+        } else {
+            let mut club = self
+                .club_registry
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| CoreError::InvalidValue(format!("Club with ID {} not found", id)))?;
 
-        if let Some(&addr) = self.club_memory_bindings.get(&id) {
-            self.active_club_addr = Some(addr);
-            if let Some(session) = self.session.as_ref().filter(|s| s.driver.pid() == std::process::id() as i32) {
-                if let Ok(mem_club) = ClubFinances::read(&session.driver, addr, &session.registry) {
-                    club.balance = mem_club.balance;
-                    club.transfer_budget = mem_club.transfer_budget;
-                    club.wage_budget = mem_club.wage_budget;
+            if let Some(&addr) = self.club_memory_bindings.get(&id) {
+                self.active_club_addr = Some(addr);
+                if let Some(session) = self.session.as_ref().filter(|s| s.driver.pid() == std::process::id() as i32) {
+                    if let Ok(mem_club) = ClubFinances::read(&session.driver, addr, &session.registry) {
+                        club.balance = mem_club.balance;
+                        club.transfer_budget = mem_club.transfer_budget;
+                        club.wage_budget = mem_club.wage_budget;
+                    }
                 }
             }
-        }
+            club
+        };
 
         self.context.club = club.clone();
         self.context.active_screen = "club".to_string();

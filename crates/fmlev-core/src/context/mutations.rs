@@ -126,33 +126,48 @@ impl GameContextManager {
     pub(crate) fn verified_native_player(&mut self, id: i32) -> Result<crate::native_player::NativePlayerRecord> {
         if let Some(mut record) = self.native_player_records.get(&id).cloned() {
             if !record.attributes_verified() {
-                if let (Some(session), Some(player)) = (self.session.as_ref(), self.player_registry.get(&id)) {
-                    let _ = record.verify_attributes(&session.driver, &player.attributes);
+                if let Some(session) = self.session.as_ref() {
+                    if let Some(player) = self.player_registry.get(&id) {
+                        let _ = record.verify_attributes(&session.driver, &player.attributes);
+                    } else {
+                        let _ = record.verify_native_attributes(&session.driver);
+                    }
                     self.native_player_records.insert(id, record.clone());
                 }
             }
             return Ok(record);
         }
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
-        let subsystem = resolve_binding_subsystem(session)
-            .ok_or_else(|| CoreError::InvalidValue("Live player bindings are unavailable; open this player's profile in FM26".into()))?;
-        let fingerprint = crate::live_write::read_person_native_fingerprint(&session.driver, subsystem, id)?;
-        if self.failed_native_fingerprints.get(&id) == Some(&fingerprint) {
-            return Err(CoreError::InvalidValue("Native player could not be verified for these bindings; reopen the profile or reconnect before retrying".into()));
-        }
-        let mut record = match crate::native_player::NativePlayerRecord::discover(
-            &session.driver, id, fingerprint.unique_id, fingerprint.aptitudes,
-            fingerprint.left_foot, fingerprint.right_foot,
-        ) {
-            Ok(record) => record,
-            Err(error) => {
-                self.failed_native_fingerprints.insert(id, fingerprint);
-                return Err(error);
+
+        let mut record_opt = None;
+        if let Some(subsystem) = resolve_binding_subsystem(session) {
+            if let Ok(fingerprint) = crate::live_write::read_person_native_fingerprint(&session.driver, subsystem, id) {
+                if self.failed_native_fingerprints.get(&id) != Some(&fingerprint) {
+                    match crate::native_player::NativePlayerRecord::discover(
+                        &session.driver, id, fingerprint.unique_id, fingerprint.aptitudes,
+                        fingerprint.left_foot, fingerprint.right_foot,
+                    ) {
+                        Ok(record) => {
+                            self.failed_native_fingerprints.remove(&id);
+                            record_opt = Some(record);
+                        }
+                        Err(_) => {
+                            self.failed_native_fingerprints.insert(id, fingerprint);
+                        }
+                    }
+                }
             }
+        }
+
+        let mut record = match record_opt {
+            Some(r) => r,
+            None => crate::native_player::NativePlayerRecord::discover_by_index(&session.driver, id)?,
         };
-        self.failed_native_fingerprints.remove(&id);
+
         if let Some(player) = self.player_registry.get(&id) {
             let _ = record.verify_attributes(&session.driver, &player.attributes);
+        } else {
+            let _ = record.verify_native_attributes(&session.driver);
         }
         self.native_player_records.insert(id, record.clone());
         Ok(record)

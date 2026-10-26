@@ -1,8 +1,10 @@
 pub mod context;
 pub mod memory;
+pub mod settings;
 
 pub use context::*;
 pub use memory::*;
+pub use settings::*;
 
 use axum::{
     extract::Request,
@@ -29,6 +31,7 @@ pub fn create_router(state: ServerState) -> Router {
     Router::new()
         .route("/", get(serve_ui))
         .route("/api/status", get(get_status))
+        .route("/api/settings", get(get_settings).post(update_settings))
         .route("/api/context", get(get_context))
         .route("/api/search", get(search_entities))
         .route("/api/players/discover", post(discover_players))

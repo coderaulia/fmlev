@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use fmlev_core::settings::{self, DisplaySettings};
 use fmlev_core::{ClubAffiliate, GameContextManager, Player};
 
 #[derive(Clone)]
@@ -29,10 +30,18 @@ pub struct AppState {
     pub last_scan_type: String,
 
     pub context_mgr: GameContextManager,
+    pub settings: DisplaySettings,
+    /// Where settings persist; `None` keeps them in memory only (tests).
+    pub settings_path: Option<std::path::PathBuf>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
+        let settings_path = settings::config_path();
+        let settings = settings_path
+            .as_deref()
+            .and_then(|path| DisplaySettings::load_from(path).ok())
+            .unwrap_or_default();
         Self {
             pid: None,
             exe_path: None,
@@ -45,6 +54,8 @@ impl Default for AppState {
             scan_results: Vec::new(),
             last_scan_type: String::new(),
             context_mgr: GameContextManager::new(),
+            settings,
+            settings_path,
         }
     }
 }

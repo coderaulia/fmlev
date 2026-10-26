@@ -344,3 +344,9 @@ crates/
     - Maarten Paes (21493): Discovered screen-independently with CA 129, PA 140, all 60 attributes, AFC Ajax (574). Live write: handling 11 -> 12, CA 129 -> 130 succeeded, read back verified, restored cleanly to 11 / 129.
     - Ole Romeny (21787): Discovered screen-independently with CA 110, PA 124, Finishing 9, Pace 12, Oxford United (386), balance £1,046,570, transfer budget £687,792.
 
+
+### Phase 13: Display Settings (Plan A) (Completed)
+- `fmlev-core/src/settings.rs`: `DisplaySettings {currency, measurement, wage_period}`, fixed dated rate table (no custom/live rates), persisted to `${XDG_CONFIG_HOME:-~/.config}/fmlev/settings.json`; missing file = GBP/metric/weekly, corrupt file = error. `GET/POST /api/settings` (`deny_unknown_fields`, unknown currency = 400).
+- `ui.html`: single formatter/parser (`formatMoney`, `setMoneyInput`/`readMoneyInput`, height/weight/distance), Settings tab, no hardcoded currency symbols. Money inputs (`data-money`) keep the raw native baseline, so an untouched control returns the exact native value. Club wage budget / max wage labelled "raw period unverified" and never period-converted.
+- Not done: reading FM26's own display currency (A4, discovery only); height/weight/distance formatters exist but no screen shows those fields yet.
+- Verification: cargo check clean; cargo test passing; Node 42 passed. Display only, no game-memory writes, so no in-game proof needed.

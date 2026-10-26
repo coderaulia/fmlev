@@ -27,6 +27,8 @@ fn offline_app_state() -> AppState {
         scan_results: Vec::new(),
         last_scan_type: String::new(),
         context_mgr: GameContextManager::new_offline(),
+        settings: Default::default(),
+        settings_path: None,
     }
 }
 
@@ -723,4 +725,40 @@ async fn test_contract_and_transfer_routes() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn settings_route_updates_validates_and_rejects_unknown_fields() {
+    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let app = create_router(state.clone());
+    let post = |body: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/settings")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+
+    let ok = app.clone().oneshot(post(r#"{"currency":"EUR","wage_period":"yearly"}"#)).await.unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    {
+        let r = state.inner.read().await;
+        assert_eq!(r.settings.currency, "EUR");
+        assert_eq!(r.settings.wage_period, fmlev_core::settings::WagePeriod::Yearly);
+    }
+
+    let bad_code = app.clone().oneshot(post(r#"{"currency":"XXX"}"#)).await.unwrap();
+    assert_eq!(bad_code.status(), StatusCode::BAD_REQUEST);
+    let custom_rate = app.clone().oneshot(post(r#"{"currency":"EUR","rate":2.0}"#)).await.unwrap();
+    assert!(custom_rate.status().is_client_error());
+    assert_eq!(state.inner.read().await.settings.currency, "EUR");
+
+    let get = app
+        .oneshot(Request::builder().uri("/api/settings").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&to_bytes(get.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["settings"]["currency"], "EUR");
+    assert!(body["currencies"].as_array().unwrap().len() >= 5);
 }

@@ -762,3 +762,65 @@ async fn settings_route_updates_validates_and_rejects_unknown_fields() {
     assert_eq!(body["settings"]["currency"], "EUR");
     assert!(body["currencies"].as_array().unwrap().len() >= 5);
 }
+
+fn post_role(body: String) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri("/api/player/role-preset")
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn role_preset_route_returns_a_proposal_without_changing_the_player() {
+    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let app = create_router(state.clone());
+    let id = state.inner.read().await.context_mgr.get_context().player.id;
+
+    // The offline fixture's attributes were never read from a game: no proposal is built on them.
+    let refused = app
+        .clone()
+        .oneshot(post_role(format!(r#"{{"player_id":{id},"role_id":"poacher","level":2}}"#)))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+
+    {
+        let mut w = state.inner.write().await;
+        let mut value = serde_json::to_value(&w.context_mgr.context.player.attributes).unwrap();
+        for field in value.as_object_mut().unwrap().values_mut() {
+            *field = serde_json::json!(8);
+        }
+        w.context_mgr.context.player.attributes = serde_json::from_value(value).unwrap();
+    }
+    let before = state.inner.read().await.context_mgr.get_context().player;
+
+    let ok = app
+        .clone()
+        .oneshot(post_role(format!(r#"{{"player_id":{id},"role_id":"poacher","level":3}}"#)))
+        .await
+        .unwrap();
+    let status = ok.status();
+    let body: serde_json::Value = serde_json::from_slice(&to_bytes(ok.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["proposal"]["role_id"], "poacher");
+    assert_eq!(body["proposal"]["role_data_verified"], false);
+    assert_eq!(body["proposal"]["ca_mode"], "raise_to_fit");
+
+    for bad in [
+        format!(r#"{{"player_id":{id},"role_id":"nope","level":1}}"#),
+        format!(r#"{{"player_id":{id},"role_id":"poacher","level":9}}"#),
+    ] {
+        let response = app.clone().oneshot(post_role(bad)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    let unknown_field = app
+        .oneshot(post_role(format!(r#"{{"player_id":{id},"role_id":"poacher","level":1,"write":true}}"#)))
+        .await
+        .unwrap();
+    assert!(unknown_field.status().is_client_error());
+
+    let after = state.inner.read().await.context_mgr.get_context().player;
+    assert_eq!(serde_json::to_value(&before).unwrap(), serde_json::to_value(&after).unwrap());
+}

@@ -350,3 +350,9 @@ crates/
 - `ui.html`: single formatter/parser (`formatMoney`, `setMoneyInput`/`readMoneyInput`, height/weight/distance), Settings tab, no hardcoded currency symbols. Money inputs (`data-money`) keep the raw native baseline, so an untouched control returns the exact native value. Club wage budget / max wage labelled "raw period unverified" and never period-converted.
 - Not done: reading FM26's own display currency (A4, discovery only); height/weight/distance formatters exist but no screen shows those fields yet.
 - Verification: cargo check clean; cargo test passing; Node 42 passed. Display only, no game-memory writes, so no in-game proof needed.
+
+### Phase 14: Role Presets (Plan B) (Completed, in-game proof pending)
+- `fmlev-core/src/role_presets.rs`: 13 roles (incl. a goalkeeper role) and 3 levels (floors key/secondary/position: 14/12/15, 16/14/18, 18/16/20). Proposals only raise values; a field reading 0 (not read from the game) refuses the whole proposal. Level 3 defaults to CA `raise_to_fit`, levels 1-2 to `keep`; user can override per request.
+- `POST /api/player/role-preset {player_id, role_id, level, ca_mode?}` returns a field diff and writes nothing; `GET /api/roles` lists roles. UI: Positions tab card previews the diff, stages it into `state.activePlayer` (dirty fields only for proposed fields) and the normal player Save writes it (verified native path, rollback).
+- **Not proven**: (1) the role names and key/secondary lists are the standard FM role model, NOT compared with FM26's role screens (plan B1); every proposal and the UI badge say "role data unverified". (2) The CA increase (1.5 CA per attribute point) is a heuristic, not the game's formula, and is labelled as an estimate. (3) The in-game proof (apply DLP level 2/3 on a throwaway save, check Attributes/Positions after a day tick, save/reload) has not been done.
+- Verification: cargo check clean, cargo test passing, Node 45 passed.

@@ -1800,6 +1800,29 @@
 
     <!-- VIEW 2: PLAYER POSITIONS & FOOT ABILITY EDITOR -->
     <section id="tab-positions" class="tab-view">
+      <div class="card" id="role-preset-card" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <h3 style="font-size: 14px; font-weight: 800;">🎭 Role Presets</h3>
+          <span id="role-data-badge" class="pill-badge badge-morale" title="Role attribute lists follow the standard FM role model and are not yet checked against FM26's role screens">Role data: unverified</span>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Raises the player's attributes and positions to a role level. Values are only ever raised, never lowered.
+          Preview first, then stage it and press Save. CA changes are a rough estimate, not the game's formula.
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <select id="role-select" class="form-control" style="max-width: 260px;" onchange="clearRoleProposal()"></select>
+          <select id="role-ca-mode" class="form-control" style="max-width: 190px;" onchange="clearRoleProposal()">
+            <option value="">CA: level default</option>
+            <option value="keep">CA: keep</option>
+            <option value="raise_to_fit">CA: raise to fit</option>
+          </select>
+          <button class="btn" onclick="previewRolePreset(1)">Level 1 · Competent</button>
+          <button class="btn" onclick="previewRolePreset(2)">Level 2 · Strong</button>
+          <button class="btn" onclick="previewRolePreset(3)">Level 3 · Elite</button>
+        </div>
+        <div id="role-diff" style="margin-top: 10px; font-size: 12px;"></div>
+        <button id="role-stage-btn" class="btn" style="margin-top: 8px; display: none;" onclick="stageRoleProposal()">Stage these changes</button>
+      </div>
       <div class="card" style="margin-bottom: 16px;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
           <div>
@@ -3095,6 +3118,90 @@
       return Number.isFinite(parsed) ? parsed : fallback;
     }
 
+    // ---- Role presets (proposal from the server; staged into the normal player Save) ----
+    const roleState = { roles: [], proposal: null };
+    async function loadRoles() {
+      try {
+        const res = await fetch("/api/roles");
+        const data = await res.json();
+        if (!res.ok) return;
+        roleState.roles = data.roles;
+        const badge = document.getElementById("role-data-badge");
+        if (badge) badge.innerText = data.role_data_verified ? "Role data: verified" : "Role data: unverified";
+        const select = document.getElementById("role-select");
+        if (select) {
+          const groups = [...new Set(data.roles.map(r => r.group))];
+          select.innerHTML = groups.map(group =>
+            `<optgroup label="${escapeHtml(group)}">${data.roles.filter(r => r.group === group)
+              .map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join("")}</optgroup>`).join("");
+        }
+      } catch (error) { /* roles stay unavailable until the server answers */ }
+    }
+    function clearRoleProposal() {
+      roleState.proposal = null;
+      const diff = document.getElementById("role-diff");
+      if (diff) diff.innerHTML = "";
+      const btn = document.getElementById("role-stage-btn");
+      if (btn) btn.style.display = "none";
+    }
+    function roleFieldLabel(field) {
+      return field.replace("attributes.", "").replace("positions.", "pos ").replace(/_/g, " ");
+    }
+    async function previewRolePreset(level) {
+      if (!state.activePlayer || !state.activePlayer.id) { showToast("Open a player first.", "warning"); return; }
+      const roleId = document.getElementById("role-select")?.value;
+      if (!roleId) { showToast("Role list is not loaded.", "warning"); return; }
+      const caMode = document.getElementById("role-ca-mode")?.value || undefined;
+      try {
+        const res = await fetch("/api/player/role-preset", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: state.activePlayer.id, role_id: roleId, level, ca_mode: caMode })
+        });
+        const data = await readJson(res);
+        if (!res.ok) throw new Error(data.message || "Role preset request failed");
+        roleState.proposal = { player_id: data.player_id, ...data.proposal };
+        const p = roleState.proposal;
+        const diff = document.getElementById("role-diff");
+        const rows = p.changes.map(c => `<div>${escapeHtml(roleFieldLabel(c.field))}: ${c.old} → <b>${c.new}</b>${c.field.endsWith("_ability") ? " (estimate)" : ""}</div>`).join("");
+        diff.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">${escapeHtml(p.role_name)} · Level ${p.level} · CA ${escapeHtml(p.ca_mode.replace("_", " "))}</div>` +
+          (rows || "<div>No changes needed: the player already meets this level.</div>");
+        const btn = document.getElementById("role-stage-btn");
+        if (btn) btn.style.display = p.changes.length ? "" : "none";
+      } catch (error) { clearRoleProposal(); showToast(error.message, "error"); }
+    }
+    function stageRoleProposal() {
+      const p = roleState.proposal;
+      if (!p || !state.activePlayer || state.activePlayer.id !== p.player_id) {
+        showToast("The previewed player is no longer open. Preview again.", "warning");
+        clearRoleProposal();
+        return false;
+      }
+      if (!state.activePlayer.positions) state.activePlayer.positions = {};
+      let positionsChanged = false;
+      for (const c of p.changes) {
+        if (c.field.startsWith("attributes.")) {
+          handleAttrInput(c.field.slice("attributes.".length), String(c.new), true);
+        } else if (c.field.startsWith("positions.")) {
+          state.activePlayer.positions[c.field.slice("positions.".length)] = c.new;
+          positionsChanged = true;
+        } else if (c.field === "current_ability") {
+          handleCAInput(String(c.new));
+          const el = document.getElementById("input-ca"); if (el) el.value = String(c.new);
+        } else if (c.field === "potential_ability") {
+          handlePAInput(String(c.new));
+          const el = document.getElementById("input-pa"); if (el) el.value = String(c.new);
+        }
+      }
+      if (positionsChanged) {
+        state.playerDirtyFields.add("positions");
+        renderPositionsTab();
+      }
+      markUnsaved();
+      showToast(`${p.role_name} level ${p.level} staged (${p.changes.length} changes). Press Save to write it.`, "info");
+      clearRoleProposal();
+      return true;
+    }
+
     // ---- Display settings: currency, measurement, wage period ----
     // Native values are raw GBP (wages per week) and metric. Everything shown or typed goes through here.
     let displaySettings = { currency: "GBP", measurement: "metric", wage_period: "weekly" };
@@ -3497,6 +3604,7 @@
 
       buildAttributeLists();
       loadDisplaySettings();
+      loadRoles();
       fetchContext();
 
       // Poll every 1 second when unpinned; displayPlayer protects focused inputs and dirtyPlayerFields

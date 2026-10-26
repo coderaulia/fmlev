@@ -13,6 +13,7 @@ pub mod live_competition;
 pub mod live_dump;
 pub mod models;
 pub mod native_player;
+pub mod role_presets;
 pub mod session;
 pub mod settings;
 

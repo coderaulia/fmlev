@@ -242,3 +242,7 @@ Never edit a player's injury vector (player + 0x248): a null or emptied vector f
 - Verified in game: club facilities, competition reputation (label changes after reopening the page), Register Anytime. Nation youth rating writes persist but have no on-screen label.
 - Transfer actions (terminate, loan recall, move, signing, accelerate) are implemented but **not verified in game**; treat them as experimental and test on a throwaway save only.
 
+## Update — 26 October 2026 (settings, role presets, nationality discovery)
+- **Display settings**: UI-only (currency, measurement, wage period). Native values stay raw GBP / metric; no game-memory writes, so no in-game proof is needed.
+- **Role presets**: compose the existing verified attribute, position and CA/PA writes through the normal player Save. Not verified in game: role attribute lists are the standard FM model, not FM26's role screens; CA increase is a heuristic (1.5 per attribute point).
+- **Nationality rules (read-only discovery, unverified)**: nation record `+0x1ed` years to gain nationality (tag `Nygn`), `+0x1eb` gain type (tag `Ngct`, values 1/2, labels unknown), bit `0x02` of `+0x1e9` no-dual-nationality (tag `Nndn`). Not compared with the Nation screen yet; no Rust/UI support. Details in `AGENTS.md`.

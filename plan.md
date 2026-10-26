@@ -1,6 +1,7 @@
 # Plan: Staff editor, player/nation enhancements and display settings
 
-Status: plan only, nothing implemented. Date: 2026-10-26.
+Status (2026-10-26): A (settings) and B (role presets) implemented; B still needs the in-game proof and FM26 role-list check. C: read-only discovery logged in `AGENTS.md`, waiting for screen comparison. D, E, F not started.
+Date: 2026-10-26.
 Scope: six workstreams (A–F below). Each one is shippable on its own and gets its own phase commit.
 
 All work follows `AGENTS.md`: discovery in `tools/fmscan` (read-only C++), product code in Rust,

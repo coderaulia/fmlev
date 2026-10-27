@@ -72,10 +72,16 @@ def owned_server():
     return pid
 
 
-def describe(pid):
+def is_current(pid):
+    """True when the running process executes the binary currently on disk."""
     current = os.stat(f"/proc/{pid}/exe")
     disk = BINARY.stat()
-    freshness = "current build" if (current.st_dev, current.st_ino) == (disk.st_dev, disk.st_ino) else "OLD build; run ./start.sh restart"
+    return (current.st_dev, current.st_ino) == (disk.st_dev, disk.st_ino)
+
+
+def describe(pid):
+    current = os.stat(f"/proc/{pid}/exe")
+    freshness = "current build" if is_current(pid) else "OLD build; run ./start.sh restart"
     built = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(current.st_mtime))
     print(f"FMLE running: PID {pid}, {freshness}, binary built {built}\n{URL}", flush=True)
 
@@ -147,17 +153,19 @@ def main():
         if args.action == "stop":
             stop(pid) if pid else print("FMLE is already stopped.")
             return
-        if args.action == "start" and pid:
+        # Always build first (a no-op when nothing changed). A failed build keeps the running server.
+        subprocess.run(["cargo", "build", "--release", "-p", "fmlev-cli"], cwd=ROOT, check=True)
+        if args.action == "start" and pid and is_current(pid):
             describe(pid)
-            print("No duplicate started. Use ./start.sh restart to rebuild and reload, or ./start.sh stop to terminate.")
+            print("Already running the current build; no duplicate started. ./start.sh stop terminates it.")
             open_browser()
             fcntl.flock(lock, fcntl.LOCK_UN)
             if not args.background:
                 watch_existing(pid)
             return
-        # Build before stopping the working server. A failed build keeps it running.
-        subprocess.run(["cargo", "build", "--release", "-p", "fmlev-cli"], cwd=ROOT, check=True)
         if pid:
+            if args.action == "start":
+                print(f"Running server (PID {pid}) uses an outdated binary; replacing it with the new build.", flush=True)
             stop(pid)
         log = (STATE / "server.log").open("a") if args.background else None
         child = subprocess.Popen([str(BINARY), "serve", "--port", str(PORT)], cwd=ROOT,

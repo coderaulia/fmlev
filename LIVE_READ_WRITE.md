@@ -246,3 +246,9 @@ Never edit a player's injury vector (player + 0x248): a null or emptied vector f
 - **Display settings**: UI-only (currency, measurement, wage period). Native values stay raw GBP / metric; no game-memory writes, so no in-game proof is needed.
 - **Role presets**: compose the existing verified attribute, position and CA/PA writes through the normal player Save. Not verified in game: role attribute lists are the standard FM model, not FM26's role screens; CA increase is a heuristic (1.5 per attribute point).
 - **Nationality rules (read-only discovery, unverified)**: nation record `+0x1ed` years to gain nationality (tag `Nygn`), `+0x1eb` gain type (tag `Ngct`, values 1/2, labels unknown), bit `0x02` of `+0x1e9` no-dual-nationality (tag `Nndn`). Not compared with the Nation screen yet; no Rust/UI support. Details in `AGENTS.md`.
+
+## Update — 27 October 2026 (registration doctor, preferred moves and staff discovery)
+- **Registration doctor (read-only)**: reads the La Liga (51/67) stage gate +0x9a, manager bits 0x100/0x200, squad cap +0x98, home-grown quota +0x99 and squad-number cap +0x9b live on PID 5907 with no writes. All other gates are `unknown`.
+- **Preferred moves (discovery, unverified)**: 64-bit bitset at `ACTUAL_PLAYER address + 0x348` matches the PPMs on screen for Mbappé, Yamal and Haaland; only bit 39 (Cuts Inside From Both Wings) is named so far. No Rust/UI support.
+- **Staff (discovery, unverified)**: staff records identified (vtable at +0x100, identity at +0x108, names at +0x150/+0x158, stride 0x240). Attribute bytes are not mapped because the screen shows labels, not numbers. No Rust/UI support. Details in `AGENTS.md`.
+

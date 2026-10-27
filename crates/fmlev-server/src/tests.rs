@@ -824,3 +824,23 @@ async fn role_preset_route_returns_a_proposal_without_changing_the_player() {
     let after = state.inner.read().await.context_mgr.get_context().player;
     assert_eq!(serde_json::to_value(&before).unwrap(), serde_json::to_value(&after).unwrap());
 }
+
+#[tokio::test]
+async fn eligibility_route_is_read_only_and_requires_a_live_game() {
+    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let app = create_router(state);
+    let post = |body: String| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/player/eligibility")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let offline = app.clone().oneshot(post(r#"{"player_id":1,"comp_index":51,"comp_uid":67}"#.into())).await.unwrap();
+    assert_eq!(offline.status(), StatusCode::BAD_REQUEST);
+    let long = format!(r#"{{"player_id":1,"comp_index":51,"comp_uid":67,"game_message":"{}"}}"#, "x".repeat(1001));
+    assert_eq!(app.clone().oneshot(post(long)).await.unwrap().status(), StatusCode::BAD_REQUEST);
+    let unknown = app.oneshot(post(r#"{"player_id":1,"comp_index":51,"comp_uid":67,"fix":true}"#.into())).await.unwrap();
+    assert!(unknown.status().is_client_error());
+}

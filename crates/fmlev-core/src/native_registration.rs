@@ -10,6 +10,7 @@
 //! Rule entries are per competition and rebuilt on a new season or stage change; re-apply then.
 
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
+use serde::Serialize;
 
 use crate::error::{CoreError, Result};
 
@@ -93,6 +94,38 @@ fn gate_byte_address(driver: &LinuxMemoryDriver, comp: usize) -> Result<(usize, 
     }
     let kind = driver.read::<u8>(entry + TYPE_BYTE)?;
     Ok((entry + GATE_BYTE, kind))
+}
+
+/// Read-only snapshot of the registration gates the game checks for one competition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct RegistrationGates {
+    pub manager_registration_bit: bool,
+    pub manager_squad_number_bit: bool,
+    pub stage_gate_open: bool,
+    pub competition_type: u8,
+    pub max_squad_size: u8,
+    /// 255 = no home-grown requirement.
+    pub min_homegrown: u8,
+    /// 255 = standard (no cap).
+    pub max_squad_number: u8,
+}
+
+/// Reads the registration gates without changing anything.
+pub fn read_registration_gates(driver: &LinuxMemoryDriver, comp_index: i32, comp_uid: i32) -> Result<RegistrationGates> {
+    let base = module_base(driver)?;
+    let human = human_object(driver, base)?;
+    let flags = driver.read::<u32>(human + HUMAN_FLAGS)?;
+    let (gate, kind) = gate_byte_address(driver, competition_record(driver, comp_index, comp_uid)?)?;
+    let entry = gate - GATE_BYTE;
+    Ok(RegistrationGates {
+        manager_registration_bit: flags & REGISTRATION_BIT != 0,
+        manager_squad_number_bit: flags & SQUAD_NUMBER_BIT != 0,
+        stage_gate_open: driver.read::<u8>(gate)? != 0,
+        competition_type: kind,
+        max_squad_size: driver.read::<u8>(entry + 0x98)?,
+        min_homegrown: driver.read::<u8>(entry + 0x99)?,
+        max_squad_number: driver.read::<u8>(entry + 0x9b)?,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

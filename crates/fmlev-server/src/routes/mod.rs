@@ -1,9 +1,11 @@
 pub mod context;
+pub mod eligibility;
 pub mod memory;
 pub mod roles;
 pub mod settings;
 
 pub use context::*;
+pub use eligibility::*;
 pub use memory::*;
 pub use roles::*;
 pub use settings::*;
@@ -39,6 +41,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/players/discover", post(discover_players))
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
+        .route("/api/player/eligibility", post(player_eligibility))
         .route("/api/roles", get(list_roles))
         .route("/api/player/role-preset", post(role_preset_proposal))
         .route("/api/player/preset", post(apply_player_preset))

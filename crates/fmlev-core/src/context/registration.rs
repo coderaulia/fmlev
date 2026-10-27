@@ -19,3 +19,12 @@ impl GameContextManager {
         Ok(state)
     }
 }
+
+impl GameContextManager {
+    /// Read-only registration gates for one competition (no writes).
+    pub fn read_registration_gates(&self, comp_index: i32, comp_uid: i32) -> Result<crate::native_registration::RegistrationGates> {
+        let session = self.session.as_ref().filter(|s| s.bases.game_assembly_base.is_some())
+            .ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
+        crate::native_registration::read_registration_gates(&session.driver, comp_index, comp_uid)
+    }
+}

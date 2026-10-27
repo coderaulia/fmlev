@@ -64,7 +64,7 @@ pub async fn read_staff_native(State(state): State<ServerState>, Json(req): Json
             "status": "ok",
             "staff": staff,
             "attributes": attributes,
-            "verification": "Read-only. 22 attributes matched against 7 on-screen staff profiles; writes are not supported.",
+            "verification": "Reads: 22 attributes matched against 7 on-screen staff profiles. Edits: experimental, readback-checked, not yet proven after a day tick and save/reload.",
         }))
         .into_response(),
         Err(error) => api_error(StatusCode::CONFLICT, error).into_response(),

@@ -22,7 +22,8 @@ struct NativeCatalog {
         const std::map<std::string, std::string> names{
             {".?AVACTUAL_PLAYER@db@@", "player"}, {".?AVCLUB@db@@", "club"},
             {".?AVTEAM@db@@", "team"}, {".?AVNATION@db@@", "nation"},
-            {".?AVCOMP@db@@", "competition"}};
+            {".?AVCOMP@db@@", "competition"},
+            {".?AVACTUAL_NON_PLAYER@db@@", "staff"}};
         for (auto& r : m.maps) {
             if (r.start < base || r.end > base + image_size || r.perms[0] != 'r' || r.perms[1] == 'w' || r.perms[2] == 'x') continue;
             for (U a = r.start; a < r.end; a += CHUNK) {

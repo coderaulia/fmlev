@@ -77,6 +77,24 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(self.scan("player", "--name", "no such player")["matches"], [])
         self.assertEqual(self.scan("player", "--id", 123)["total_matches"], 0)
 
+    def test_staff_identity_names_and_raw_blocks(self):
+        data = self.scan("staff", "--name", "guardiola", "--editor")
+        self.assertEqual(data["total_matches"], 1, data)
+        staff = data["matches"][0]
+        self.assertEqual((staff["name"], staff["index"], staff["uid"]), ("Pep Guardiola", 79, 1120))
+        self.assertEqual(staff["address"], hex(self.root + 0xf100))
+        self.assertEqual(staff["record"], hex(self.root + 0xf000))
+        editor = staff["editor_data"]
+        self.assertEqual(editor["write_support"], "none")
+        self.assertTrue(editor["attributes"].startswith("unavailable"))
+        block = editor["raw_blocks"][1]
+        self.assertEqual(block["bytes"], list(range(10, 18)))
+        self.assertEqual(block["status"], "unmapped_raw_bytes_heuristic")
+        self.assertEqual(self.scan("staff", "--id", 80)["total_matches"], 0, "copy without +0x128 owner")
+        self.scan("staff", "--name", "guardiola", "--related", ok=False)
+        self.action("bad-staff-uid")
+        self.assertEqual(self.scan("staff", "--name", "guardiola")["total_matches"], 0)
+
     def test_broken_relationships_are_reported(self):
         self.action("bad-contract")
         player = self.scan("player", "--name", "Lamine", "--related")["matches"][0]

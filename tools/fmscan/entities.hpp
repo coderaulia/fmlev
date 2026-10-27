@@ -9,7 +9,28 @@ inline Json editor_player_data(const Memory&, const NativeCatalog&, const Native
 inline void print_player_editor(const Memory&, const NativeCatalog&, const NativeEntity&);
 inline Json editor_entity_data(const Memory&, const NativeCatalog&, const NativeEntity&);
 inline void print_entity_editor(const Memory&, const NativeCatalog&, const NativeEntity&);
+inline Json editor_staff_data(const Memory&, const NativeEntity&);
+inline void print_staff_editor(const Memory&, const NativeEntity&);
+// Staff (ACTUAL_NON_PLAYER) records are found by their +0x100 sub-object; `address` is that sub-object.
+inline constexpr U STAFF_SUBOBJECT = 0x100, STAFF_SECOND_SUBOBJECT = 0x128;
+inline std::optional<NativeEntity> read_staff(const Memory& m, const NativeCatalog& catalog, U address) {
+    auto type = catalog.at(m, address, "staff", false);
+    if (!type || type->subobject_offset != STAFF_SUBOBJECT || address < STAFF_SUBOBJECT) return {};
+    auto second = catalog.at(m, address + (STAFF_SECOND_SUBOBJECT - STAFF_SUBOBJECT), "staff", false);
+    if (!second || second->subobject_offset != STAFF_SECOND_SUBOBJECT) return {};
+    std::array<uint32_t, 3> ids{};
+    if (!m.read(address + 8, ids) || ids[0] > INT32_MAX || !ids[1] || ids[1] != ids[2]) return {};
+    std::string name;
+    for (U off : {0x50, 0x58}) {
+        U ref = 0; if (!m.read(address + off, ref)) return {};
+        auto part = pooled_name(m, ref); if (ref && part.empty()) return {};
+        if (!part.empty()) { if (!name.empty()) name += " "; name += part; }
+    }
+    if (name.empty()) return {};
+    return NativeEntity{"staff", name, address, address - STAFF_SUBOBJECT, ids[0], ids[1], type};
+}
 inline std::optional<NativeEntity> read_entity(const Memory& m, const NativeCatalog& catalog, U address, const std::string& kind) {
+    if (kind == "staff") return read_staff(m, catalog, address);
     auto type = catalog.at(m, address, kind); if (!type) return {};
     // NativePlayerRecord's calibrated attribute/person view is embedded at ACTUAL_PLAYER+0x148.
     U record = kind == "player" ? address + 0x148 : address;
@@ -103,11 +124,12 @@ struct EntityRelations {
 inline int cmd_entity(const Memory& m, const Args& a) {
     a.allow({"--name", "--id", "--uid", "--max", "--near", "--related", "--editor"}, 3);
     const auto& kind = a.pos[2];
-    if (kind != "player" && kind != "club" && kind != "nation" && kind != "competition") throw std::runtime_error("entity kind must be player|club|nation|competition");
+    if (kind != "player" && kind != "club" && kind != "nation" && kind != "competition" && kind != "staff") throw std::runtime_error("entity kind must be player|club|nation|competition|staff");
+    if (kind == "staff" && a.has("--related")) throw std::runtime_error("--related is not supported for staff");
     U max = a.val("--max", 20), id = a.val("--id", 0), uid = a.val("--uid", 0);
     if (!max || max > 1000 || id > INT32_MAX || uid > UINT32_MAX || (a.has("--name") && a.get("--name").empty())) throw std::runtime_error("invalid entity selector or max (1..1000)");
     NativeCatalog catalog(m);
-    std::set<U> tables; for (auto& [vt, type] : catalog.tables) if (type.kind == kind && !type.subobject_offset) tables.insert(vt);
+    std::set<U> tables; for (auto& [vt, type] : catalog.tables) if (type.kind == kind && type.subobject_offset == (kind == "staff" ? STAFF_SUBOBJECT : 0)) tables.insert(vt);
     if (tables.empty()) throw std::runtime_error("requested native entity type not found in DLL RTTI");
     std::vector<NativeEntity> found; U examined = 0, total = 0;
     std::map<uint32_t, U> indices, uids;
@@ -131,8 +153,8 @@ inline int cmd_entity(const Memory& m, const Args& a) {
         auto fresh = read_entity(m, catalog, e.address, e.kind);
         if (!fresh || fresh->index != e.index || fresh->uid != e.uid || fresh->name != e.name) throw std::runtime_error("native identity changed during scan; retry");
         Json j = entity_json(e);
-        if (a.has("--editor")) j.raw("editor_data",(kind=="player"?editor_player_data(m,catalog,e):editor_entity_data(m,catalog,e)).done());
-        if (a.has("--editor") && !a.json) { if(kind=="player")print_player_editor(m,catalog,e);else print_entity_editor(m,catalog,e); }
+        if (a.has("--editor")) j.raw("editor_data",(kind=="player"?editor_player_data(m,catalog,e):kind=="staff"?editor_staff_data(m,e):editor_entity_data(m,catalog,e)).done());
+        if (a.has("--editor") && !a.json) { if(kind=="player")print_player_editor(m,catalog,e);else if(kind=="staff")print_staff_editor(m,e);else print_entity_editor(m,catalog,e); }
         if (a.has("--related")) {
             EntityRelations links{m, catalog, {}, {}, {}, {}};
             if (e.kind == "player") links.player(e);

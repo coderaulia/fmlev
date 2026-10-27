@@ -37,7 +37,7 @@ Addresses and 64-bit memory values are hex strings to avoid JSON precision loss.
 | `contract PID INDEX UID [--record HEX]` | Inspect an owned parent contract, including absent/invalid diagnostics. |
 | `transfer PID INDEX UID [--record HEX] [--refs] [--max N]` | Inspect agreement/loan roots, current team and squad membership candidates; optionally scan inbound references. |
 | `transfer-watch PID INDEX UID [--record HEX] [--ms N] [--count POLLS]` | Emit baseline and changed contract/transfer snapshots as JSON lines. |
-| `entity PID player\|club\|nation\|competition [--name TEXT] [--id N] [--uid N] [--related]` | Discover native named records without opening any FM26 screen. |
+| `entity PID player\|club\|nation\|competition\|staff [--name TEXT] [--id N] [--uid N] [--related]` | Discover native named records without opening any FM26 screen. `staff` (no `--related`) finds ACTUAL_NON_PLAYER records by their +0x100/+0x128 sub-objects; `--editor` prints unmapped raw byte blocks only. |
 | `graph PID OBJECT --in --out` | Group inbound slots by region and annotate outbound mapped pointers. Either direction or both is supported. |
 | `watch PID ADDR LEN [--ms N] [--count POLLS]` | Poll a range and print changed words, including a trailing partial word. |
 | `diffset PID [--noise-ms N] [--action-wait SECONDS]` | Sample noise, snapshot baseline, wait for action, exclude noise and rank changed words. |
@@ -69,6 +69,7 @@ profile, UI binding or editor calibration:
 ```bash
 ./fmscan entity PID player --name "Lamine Yamal" --related --json
 ./fmscan entity PID club --name Barcelona --related --json
+./fmscan entity PID staff --name Guardiola --editor --json
 ./fmscan entity PID nation --name Spain --json
 ./fmscan entity PID competition --name "Spanish First Division" --related --json
 ```

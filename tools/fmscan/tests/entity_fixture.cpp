@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     auto nt = type(".?AVNATIONAL_TEAM@db@@"), actual_comp = type(".?AVACTUAL_COMP@sicomps@@");
     auto continent = type(".?AVCONTINENT@db@@");
     auto stadium = type(".?AVSTADIUM@db@@");
+    auto staff = type(".?AVACTUAL_NON_PLAYER@db@@", 0x100), staff2 = type(".?AVACTUAL_NON_PLAYER@db@@", 0x128);
     uint64_t native_vt = module + 0x3e00; put(dll + 0x3e00, reinterpret_cast<uint64_t>(code));
     size_t text_offset = 0xc000;
     auto text = [&](const char* s) {
@@ -96,6 +97,13 @@ int main(int argc, char** argv) {
     put(heap+0x18040,text("Camp Nou"));put(heap+0x1b040,text("Training Ground"));
     put(heap+0x1807c,uint32_t{62500});put(heap+0x1808c,uint32_t{105000});
     put(heap+0x3078,root+0x18000);put(heap+0x2140,root+0x1b000);
+    // Staff record at 0xf000: sub-objects at +0x100/+0x128, identity at +0x108, pooled names at +0x150/+0x158.
+    identity(0xf100, staff, 79, 1120); put(heap + 0xf128, staff2);
+    put(heap + 0xb200, text("Pep")); put(heap + 0xb208, text("Guardiola"));
+    put(heap + 0xf150, root + 0xb200); put(heap + 0xf158, root + 0xb208);
+    for (int i = 0; i < 8; ++i) heap[0xf170 + i] = uint8_t(10 + i);
+    // A copy of only the first sub-object (no +0x128 owner) must not be discoverable.
+    identity(0xf400, staff, 80, 1121); put(heap + 0xf450, root + 0xb200); put(heap + 0xf458, root + 0xb208);
     // A stale copy with conflicting UIDs must not be discoverable.
     memcpy(heap + 0x8000, heap, 0x400); put(heap + 0x8298, uint32_t{123});
     if (mprotect(dll, 0x4000, PROT_READ)) return 5;
@@ -107,6 +115,7 @@ int main(int argc, char** argv) {
         if (cmd == "bad-vector-owner") put(heap + 0x3030, root + 0x5000);
         if (cmd == "duplicate") memcpy(heap + 0x8000, heap, 0x400);
         if (cmd == "bad-name") heap[0xc004] = 0xff;
+        if (cmd == "bad-staff-uid") put(heap + 0xf110, uint32_t{1});
         if (cmd == "bad-attribute") heap[0x148 + 0x1e] = 101;
         if (cmd == "good-attribute") heap[0x148 + 0x1e] = 50;
         if (cmd == "bad-date") put(heap + 0x6048, uint32_t{0});

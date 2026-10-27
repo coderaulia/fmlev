@@ -370,3 +370,4 @@ inline void print_entity_editor(const Memory &m, const NativeCatalog &c,
     for (auto &[key, value] : d.text)
       std::cout << std::left << std::setw(30) << key << value << "\n";
 }
+#include "staff.hpp"

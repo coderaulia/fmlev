@@ -362,3 +362,8 @@ crates/
 - Candidate layout (nation record): byte `+0x1ed` = years to gain nationality (tag `Nygn`, store at RVA 0xf7cfde); byte `+0x1eb` = gain-nationality type (tag `Ngct`, store at RVA 0xf7cbf5; live values only 1 and 2, 128 vs 123 nations); bit `0x02` of byte `+0x1e9` (word `+0x1e8` bit `0x200`, tag `Nndn`, RVA 0xf7d483 -> 0xf7da09) = does NOT allow dual nationality (set for 12 nations incl. Japan, China PR, India, Indonesia, Kazakhstan, Cuba, Latvia, Ukraine).
 - Live values: Spain years 10, Italy 10, England 5, Germany 5, Brazil 4, Ghana 6, Andorra 20, San Marino 30, Japan 5; years distribution includes 0 (historic nations), 99 and 255 (12 nations).
 - **Not proven**: that these bytes are what the Nation screen shows (needs screen comparison), the type enum labels (1 vs 2 = Accumulative/Continuous order unknown), the meaning of 255/99, and that edits change in-game behavior. No Rust/UI work done yet.
+
+### Plan D/E/F discovery log (2026-10-27, static only, NOT verified)
+- FM26 (PID 5907) was at the main menu with no save loaded: `fmscan entity` returned 0 validated records for nations and players, so no live reads were possible. No code changed.
+- Static lead from `strings` on `game_plugin.dll` (RTTI names, `db` namespace): staff record candidates `.?AVACTUAL_NON_PLAYER@db@@` (like ACTUAL_PLAYER), `.?AVNON_PLAYER_TENDENCY_TEMPLATE@db@@` (staff tendencies), `.?AVJOB@db@@`, `.?AVSTARTING_CLUB_STAFF_JOB_STATUS@db@@`, `.?AVEXTERN_STAFF_NUMBERS@db@@`; eligibility leads `.?AVWORK_PERMIT_EXEMPTION_INFO@db@@`, `.?AVMAX_PLAYERS_MOVED_BETWEEN_MAIN_CLUB_AND_AFFILIATE_CLUB_INFO@db@@`. No RTTI name mentions preferred moves, so that layout needs a live diff.
+- **Not proven**: every layout, size and relation for D, E and F. Next step needs a loaded save.

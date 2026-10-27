@@ -87,7 +87,8 @@ class EntityTests(unittest.TestCase):
         editor = staff["editor_data"]
         self.assertEqual(editor["write_support"], "none")
         attrs = {a["field"]: a for a in editor["attributes"]}
-        self.assertEqual(len(attrs), 19)
+        self.assertEqual(len(attrs), 22)
+        self.assertEqual((attrs["physiotherapy"]["group"], attrs["physiotherapy"]["value"]), ("medical", 10))
         self.assertEqual((attrs["attacking"]["value"], attrs["attacking"]["native"]), (18, 89))
         self.assertEqual(attrs["negotiating"]["value"], 1, "native 1 displays as 1")
         self.assertEqual(attrs["tactical_knowledge"]["value"], 3, "native 16 rounds to 3")

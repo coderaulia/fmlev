@@ -3,7 +3,7 @@
 
 // Staff editor view. Offsets matched against three on-screen profiles (Guardiola 79/1120,
 // Maldini 2/45, Supriyatna 22412/41002451) through the open-profile UI bindings; each one was the
-// only offset consistent with all three. Native fields are 1..100 and display as max(1, round(native / 5)).
+// only offset consistent with all three (scouting/medical: Guardiola and Supriyatna). Native fields are 1..100 and display as max(1, round(native / 5)).
 struct StaffField { const char* group; const char* name; U offset; bool native; };
 inline constexpr StaffField STAFF_FIELDS[] = {
     {"coaching", "attacking", 0x32, true}, {"coaching", "defending", 0x33, true},
@@ -17,9 +17,12 @@ inline constexpr StaffField STAFF_FIELDS[] = {
     {"knowledge", "judging_player_ability", 0x2c, true}, {"knowledge", "judging_player_potential", 0x2d, true},
     {"knowledge", "judging_staff_ability", 0x42, true}, {"knowledge", "negotiating", 0x41, true},
     {"knowledge", "tactical_knowledge", 0x31, true},
+    {"scouting", "analyzing_data", 0x3c, true},
+    {"medical", "physiotherapy", 0x30, true}, {"medical", "sports_science", 0x3f, true},
 };
 inline uint8_t staff_display(uint8_t native) { return std::max<uint8_t>(1, uint8_t((native + 2) / 5)); }
-// Remaining bytes that are 1..100 across all staff but not yet named (scouting/medical/data, unconfirmed).
+// Raw context blocks. Native bytes +0x2a, +0x38..+0x3b, +0x3d, +0x3e, +0x40 are 1..100 across all staff but are
+// not shown on any staff attribute tab; their meaning is unknown.
 struct StaffBlock { const char* name; U offset, length; };
 inline constexpr StaffBlock STAFF_BLOCKS[] = {
     {"record_0x10_small_values", 0x10, 0x40},
@@ -55,7 +58,7 @@ inline Json editor_staff_data(const Memory& m, const NativeEntity& e) {
         blocks.push_back(r.done());
     }
     j.raw("raw_blocks", array(blocks));
-    j.str("attribute_evidence", "19 head-coach-tab attributes matched to three on-screen profiles via UI bindings; scouting/medical attributes not mapped");
+    j.str("attribute_evidence", "22 attributes (head coach, scouting and medical tabs) matched to on-screen profiles via UI bindings");
     j.str("verification", "identity by ACTUAL_NON_PLAYER sub-objects at +0x100/+0x128 and duplicate UID; no screen comparison");
     j.str("write_support", "none");
     return j;

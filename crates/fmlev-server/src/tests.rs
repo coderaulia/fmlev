@@ -844,3 +844,28 @@ async fn eligibility_route_is_read_only_and_requires_a_live_game() {
     let unknown = app.oneshot(post(r#"{"player_id":1,"comp_index":51,"comp_uid":67,"fix":true}"#.into())).await.unwrap();
     assert!(unknown.status().is_client_error());
 }
+
+#[tokio::test]
+async fn staff_routes_are_read_only_strict_and_require_a_game() {
+    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let app = create_router(state);
+    let post = |uri: &str, body: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let search = app.clone().oneshot(post("/api/staff/search", r#"{"query":"guardiola"}"#)).await.unwrap();
+    assert_eq!(search.status(), StatusCode::BAD_REQUEST);
+    let native = app.clone().oneshot(post("/api/staff/native", r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();
+    assert_eq!(native.status(), StatusCode::BAD_REQUEST);
+    for (uri, body) in [
+        ("/api/staff/native", r#"{"staff_id":79}"#),
+        ("/api/staff/native", r#"{"staff_id":79,"staff_uid":1120,"attacking":20}"#),
+        ("/api/staff/search", r#"{"query":"x","write":true}"#),
+    ] {
+        assert!(app.clone().oneshot(post(uri, body)).await.unwrap().status().is_client_error(), "{body}");
+    }
+}

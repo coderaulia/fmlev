@@ -251,4 +251,5 @@ Never edit a player's injury vector (player + 0x248): a null or emptied vector f
 - **Registration doctor (read-only)**: reads the La Liga (51/67) stage gate +0x9a, manager bits 0x100/0x200, squad cap +0x98, home-grown quota +0x99 and squad-number cap +0x9b live on PID 5907 with no writes. All other gates are `unknown`.
 - **Preferred moves (discovery, unverified)**: 64-bit bitset at `ACTUAL_PLAYER address + 0x348` matches the PPMs on screen for Mbappé, Yamal and Haaland; only bit 39 (Cuts Inside From Both Wings) is named so far. No Rust/UI support.
 - **Staff (discovery, unverified)**: staff records identified (vtable at +0x100, identity at +0x108, names at +0x150/+0x158, stride 0x240). Attribute bytes are not mapped because the screen shows labels, not numbers. No Rust/UI support. Details in `AGENTS.md`.
+- **Staff attributes (read-only, verified)**: `native_staff.rs` reads 22 staff attributes from the ACTUAL_NON_PLAYER record (offsets in `AGENTS.md`). Screen values from the open-profile bindings equal the reader for Guardiola, Maldini, Supriyatna, two scouts, a physio and a performance analyst; Rust and `fmscan` agree for all seven. No writes.
 

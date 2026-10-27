@@ -3,12 +3,14 @@ pub mod eligibility;
 pub mod memory;
 pub mod roles;
 pub mod settings;
+pub mod staff;
 
 pub use context::*;
 pub use eligibility::*;
 pub use memory::*;
 pub use roles::*;
 pub use settings::*;
+pub use staff::*;
 
 use axum::{
     extract::Request,
@@ -42,6 +44,8 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
         .route("/api/player/eligibility", post(player_eligibility))
+        .route("/api/staff/search", post(search_staff))
+        .route("/api/staff/native", post(read_staff_native))
         .route("/api/roles", get(list_roles))
         .route("/api/player/role-preset", post(role_preset_proposal))
         .route("/api/player/preset", post(apply_player_preset))

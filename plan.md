@@ -1,6 +1,6 @@
 # Plan: Staff editor, player/nation enhancements and display settings
 
-Status (2026-10-27): A (settings), B (role presets) and D (read-only registration doctor) implemented. B still needs the in-game proof and an FM26 role-list check. C: discovery logged in `AGENTS.md`, waiting for screen comparison. E: PPM bitset found, bit-to-move table incomplete. F: staff records located, attributes not mapped.
+Status (2026-10-27): A (settings), B (role presets) and D (read-only registration doctor) implemented. B still needs the in-game proof and an FM26 role-list check. C: discovery logged in `AGENTS.md`, waiting for screen comparison. E: PPM bitset found, bit-to-move table incomplete. F: staff reads done (22 attributes, read-only Staff tab); contracts, career plans, relationships, knowledge, formations/tendencies and all writes not started.
 Date: 2026-10-26.
 Scope: six workstreams (A–F below). Each one is shippable on its own and gets its own phase commit.
 

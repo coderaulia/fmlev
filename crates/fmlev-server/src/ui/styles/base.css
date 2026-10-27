@@ -1,0 +1,56 @@
+/* Reset, document defaults, page (tab-view) visibility, utilities. */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+}
+
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-size: var(--fs-md);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb { background: #263352; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #384b75; }
+
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Pages: every <section class="tab-view"> is one page; the shell shows the active one. */
+.tab-view {
+  display: none;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.tab-view.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.muted { color: var(--text-muted); }
+.dim { color: var(--text-dim); }
+.mono { font-family: var(--font-mono); }
+.row { display: flex; align-items: center; gap: var(--space-2); }
+.row-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.spacer { flex: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+button:disabled, input:disabled, select:disabled { cursor: not-allowed; }
+button:disabled { opacity: .55; }

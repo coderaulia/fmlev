@@ -2,16 +2,14 @@
     async function applyGodModeAll() {
       showToast("Preparing pending presets across all entities...", "info");
       const actions = [
-        () => applyPlayerPreset("goat"), applyBothFeetGodMode,
-        () => applyClubPreset("heal_squad"), () => applyClubPreset("morale_squad"),
-        () => applyClubPreset("sugar_daddy"), () => applyClubPreset("max_facilities"),
-        applyInvincibleBoard, () => applyNationPreset("golden_generation"),
-        () => applyCompetitionPreset("relax_rules")
+        ...(state.activePlayer ? [() => applyPlayerPreset("goat"), applyBothFeetGodMode] : []),
+        ...(state.activeClub ? [() => applyClubPreset("heal_squad"), () => applyClubPreset("max_facilities")] : [])
       ];
+      if (!actions.length) { showToast("Select a player or club first", "warning"); return false; }
       for (const action of actions) {
         if (!await action()) return false;
       }
-      showToast("Presets staged. Click Save on each affected tab to apply them.", "info");
+      showToast("Presets staged. Press Save on each affected page to apply them.", "info");
       return true;
     }
 
@@ -22,7 +20,7 @@
       state.activePlayer.positions.right_foot = 20;
       renderPositionsTab();
       state.playerDirtyFields.add("positions");
-      markUnsaved();
+      SaveBar.markDirty("player");
       return true;
     }
 
@@ -44,7 +42,8 @@
       updateDispPercent("disp-board-conf", 100);
       updateDispPercent("disp-retention", 100);
       state.clubDirty = true;
-      showToast("Board changes pending. Click Save on the Club tab.", "info");
+      SaveBar.markDirty("club");
+      showToast("Board changes pending. Press Save on the Club page.", "info");
       return true;
     }
 
@@ -57,7 +56,8 @@
       const tv = document.getElementById("comp-tv-rights");
       if (tv) setMoneyInput(tv, 3000000000);
       state.competitionDirty = true;
-      showToast("Prize changes pending. Click Save on the Competition tab.", "info");
+      SaveBar.markDirty("competition");
+      showToast("Prize changes pending. Press Save on the Competition page.", "info");
       return true;
     }
 
@@ -72,7 +72,8 @@
       updateDisp("disp-nation-corruption", 0);
       updateDisp("disp-nation-importance", 20);
       state.nationDirty = true;
-      showToast("Nation changes pending. Click Save on the Nation tab.", "info");
+      SaveBar.markDirty("nation");
+      showToast("Nation changes pending. Press Save on the Nation page.", "info");
       return true;
     }
 
@@ -81,3 +82,66 @@
       return queuePreset("player", preset);
     }
 
+
+    // ---- Diagnostics page: connection, module bases and loaded modules (read-only) ----
+    // One Load button (SaveBar) re-reads /api/status and /api/maps. There is nothing to save.
+    function diagEscape(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+    }
+    function diagSetText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.innerText = text;
+    }
+    function diagHexSize(start, end) {
+      const a = parseInt(String(start), 16), b = parseInt(String(end), 16);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return "unavailable";
+      const kb = (b - a) / 1024;
+      return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+    }
+    function renderDiagStatus(status) {
+      if (!status) return;
+      diagSetText("diag-exe", status.exe_path || "unavailable");
+      diagSetText("diag-proton", status.attached ? (status.is_proton ? "Steam Proton / Wine" : "Linux native") : "Not attached");
+      diagSetText("diag-prefix", status.wine_prefix || "unavailable");
+      diagSetText("diag-yama", status.yama_diagnostics || "unavailable");
+      const rows = [["GameAssembly", status.game_assembly_base], ["UnityPlayer", status.unity_player_base], ["fm.exe", status.fm_exe_base]];
+      const bases = document.getElementById("diag-bases");
+      if (bases) bases.innerHTML = rows.map(([name, base]) =>
+        `<tr><td>${diagEscape(name)}</td><td class="mono">${base ? diagEscape(base) : "unavailable"}</td></tr>`).join("");
+    }
+    function renderDiagMaps(maps) {
+      const body = document.getElementById("diag-maps");
+      const modules = maps && Array.isArray(maps.modules) ? maps.modules : [];
+      diagSetText("diag-maps-count", maps && maps.total_mappings !== undefined ? `${modules.length} modules / ${maps.total_mappings} mappings` : "-");
+      if (!body) return;
+      body.innerHTML = modules.length ? modules.map(m =>
+        `<tr><td>${diagEscape(m.name)}</td><td class="mono">${diagEscape(m.start)} - ${diagEscape(m.end)}</td><td class="mono">${diagEscape(m.perms)}</td><td class="num">${diagSetSize(m)}</td><td class="mono">${diagEscape(m.path)}</td></tr>`).join("")
+        : `<tr><td colspan="5" class="unverified-note">${diagEscape(maps && maps.message ? maps.message : "No module data. Attach to FM26 first.")}</td></tr>`;
+    }
+    function diagSetSize(m) { return diagEscape(diagHexSize(m.start, m.end)); }
+
+    async function loadDiagnostics() {
+      try {
+        const [statusRes, mapsRes] = await Promise.all([fetch("/api/status"), fetch("/api/maps")]);
+        const status = await statusRes.json();
+        if (!statusRes.ok) return false;
+        renderDiagStatus(status);
+        let maps = null;
+        try { maps = await mapsRes.json(); } catch (error) { maps = null; }
+        renderDiagMaps(mapsRes.ok ? maps : { message: maps && maps.message });
+        return true;
+      } catch (error) {
+        showToast(`Diagnostics could not be read: ${error.message}`, "error");
+        return false;
+      }
+    }
+
+    SaveBar.register("diagnostics", { load: loadDiagnostics });
+
+    // Read the diagnostics once, the first time the page is opened (read-only; the Load button re-reads).
+    let diagnosticsAutoLoaded = false;
+    if (typeof Shell !== "undefined" && Shell.onNavigate) {
+      Shell.onNavigate(tabId => {
+        if (tabId === "tab-status" && !diagnosticsAutoLoaded) { diagnosticsAutoLoaded = true; loadDiagnostics(); }
+      });
+    }

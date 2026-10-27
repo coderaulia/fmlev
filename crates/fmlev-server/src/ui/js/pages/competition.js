@@ -1,126 +1,101 @@
-    // Competition Details Management
-    function handleCompRepChange(val) {
-      state.competitionDirty = true;
-      const num = Math.max(1, Math.min(10000, parseInt(val) || 5000));
-      const repNum = document.getElementById("comp-rep-num");
-      if (repNum) repNum.innerText = `${num.toLocaleString()} / 10,000`;
-      const repStars = document.getElementById("comp-rep-stars");
-      if (repStars) repStars.innerText = getReputationStars(num);
-      if (state.activeCompetition) state.activeCompetition.reputation = num;
+    // Competition reputation is editable; rule and prize support have separate guarded paths.
+    let nativeCompetitionSyncedId = null;
+    let competitionBaseline = null;
+    let competitionRead = null;
+    let competitionReadEpoch = 0;
+    function renderCompetitionValues() {
+      const comp = state.activeCompetition;
+      const value = competitionBaseline?.id === comp?.id ? competitionBaseline.reputation : null;
+      const valid = Number.isInteger(value) && value >= 1 && value <= 10000;
+      const banner = document.getElementById("competition-live-unavailable");
+      if (banner && valid) banner.hidden = true;
+      const input = document.getElementById("comp-reputation");
+      if (input) { input.value = valid ? value : ""; input.disabled = !valid; }
+      const set = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+      set("comp-rep-num", valid ? `${value.toLocaleString()} / 10,000` : "Unavailable");
+      set("comp-rep-stars", valid ? getReputationStars(value) : "—");
+      set("competition-rule-status", "Match and squad rule edits are unavailable here. Registration actions are staged below.");
+      const live = state.liveCompetitions?.[comp?.id];
+      set("competition-info-teams", live?.number_of_teams > 0 ? live.number_of_teams : "Unavailable");
+      set("competition-info-season", live?.season_name || "Unavailable");
     }
-
     function displayCompetition(comp) {
       state.activeCompetition = JSON.parse(JSON.stringify(comp));
-      if (displayEntityAvailability("competition", comp)) return;
-
-      document.getElementById("comp-name").innerText = comp.name || "Competition";
-      document.getElementById("comp-short-name").innerText = comp.short_name || "COMP";
-      document.getElementById("comp-nation").innerText = comp.nation_name || "International";
-
-      document.getElementById("comp-rep-num").innerText = `${(comp.reputation || 8000).toLocaleString()} / 10,000`;
-      document.getElementById("comp-rep-stars").innerText = getReputationStars(comp.reputation || 8000);
-      const compRep = document.getElementById("comp-reputation");
-      if (compRep) compRep.value = comp.reputation || 8000;
-
-      // Financial prizes
-      setMoneyInput(document.getElementById("comp-prize-money"), comp.winner_prize_money ?? 40000000);
-      setMoneyInput(document.getElementById("comp-tv-rights"), comp.tv_rights_pool ?? 2000000000);
-
-      // Match rules
-      document.getElementById("comp-max-subs").value = comp.max_substitutes ?? 5;
-      document.getElementById("comp-bench-size").value = comp.max_bench_size ?? 9;
-      document.getElementById("comp-sub-windows").value = comp.substitution_windows ?? 3;
-      document.getElementById("comp-yellow-ban").value = comp.yellow_cards_for_ban ?? 5;
-
-      const varCheck = document.getElementById("comp-var-active");
-      if (varCheck) {
-        varCheck.checked = comp.var_active !== false;
-        handleVarToggle(varCheck.checked);
-      }
-
-      // Squad rules
-      document.getElementById("comp-squad-size").value = comp.max_squad_size ?? 25;
-      document.getElementById("comp-foreign-limit").value = comp.max_foreign_players ?? 17;
-      document.getElementById("comp-hg-club").value = comp.min_homegrown_club ?? 4;
-      document.getElementById("comp-hg-nation").value = comp.min_homegrown_nation ?? 8;
+      if (!state.connected) competitionBaseline = { ...comp };
+      displayEntityAvailability("competition", comp);
+      const set = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+      set("comp-name", comp.name || "Competition unavailable");
+      set("comp-short-name", comp.short_name || "—");
+      set("comp-nation", comp.nation_name || "Unavailable");
+      if (competitionBaseline?.id === comp.id) state.activeCompetition.reputation = competitionBaseline.reputation;
+      renderCompetitionValues();
+      // A prize baseline is bound to the competition and cannot follow a context switch.
+      if (typeof renderPrizeAvailability === "function") renderPrizeAvailability();
+      Shell.setContext({ section: "competition", kind: "competition", id: comp.id, title: comp.name || "Competition unavailable", subtitle: comp.nation_name || "" });
       refreshPendingActionIndicators();
     }
-
-    function stepCompField(id, delta, min, max) {
-      state.competitionDirty = true;
-      const input = document.getElementById(id);
-      if (!input) return;
-      const current = parseInt(input.value) || 0;
-      const next = Math.max(min, Math.min(max, current + delta));
-      input.value = next;
-    }
-
-    function handleVarToggle(active) {
-      const badge = document.getElementById("comp-var-status");
-      if (!badge) return;
-      if (active) {
-        badge.className = "pill-badge badge-fit";
-        badge.innerText = "🟢 VAR Active";
-      } else {
-        badge.className = "pill-badge badge-injured";
-        badge.innerText = "⚪ VAR Disabled";
-      }
-    }
-
-    async function writeCompetitionChanges() {
-      if (!state.activeCompetition) return false;
-      state.competitionDirty = true;
-
-      const compRepInput = document.getElementById("comp-reputation");
-      if (compRepInput) {
-        state.activeCompetition.reputation = numberInput(compRepInput.value, state.activeCompetition.reputation || 8000);
-      }
-
-      if (!state.connected) {
-        state.activeCompetition.winner_prize_money = readMoneyInput(document.getElementById("comp-prize-money"), 0);
-        state.activeCompetition.tv_rights_pool = readMoneyInput(document.getElementById("comp-tv-rights"), 0);
-
-        state.activeCompetition.max_substitutes = numberInput(document.getElementById("comp-max-subs")?.value, 5);
-        state.activeCompetition.max_bench_size = numberInput(document.getElementById("comp-bench-size")?.value, 9);
-        state.activeCompetition.substitution_windows = numberInput(document.getElementById("comp-sub-windows")?.value, 3);
-        state.activeCompetition.yellow_cards_for_ban = numberInput(document.getElementById("comp-yellow-ban")?.value, 5);
-        const varActive = document.getElementById("comp-var-active");
-        if (varActive) {
-          state.activeCompetition.var_active = varActive.checked;
-        }
-
-        state.activeCompetition.max_squad_size = numberInput(document.getElementById("comp-squad-size")?.value, 25);
-        state.activeCompetition.max_foreign_players = numberInput(document.getElementById("comp-foreign-limit")?.value, 17);
-        state.activeCompetition.min_homegrown_club = numberInput(document.getElementById("comp-hg-club")?.value, 0);
-        state.activeCompetition.min_homegrown_nation = numberInput(document.getElementById("comp-hg-nation")?.value, 0);
-      }
-
-      showToast("Saving competition...", "info");
-      const submittedEntity = JSON.stringify(state.activeCompetition);
-      try {
-        const res = await fetch("/api/competition/update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: submittedEntity
-        });
-        const data = await readJson(res);
-        if (res.ok) {
-          if (JSON.stringify(state.activeCompetition) === submittedEntity) {
-            state.competitionDirty = false;
-            nativeCompetitionSyncedId = null;
-          }
-          showToast(`Saved ${state.activeCompetition.name} native competition values (reputation). Rules and prize money are saved separately.`, "success");
+    async function syncCompetitionNative(id) {
+      if (!state.connected || !id || state.competitionDirty) return false;
+      if (competitionBaseline?.id === id && nativeCompetitionSyncedId === id) return true;
+      if (competitionRead?.id === id) return competitionRead.promise;
+      const epoch = competitionReadEpoch;
+      const promise = (async () => {
+        try {
+          const res = await fetch("/api/competition/native", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ competition_id: id }) });
+          const data = await readJson(res);
+          if (!res.ok || data.competition?.id !== id) throw new Error(data.message || "Native competition read failed");
+          if (state.activeCompetition?.id !== id || state.competitionDirty || epoch !== competitionReadEpoch) return false;
+          competitionBaseline = { ...data.competition };
+          nativeCompetitionSyncedId = id;
+          state.activeCompetition.reputation = data.competition.reputation;
+          renderCompetitionValues();
           return true;
-        } else {
-          showToast(data.message || "Failed to save competition rules", "error");
-        }
-      } catch (e) {
-        showToast("Competition save error: " + e.message, "error");
-      }
-      return false;
+        } catch (error) { nativeCompetitionSyncedId = null; return false; }
+      })();
+      competitionRead = { id, promise };
+      try { return await promise; } finally { if (competitionRead?.promise === promise) competitionRead = null; }
     }
-
-    async function applyCompetitionPreset(preset) {
-      return queuePreset("competition", preset);
+    function handleCompRepChange(value) {
+      state.competitionDirty = true; SaveBar.markDirty("competition");
+      const rep = Number(value), text = document.getElementById("comp-rep-num"), stars = document.getElementById("comp-rep-stars");
+      if (text) text.innerText = Number.isInteger(rep) && rep > 0 && rep <= 10000 ? `${rep.toLocaleString()} / 10,000` : "Unavailable";
+      if (stars) stars.innerText = rep > 0 && rep <= 10000 ? getReputationStars(rep) : "—";
     }
-
+    function competitionFieldChanges() {
+      const input = document.getElementById("comp-reputation");
+      if (!competitionBaseline || !state.activeCompetition || competitionBaseline.id !== state.activeCompetition.id || !input || input.disabled) return [];
+      if (input.value !== "" && Number(input.value) === competitionBaseline.reputation) return [];
+      return [{ label: "Competition reputation", from: competitionBaseline.reputation, to: input.value }];
+    }
+    async function writeCompetitionChanges() {
+      const changes = competitionFieldChanges();
+      if (!changes.length) { state.competitionDirty = false; return true; }
+      const input = document.getElementById("comp-reputation"), value = Number(input.value);
+      if (input.value === "" || !Number.isInteger(value) || value < 1 || value > 10000) throw new Error("Reputation must be a whole number from 1 to 10,000");
+      const id = state.activeCompetition.id, submitted = { ...state.activeCompetition, reputation: value };
+      competitionReadEpoch++;
+      const res = await fetch("/api/competition/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submitted) });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.message || "Competition save failed");
+      if (state.activeCompetition?.id !== id) return false;
+      competitionBaseline.reputation = value;
+      state.activeCompetition.reputation = value;
+      state.competitionDirty = competitionFieldChanges().length > 0;
+      return !state.competitionDirty;
+    }
+    function stageCompetitionRegistration(enabled) {
+      const comp = state.activeCompetition, live = state.liveCompetitions?.[comp?.id];
+      if (!comp || !live?.unique_id) { showToast("Open the competition Rules page in FM26 first", "warning"); return false; }
+      const key = `competition:${comp.id}`;
+      // The latest desired state replaces an older staged registration request.
+      const queue = (pendingActions.get(key) || []).filter(action => action.url !== "/api/competition/registration");
+      if (queue.length) pendingActions.set(key, queue); else pendingActions.delete(key);
+      queuePendingAction("competition", "/api/competition/registration", { comp_index: comp.id, comp_uid: live.unique_id, enabled },
+        enabled ? "Allow registration anytime" : "Restore registration rules");
+      SaveBar.markDirty("competition");
+      return true;
+    }
+    // Kept for legacy callers. Unmapped rules do not acquire a write path through this page.
+    function stepCompField() { showToast("Rule editing is unavailable", "warning"); }
+    function handleVarToggle() {}
+    async function applyCompetitionPreset(preset) { return queuePreset("competition", preset); }

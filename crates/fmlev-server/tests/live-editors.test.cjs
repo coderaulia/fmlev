@@ -41,9 +41,6 @@ test('every live editor endpoint the UI calls exists in the router', () => {
   for (const route of [
     '/api/player/squad-number',
     '/api/player/contract/extend',
-    '/api/player/contract/terminate',
-    '/api/player/loan/terminate',
-    '/api/transfer/move',
     '/api/player/familiarity',
     '/api/club/money',
     '/api/club/native',
@@ -58,9 +55,11 @@ test('every live editor endpoint the UI calls exists in the router', () => {
     assert.ok(html.includes(`"${route}"`), `UI calls ${route}`);
     assert.ok(router.includes(`"${route}"`), `router serves ${route}`);
   }
+  for (const id of ['btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent'])
+    assert.match(html, new RegExp(`id="${id}"[^>]*disabled data-unverified="true"`), 'Unverified transfers remain unavailable');
 });
 
-test('live editor buttons call functions that exist', () => {
+test('live editor actions and shared save adapters call functions that exist', () => {
   for (const fn of [
     'saveSquadNumber',
     'extendContract',
@@ -79,6 +78,16 @@ test('live editor buttons call functions that exist', () => {
     'setRegistration',
   ]) {
     assert.match(html, new RegExp(`function ${fn}\\(`), `${fn} is defined`);
+  }
+  // Player actions are staged; Club writes run through its single shared Save pair.
+  for (const fn of ['signFreeAgent', 'terminateContract', 'terminateLoan', 'movePlayer', 'stageCompetitionRegistration']) {
     assert.match(html, new RegExp(`onclick="${fn}\\(`), `${fn} is wired to a button`);
   }
+  assert.match(html, /onchange="stageSquadNumber\(/);
+  assert.match(html, /onclick="stageContractExtension\(/);
+  assert.match(html, /onclick="stageFamiliarity\(/);
+  assert.match(html, /SaveBar\.register\("club", \{ load: loadClubPage, save: saveClubPage/);
+  assert.match(html, /SaveBar\.register\("nation", \{ load: loadNationPage/);
+  assert.match(html, /SaveBar\.register\("competition", \{ load: loadCompetitionPage/);
+  assert.match(html, /onclick="SaveBar\.save\(\)"/);
 });

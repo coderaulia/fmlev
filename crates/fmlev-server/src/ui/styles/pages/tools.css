@@ -1,0 +1,113 @@
+/* Cheats, settings and diagnostics pages. */
+/* God Mode status notes */
+.god-status {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.god-live {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.god-dev {
+  background: rgba(245, 158, 11, 0.10);
+  color: #fbbf24;
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+}
+
+.god-legend {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Club & Squad God Mode Tab */
+.god-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.god-card {
+  background: #10162a;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: border-color 0.2s;
+}
+
+.god-card:hover {
+  border-color: var(--border-light);
+}
+
+.god-card-title {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.god-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+/* ---- FM26-style cheats, settings and diagnostics ---- */
+.cheat-intro { margin-bottom: 24px; }
+.cheat-intro .panel-body { padding: 20px 24px; }
+.cheat-note { font-size: 12px; color: var(--text-muted); line-height: 1.75; margin-bottom: 10px; }
+.cheat-note:last-child { margin-bottom: 0; }
+.cheat-note .pill { margin-right: 6px; }
+.cheat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.cheat-card { margin-bottom: 0; }
+.cheat-card .panel-head { padding: 16px 20px; flex-wrap: wrap; gap: 10px; line-height: 1.5; }
+.cheat-card .panel-head .pill { max-width: 100%; overflow-wrap: anywhere; }
+.cheat-list { display: flex; flex-direction: column; padding: 0; }
+.cheat-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 136px; align-items: start; gap: 18px;
+  padding: 20px; border-bottom: 1px solid var(--border-color);
+}
+.cheat-row:nth-child(even) { background: var(--bg-row-alt); }
+.cheat-row:last-child { border-bottom: 0; }
+.cheat-info { min-width: 0; }
+.cheat-name { font-weight: 700; font-size: 14px; line-height: 1.5; }
+.cheat-desc { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.65; }
+.cheat-why { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.7; }
+.cheat-why .pill { display: block; width: fit-content; margin-bottom: 8px; }
+.cheat-row .btn { width: 136px; min-height: 36px; margin-top: 2px; white-space: normal; line-height: 1.4; font-size: 12px; }
+body.mode-compact-overlay .cheat-row { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (max-width: 600px) {
+  .cheat-intro .panel-body { padding: 16px; }
+  .cheat-row { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 18px; }
+}
+
+.settings-hint { font-size: var(--fs-xs); color: var(--text-dim); margin-top: 4px; }
+.settings-preview { margin-top: var(--space-3); font-size: var(--fs-sm); color: var(--accent); }
+.band-sample { display: flex; gap: 6px; margin-top: 6px; font-weight: 700; }
+
+.diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: var(--space-3); align-items: start; }
+.diag-grid .panel { margin-bottom: 0; }
+.diag-wide { grid-column: 1 / -1; }
+.diag-table th[scope="row"] { width: 34%; text-align: left; color: var(--text-muted); font-weight: 600; padding: 5px 10px; }
+.diag-table .mono, .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; word-break: break-all; }
+.diag-pre { margin: 0; padding: 10px 14px; font-size: var(--fs-xs); color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
+@media (max-width: 760px) {
+  .cheat-grid, .diag-grid { grid-template-columns: 1fr; }
+}
+
+body.mode-compact-overlay .cheat-grid, body.mode-compact-overlay .diag-grid { grid-template-columns: minmax(0, 1fr); }

@@ -1,21 +1,44 @@
     // ---- Role presets (proposal from the server; staged into the normal player Save) ----
-    const roleState = { roles: [], proposal: null };
+    const roleState = { roles: [], proposal: null, selected: null, dataVerified: false };
     async function loadRoles() {
       try {
         const res = await fetch("/api/roles");
         const data = await res.json();
         if (!res.ok) return;
         roleState.roles = data.roles;
+        roleState.dataVerified = data.role_data_verified === true;
         const badge = document.getElementById("role-data-badge");
         if (badge) badge.innerText = data.role_data_verified ? "Role data: verified" : "Role data: unverified";
         const select = document.getElementById("role-select");
         if (select) {
           const groups = [...new Set(data.roles.map(r => r.group))];
-          select.innerHTML = groups.map(group =>
+          select.innerHTML = '<option value="">Choose role…</option>' + groups.map(group =>
             `<optgroup label="${escapeHtml(group)}">${data.roles.filter(r => r.group === group)
               .map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join("")}</optgroup>`).join("");
         }
+        renderRoleList();
       } catch (error) { /* roles stay unavailable until the server answers */ }
+    }
+    function selectedRole() { return roleState.roles.find(role => role.id === roleState.selected) || null; }
+    function selectRole(id) {
+      roleState.selected = roleState.roles.some(role => role.id === id) ? id : null;
+      const select = document.getElementById("role-select");
+      if (select) select.value = roleState.selected || "";
+      clearRoleProposal();
+      applyRoleHighlight();
+      renderRoleList();
+    }
+    function clearRoleSelection() { selectRole(null); }
+    function renderRoleList() {
+      const list = document.getElementById("role-list");
+      if (!list) return;
+      list.innerHTML = roleState.roles.map(role => {
+        const positions = role.positions || [];
+        const values = positions.map(key => state.activePlayer?.positions?.[key]);
+        const known = values.length && values.every(value => Number.isInteger(value) && value > 0);
+        const rating = known ? `${Math.max(...values)} / 20` : "Unavailable";
+        return `<tr><td><button class="btn btn-sm" data-role="${escapeHtml(role.id)}" onclick="selectRole(this.dataset.role)" aria-pressed="${role.id === roleState.selected}">${escapeHtml(role.name)}</button></td><td>${escapeHtml(role.group)}</td><td>${escapeHtml(positions.join(", ").toUpperCase())}</td><td class="num" title="Native position familiarity, not an FM role suitability calculation">${rating}</td></tr>`;
+      }).join("") || '<tr><td colspan="4">Roles unavailable</td></tr>';
     }
     function clearRoleProposal() {
       roleState.proposal = null;

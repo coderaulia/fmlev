@@ -93,35 +93,6 @@
       const sym = document.getElementById("currency-symbol-label");
       if (sym) sym.innerText = `${cur.code} (${cur.symbol.trim()}) / ${periodLabel(displaySettings.wage_period)}`;
     }
-    function applySettingsToControls() {
-      const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
-      const select = document.getElementById("settings-currency");
-      if (select && select.options.length !== currencyTable.length) {
-        select.innerHTML = currencyTable.map(c => `<option value="${c.code}">${c.code} (${c.symbol.trim()})</option>`).join("");
-      }
-      set("settings-currency", displaySettings.currency);
-      set("settings-measurement", displaySettings.measurement);
-      set("settings-wage-period", displaySettings.wage_period);
-      const cur = currentCurrency();
-      const rate = document.getElementById("settings-rate");
-      if (rate) rate.innerText = `Fixed rate: 1 GBP = ${cur.rate_per_gbp} ${cur.code} (table dated ${ratesDate}, approximate)`;
-      const preview = document.getElementById("settings-preview");
-      if (preview) preview.innerText = `Preview: ${formatMoney(50000000, { compact: true })} budget, ${formatMoney(400000, { kind: "wage" })} wage, 185 cm = ${metersToHeight(185)}, 80 kg = ${formatWeight(80)}`;
-      refreshMoneyLabels();
-    }
-    function applySettingsPayload(data) {
-      displaySettings = data.settings;
-      if (Array.isArray(data.currencies) && data.currencies.length) currencyTable = data.currencies;
-      ratesDate = data.rates_date || "";
-      applySettingsToControls();
-    }
-    async function loadDisplaySettings() {
-      try {
-        const res = await fetch("/api/settings");
-        const data = await res.json();
-        if (res.ok) { applySettingsPayload(data); rebaseMoneyInputs(); }
-      } catch (error) { /* keep GBP/metric defaults when the server cannot be reached */ }
-    }
     // Re-show every money input in the new units without changing the raw value it represents.
     function rebaseMoneyInputs(previous) {
       document.querySelectorAll("input[data-money]").forEach(el => {
@@ -129,22 +100,25 @@
         if (raw !== null && Number.isFinite(raw)) setMoneyInput(el, raw);
       });
     }
-    async function saveDisplaySettings() {
-      const read = id => document.getElementById(id).value;
-      const body = { currency: read("settings-currency"), measurement: read("settings-measurement"), wage_period: read("settings-wage-period") };
-      // Capture what each input means in raw units under the OLD settings before they change.
-      const raws = new Map();
-      document.querySelectorAll("input[data-money]").forEach(el => raws.set(el, readMoneyInput(el, null)));
-      try {
-        const res = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Settings were rejected");
-        applySettingsPayload(data);
-        rebaseMoneyInputs(el => raws.get(el));
-        showToast("Display settings saved.", "success");
-      } catch (error) {
-        applySettingsToControls();
-        showToast(error.message, "error");
-      }
-    }
 
+    // ---- FM 1-20 value bands ----
+    // valueBand(v) returns the CSS class for a rating: band-1-5, band-6-10, band-11-15, band-16-20, or band-none.
+    // Pass `scale` for other ranges (valueBand(150, 200) maps onto 1-20).
+    function valueBand(value, scale = 20) {
+      if (value === null || value === undefined || value === "") return "band-none";
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 1 || n > scale) return "band-none";
+      const v = scale === 20 ? n : (n * 20) / scale;
+      return v <= 5 ? "band-1-5" : v <= 10 ? "band-6-10" : v <= 15 ? "band-11-15" : "band-16-20";
+    }
+    // "fm26" (default) or "legacy" (old red/grey/amber/green four tiers). Only the colours change.
+    let bandScheme = "fm26";
+    function applyBandScheme(name) {
+      bandScheme = name === "legacy" ? "legacy" : "fm26";
+      const body = typeof document !== "undefined" ? document.body : null;
+      if (body) {
+        if (body.dataset) body.dataset.bandScheme = bandScheme;
+        else if (body.setAttribute) body.setAttribute("data-band-scheme", bandScheme);
+      }
+      return bandScheme;
+    }

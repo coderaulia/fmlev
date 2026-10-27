@@ -1,18 +1,18 @@
 
     <!-- VIEW 4: ADVANCED CLUB DETAILS, FACILITIES, BOARD & AFFILIATES -->
-    <section id="tab-club" class="tab-view">
+    <section id="tab-club" class="tab-view club-page">
       <!-- Club Header -->
       <div class="player-header-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(16, 185, 129, 0.35);">
         <div>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <h2 id="club-title" style="font-size: 22px; font-weight: 800;">Manchester City</h2>
-            <span id="club-league-badge" class="pill-badge badge-club">Premier League</span>
-            <span id="save-club-status-indicator" class="pill-badge badge-fit">✅ Synced with FM26</span>
+            <h2 id="club-title" style="font-size: 22px; font-weight: 800;">Select a club</h2>
+            <span id="club-league-badge" class="pill-badge badge-club">—</span>
+            <span id="save-club-status-indicator" class="pill-badge badge-fit">Not loaded</span>
           </div>
           <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap;">
             <span style="font-size: 11px; color: var(--text-muted);">Reputation:</span>
-            <span id="club-rep-num" style="font-weight: 800; color: var(--accent-gold);">9,450 / 10,000</span>
-            <span id="club-rep-stars" class="star-rating">★★★★★</span>
+            <span id="club-rep-num" style="font-weight: 800; color: var(--accent-gold);">Unavailable</span>
+            <span id="club-rep-stars" class="star-rating">—</span>
             <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
               <span style="font-size: 11px; color: var(--text-dim);">Switch Club:</span>
               <select id="club-switcher" class="form-control" style="width: auto; min-width: 170px; padding: 3px 8px; font-size: 11px;" onchange="if (this.value) selectSearchedClub(this.value)">
@@ -32,11 +32,38 @@
         </div>
       </div>
 
+      <div class="card club-overview" id="club-overview-card" data-live-editor="true">
+        <h3>Club information</h3>
+        <dl class="club-info-grid">
+          <div><dt>Club ID</dt><dd id="club-info-id">—</dd></div>
+          <div><dt>Stadium</dt><dd id="club-info-stadium">Unavailable</dd></div>
+          <div><dt>Capacity</dt><dd id="club-info-capacity">Unavailable</dd></div>
+          <div><dt>Expansion capacity</dt><dd id="club-info-expansion">Unavailable</dd></div>
+        </dl>
+        <p class="unverified-note">Unavailable details have no verified value in the current read.</p>
+      </div>
+        <!-- Live native club money (verified fields only) -->
+      <div class="card" id="club-money-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Finances</div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Balance and transfer budget are read and written natively and show after you reopen Club &gt; Finances. Balance survives day ticks; month-end persistence is unconfirmed.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <label class="form-group"><span class="form-label">Overall balance</span>
+            <input id="club-money-balance" disabled aria-label="Overall balance" oninput="SaveBar.markDirty('club')" data-money="money" type="number" class="form-control" placeholder="Balance">
+          </label>
+          <label class="form-group"><span class="form-label">Available transfer budget</span>
+            <input id="club-money-transfer" disabled aria-label="Available transfer budget" oninput="SaveBar.markDirty('club')" data-money="money" type="number" class="form-control" placeholder="Transfer budget">
+          </label>
+        </div>
+        <p class="unverified-note">Use Load from game and Save in the bottom bar. Only edited amounts are sent.</p>
+      </div>
+
       <!-- Left: Financial Budgets & Stadium (Unverified in live session; use Live Club Money card below) -->
       <div class="card" id="club-finances-card" style="margin: 16px 0;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
           <span>💰 Financial Budgets & Stadium</span>
-          <span style="font-size: 11px; color: var(--text-dim);">Live Balance & Capacity</span>
+          <span style="font-size: 11px; color: var(--text-dim);">Offline demo fields</span>
         </div>
 
         <div class="form-group">
@@ -93,70 +120,62 @@
             <input id="club-stadium-exp" type="number" class="form-control" value="62000" oninput="markClubUnsaved()" onchange="autoSaveClub()">
           </div>
         </div>
-
-        <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveClubToGame()">
-          💾 Save Financial Budgets & Stadium
-        </button>
       </div>
 
       <!-- Right: Facilities Matrix (1 - 20) with Stepper Controls -->
       <div class="card" id="club-facilities-card" data-live-editor="true" style="margin: 16px 0;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-          <span>🏗️ Facilities Matrix (1 - 20)</span>
+          <span>Facilities</span>
           <button class="preset-btn" style="padding: 2px 8px; font-size: 10px;" onclick="applyClubPreset('max_facilities')">⭐ Max All (20/20)</button>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Governs squad training quality and attribute growth rates">Training Facilities</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-training', -1)">−</button>
-          <input id="fac-training" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-training-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-training', 1)">+</button>
-          <span id="fac-training-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-training', 'Training Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-training', -1)">−</button>
+          <input id="fac-training" disabled aria-label="Training facilities" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-training', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-training', 1)">+</button>
+          <span id="fac-training-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-training-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-training', 'Training Facilities')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Governs youth training environment and development quality">Youth Facilities</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-youth', -1)">−</button>
-          <input id="fac-youth" type="range" min="1" max="20" value="20" class="facility-slider" oninput="updateFacVal('fac-youth-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-youth', 1)">+</button>
-          <span id="fac-youth-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-youth', 'Youth Facilities')" title="Click to enter 1-20" style="cursor: pointer;">20</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-youth', -1)">−</button>
+          <input id="fac-youth" disabled aria-label="Youth facilities" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-youth', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-youth', 1)">+</button>
+          <span id="fac-youth-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-youth-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-youth', 'Youth Facilities')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Determines youth intake talent pool quality and wonderkid newgen generation">Youth Recruitment</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', -1)">−</button>
-          <input id="fac-recruitment" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-recruitment-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-recruitment', 1)">+</button>
-          <span id="fac-recruitment-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-recruitment', 'Youth Recruitment')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-recruitment', -1)">−</button>
+          <input id="fac-recruitment" disabled aria-label="Youth recruitment" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-recruitment', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-recruitment', 1)">+</button>
+          <span id="fac-recruitment-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-recruitment-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-recruitment', 'Youth Recruitment')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Governs the starting CA and fundamentals of newly generated youth candidates">Junior Coaching</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-coaching', -1)">−</button>
-          <input id="fac-coaching" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-coaching-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-coaching', 1)">+</button>
-          <span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-coaching', -1)">−</button>
+          <input id="fac-coaching" disabled aria-label="Junior coaching" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-coaching', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-coaching', 1)">+</button>
+          <span id="fac-coaching-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-coaching-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-coaching', 'Junior Coaching')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Governs data analysis infrastructure and tactical analytics">Data Analysis Facilities</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', -1)">−</button>
-          <input id="fac-data-analysis" type="range" min="1" max="20" value="18" class="facility-slider" oninput="updateFacVal('fac-data-analysis-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-data-analysis', 1)">+</button>
-          <span id="fac-data-analysis-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-data-analysis', 'Data Analysis Facilities')" title="Click to enter 1-20" style="cursor: pointer;">18</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-data-analysis', -1)">−</button>
+          <input id="fac-data-analysis" disabled aria-label="Data analysis facilities" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-data-analysis', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-data-analysis', 1)">+</button>
+          <span id="fac-data-analysis-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-data-analysis-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-data-analysis', 'Data Analysis Facilities')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
 
         <div class="facility-row">
           <span class="facility-name" title="Governs corporate suites and commercial revenue potential">Corporate Facilities</span>
-          <button class="stepper-btn" onclick="stepClubFac('fac-corporate', -1)">−</button>
-          <input id="fac-corporate" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateFacVal('fac-corporate-disp', this.value); markClubUnsaved();">
-          <button class="stepper-btn" onclick="stepClubFac('fac-corporate', 1)">+</button>
-          <span id="fac-corporate-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-corporate', 'Corporate Facilities')" title="Click to enter 1-20" style="cursor: pointer;">19</span>
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-corporate', -1)">−</button>
+          <input id="fac-corporate" disabled aria-label="Corporate facilities" type="range" min="1" max="20" class="facility-slider" oninput="updateClubFacilityDisplay('fac-corporate', this.value); markClubUnsaved();">
+          <button class="stepper-btn" disabled onclick="stepClubFac('fac-corporate', 1)">+</button>
+          <span id="fac-corporate-stars" class="facility-stars" aria-hidden="true">—</span><span id="fac-corporate-disp" class="facility-val tier-elite" onclick="promptEditClubFac('fac-corporate', 'Corporate Facilities')" title="Click to enter 1-20" style="cursor: pointer;">—</span>
         </div>
-
-        <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveClubToGame()">
-          💾 Save Facilities to Game
-        </button>
       </div>
 
       <!-- Board & Ownership and Affiliated Clubs Manager Grid -->
@@ -215,10 +234,6 @@
             </div>
             <input id="club-transfer-retention" type="range" min="0" max="100" value="100" style="width: 100%; accent-color: var(--accent-gold);" oninput="document.getElementById('disp-retention').innerText = this.value + '%'; markClubUnsaved();" onchange="autoSaveClub()">
           </div>
-
-          <button class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="saveClubToGame()">
-            💾 Save Board & Ownership Settings
-          </button>
         </div>
 
         <!-- Affiliated Clubs Manager -->
@@ -276,20 +291,5 @@
         <button class="btn btn-primary" onclick="switchTab('tab-godmode')">
           ⚡ Open God Mode & Quick Cheats ↗
         </button>
-      </div>
-        <!-- Live native club money (verified fields only) -->
-      <div class="card" id="club-money-card" data-live-editor="true" style="margin-top: 16px;">
-        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">💷 Live Club Money</div>
-        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
-          Balance and transfer budget are read and written natively and show after you reopen Club &gt; Finances. Balance survives day ticks; month-end persistence is unconfirmed.
-        </p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <input id="club-money-balance" data-money="money" type="number" class="form-control" placeholder="Balance">
-          <input id="club-money-transfer" data-money="money" type="number" class="form-control" placeholder="Transfer budget">
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 8px;">
-          <button class="btn" onclick="loadClubMoney()">Load from game</button>
-          <button class="btn btn-emerald" onclick="saveClubMoney()">💾 Save Club Money</button>
-        </div>
       </div>
     </section>

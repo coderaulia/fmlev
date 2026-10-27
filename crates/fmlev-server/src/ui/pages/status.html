@@ -1,31 +1,38 @@
-
     <section id="tab-status" class="tab-view">
-      <div class="card">
-        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 14px;">Game Connection & Linux Diagnostics</h3>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 16px;">
-          <div class="form-group">
-            <label class="form-label">Connection State</label>
-            <div id="diag-conn-state" style="font-weight: 700; color: var(--accent-emerald);">Checking...</div>
+      <div class="diag-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <span>Connection</span>
+            <button class="btn btn-sm btn-primary" onclick="toggleAutoAttach()">Re-scan and attach to FM26</button>
           </div>
-          <div class="form-group">
-            <label class="form-label">FM26 Process PID</label>
-            <div id="diag-pid" style="font-family: monospace; font-weight: 700;">-</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Proton / Wine Runtime</label>
-            <div id="diag-proton" style="font-weight: 700;">Linux Native / Steam Proton</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Active Screen Detection</label>
-            <div id="diag-screen" style="font-weight: 700; color: var(--accent-cyan);">Auto-Following Screen</div>
-          </div>
+          <table class="fm-table diag-table">
+            <tbody>
+              <tr><th scope="row">State</th><td id="diag-conn-state">Checking...</td></tr>
+              <tr><th scope="row">FM26 process PID</th><td id="diag-pid" class="mono">-</td></tr>
+              <tr><th scope="row">Executable</th><td id="diag-exe" class="mono">-</td></tr>
+              <tr><th scope="row">Runtime</th><td id="diag-proton">Not read yet.</td></tr>
+              <tr><th scope="row">Wine prefix</th><td id="diag-prefix" class="mono">-</td></tr>
+              <tr><th scope="row">Screen detection</th><td id="diag-screen">Auto-following screen</td></tr>
+            </tbody>
+          </table>
         </div>
-
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-primary" onclick="toggleAutoAttach()">
-            🔄 Re-scan & Attach to FM26
-          </button>
+        <div class="panel">
+          <div class="panel-head"><span>Module bases</span></div>
+          <table class="fm-table diag-table">
+            <thead><tr><th>Module</th><th>Base address</th></tr></thead>
+            <tbody id="diag-bases"><tr><td colspan="2" class="unverified-note">Not read yet.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="panel diag-wide">
+          <div class="panel-head"><span>Loaded modules</span><span id="diag-maps-count" class="pill">-</span></div>
+          <table class="fm-table diag-table">
+            <thead><tr><th>Module</th><th>Range</th><th>Perms</th><th class="num">Size</th><th>Path</th></tr></thead>
+            <tbody id="diag-maps"><tr><td colspan="5" class="unverified-note">Not read yet.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="panel diag-wide">
+          <div class="panel-head"><span>Diagnostics text</span></div>
+          <pre id="diag-yama" class="diag-pre">-</pre>
         </div>
       </div>
     </section>

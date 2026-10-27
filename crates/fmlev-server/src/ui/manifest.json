@@ -1,6 +1,13 @@
 {
   "styles": [
-    "styles/app.css"
+    "styles/tokens.css",
+    "styles/base.css",
+    "styles/components.css",
+    "styles/shell.css",
+    "styles/pages/player.css",
+    "styles/pages/staff.css",
+    "styles/pages/club.css",
+    "styles/pages/tools.css"
   ],
   "pages": [
     "pages/player.html",
@@ -16,29 +23,34 @@
   ],
   "scripts": [
     "js/core/helpers.js",
+    "js/core/http.js",
+    "js/core/format.js",
+    "js/core/state.js",
+    "js/core/shell.js",
+    "js/core/savebar.js",
+    "js/core/app.js",
+    "js/core/sync.js",
+    "js/core/pin-attach.js",
+    "js/core/search.js",
+    "js/core/input-guard.js",
+    "js/core/tools.js",
     "js/pages/staff.js",
     "js/pages/eligibility.js",
     "js/pages/role-presets.js",
-    "js/core/format.js",
-    "js/core/state.js",
-    "js/core/app.js",
     "js/pages/attributes.js",
-    "js/core/sync.js",
     "js/pages/player.js",
     "js/pages/club.js",
     "js/pages/player-actions.js",
     "js/pages/player-ca.js",
-    "js/core/pin-attach.js",
     "js/pages/player-save.js",
     "js/pages/godmode.js",
     "js/pages/contract.js",
     "js/pages/positions.js",
     "js/pages/club-edit.js",
+    "js/pages/club-money.js",
     "js/pages/nation.js",
     "js/pages/competition.js",
-    "js/core/search.js",
-    "js/core/input-guard.js",
-    "js/core/tools.js",
-    "js/core/http.js"
+    "js/pages/competition-prizes.js",
+    "js/pages/settings.js"
   ]
 }

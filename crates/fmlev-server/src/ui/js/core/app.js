@@ -6,6 +6,7 @@
         setOverlayMode(true);
       }
 
+      Shell.init();
       buildAttributeLists();
       loadDisplaySettings();
       loadRoles();
@@ -34,27 +35,22 @@
       state.isOverlayMode = enable;
       if (enable) {
         document.body.classList.add("mode-compact-overlay");
-        document.getElementById("overlay-mode-btn").innerText = "🖥️ Full Editor";
+        setText("overlay-mode-btn", "Full Editor");
         showToast("Switched to Compact In-Game Overlay HUD", "info");
       } else {
         document.body.classList.remove("mode-compact-overlay");
-        document.getElementById("overlay-mode-btn").innerText = "📱 Compact Overlay";
+        setText("overlay-mode-btn", "Compact Overlay");
         showToast("Switched to Full Live Editor", "info");
       }
+      Shell.render();
     }
 
-    // Tab Navigation
-    function switchTab(tabId) {
-      document.querySelectorAll(".tab-view").forEach(el => el.classList.remove("active"));
-      document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
-
-      const target = document.getElementById(tabId);
-      if (target) target.classList.add("active");
-
-      const buttons = Array.from(document.querySelectorAll(".tab-btn"));
-      const btn = buttons.find(b => b.getAttribute("onclick")?.includes(tabId));
-      if (btn) btn.classList.add("active");
+    function setText(id, text) {
+      const node = document.getElementById(id);
+      if (node) node.innerText = text;
     }
+
+    // Tab navigation lives in js/core/shell.js (switchTab / Shell.navigate).
 
     const allAttrKeys = [
       ...techAttrs,

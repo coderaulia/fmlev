@@ -1,6 +1,16 @@
 # Plan: open the FMLE web UI over the running game (no alt-tab)
 
-Status: plan only, nothing implemented. Target: Linux, FM26 under Proton, fmlev server on `127.0.0.1:41789`.
+## Compact UI completed — 2026-10-27
+
+The browser's `?mode=overlay` layout now retains horizontal navigation, stacks editor and
+Quick Action cards, wraps the save bar, uses 12–16px content padding and larger buttons,
+and respects reduced motion. Cheats use one column with separated status notes and action
+buttons. This is a separate browser window or Steam browser page; global hotkeys,
+always-on-top integration and layer-shell hosting below remain future work.
+See [UI architecture](UI_ARCHITECTURE.md) for the implemented UI contract.
+
+
+Status: compact web layout implemented; native window/global-hotkey integration remains a plan. Target: Linux, FM26 under Proton, fmlev server on `127.0.0.1:41789`.
 Current state: `fmlev overlay` opens `?mode=overlay` in a Chromium-family app window (`crates/fmlev-overlay/src/launcher.rs`); it is a normal window, so it needs alt-tab.
 
 ## Constraints

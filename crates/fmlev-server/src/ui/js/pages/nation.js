@@ -1,191 +1,160 @@
-    // Nation Details Management
+    // Nation controls use native baselines. A missing value never becomes an editable default.
+    const NATION_FIELDS = [
+      ["nation-youth-slider", "youth_rating", "Youth rating", 1, 200],
+      ["nation-reputation", "reputation", "International reputation", 1, 10000],
+      ["nation-economic", "economic_factor", "Economic factor", 1, 20],
+      ["nation-development", "state_of_development", "Development code", 0, 2],
+    ];
+    let nativeNationSyncedId = null;
+    let nationBaseline = null;
+    let nationRead = null;
+    let nationReadEpoch = 0;
+
+    function renderNationValues() {
+      const nation = state.activeNation;
+      const base = nationBaseline?.id === nation?.id ? nationBaseline : null;
+      const banner = document.getElementById("nation-live-unavailable");
+      if (banner && base) banner.hidden = true;
+      for (const [id, field, label, min, max] of NATION_FIELDS) {
+        const input = document.getElementById(id);
+        const value = base?.[field];
+        const valid = Number.isInteger(value) && value >= min && value <= max;
+        if (input) {
+          input.disabled = !valid;
+          input.value = valid ? value : "";
+          input.title = valid ? label : "Native value unavailable. Use Load from game to retry.";
+          for (const button of input.parentElement?.querySelectorAll?.("button") || []) button.disabled = !valid;
+        }
+      }
+      const text = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+      const rep = base?.reputation;
+      text("nation-rep-num", rep > 0 ? `${rep.toLocaleString()} / 10,000` : "Unavailable");
+      text("nation-rep-stars", rep > 0 ? getReputationStars(rep) : "—");
+      updateYouthRatingDisplay(base?.youth_rating);
+      setNationStatUI("nation-economic", "disp-nation-econ", base?.economic_factor);
+      const population = document.getElementById("nation-population");
+      if (population) { population.value = nation?.population > 0 ? nation.population : ""; population.disabled = true; }
+    }
+
     function displayNation(nation) {
       state.activeNation = JSON.parse(JSON.stringify(nation));
-      if (displayEntityAvailability("nation", nation)) return;
-
-      document.getElementById("nation-name").innerText = nation.name || "Nation";
-      document.getElementById("nation-code").innerText = nation.three_letter_code || "NAT";
-      document.getElementById("nation-continent").innerText = nation.continent || "Continent";
-      document.getElementById("nation-flag-avatar").innerText = getCountryFlag(nation.name);
-
-      document.getElementById("nation-rep-num").innerText = `${(nation.reputation || 7500).toLocaleString()} / 10,000`;
-      document.getElementById("nation-rep-stars").innerText = getReputationStars(nation.reputation || 7500);
-
-      // Youth Rating Slider & Gauge
-      const yr = nation.youth_rating ?? 120;
-      document.getElementById("nation-youth-val").innerText = yr;
-      document.getElementById("nation-youth-slider").value = yr;
-      updateYouthRatingDisplay(yr);
-
-      // Macro & Governance
-      document.getElementById("nation-reputation").value = nation.reputation ?? 7500;
-      document.getElementById("nation-development").value = nation.state_of_development ?? 2;
-
-      setNationStatUI("nation-economic", "disp-nation-econ", nation.economic_factor ?? 15);
-      setNationStatUI("nation-fa-power", "disp-nation-fa", nation.fa_financial_power ?? 15);
-
-      const tax = nation.tax_rate ?? 25;
-      document.getElementById("nation-tax-rate").value = tax;
-      document.getElementById("disp-nation-tax").innerText = `${tax}%`;
-
-      if (document.getElementById("nation-population")) {
-        document.getElementById("nation-population").value = nation.population ?? 50000000;
-      }
-
-      setNationStatUI("nation-corruption", "disp-nation-corruption", nation.corruption_index ?? 2);
-      setNationStatUI("nation-game-importance", "disp-nation-importance", nation.game_importance ?? 18);
-
-      // Infrastructure Averages
-      setNationStatUI("nation-fac-avg", "disp-nation-fac-avg", nation.youth_facilities_avg ?? 15);
-      setNationStatUI("nation-coaching-avg", "disp-nation-coaching-avg", nation.youth_coaching_avg ?? 15);
-      setNationStatUI("nation-rec-avg", "disp-nation-rec-avg", nation.youth_recruitment_avg ?? 15);
-
-      // Update God Mode Target Badge
-      const godNationTarget = document.getElementById("god-nation-target");
-      if (godNationTarget) godNationTarget.innerText = `Target: ${nation.name || "Active Nation"}`;
+      if (!state.connected) nationBaseline = { ...nation };
+      displayEntityAvailability("nation", nation);
+      const set = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+      set("nation-name", nation.name || "Nation unavailable");
+      set("nation-code", nation.three_letter_code || "—");
+      set("nation-continent", nation.continent || "Unavailable");
+      set("nation-flag-avatar", getCountryFlag(nation.name));
+      if (nationBaseline?.id === nation.id) for (const [, field] of NATION_FIELDS) state.activeNation[field] = nationBaseline[field];
+      renderNationValues();
+      Shell.setContext({ section: "nation", kind: "nation", id: nation.id, title: nation.name || "Nation unavailable", subtitle: nation.continent || "" });
       refreshPendingActionIndicators();
     }
 
-    function setNationStatUI(sliderId, dispId, val) {
-      const s = document.getElementById(sliderId);
-      const d = document.getElementById(dispId);
-      if (s) s.value = val;
-      if (d) {
-        d.innerText = val;
-        d.className = `facility-val ${getTierClass(val)}`;
-      }
-    }
-
-    function handleYouthRatingInput(val) {
-      state.nationDirty = true;
-      const yr = Math.max(1, Math.min(200, parseInt(val) || 1));
-      document.getElementById("nation-youth-val").innerText = yr;
-      updateYouthRatingDisplay(yr);
-      if (state.activeNation) state.activeNation.youth_rating = yr;
-    }
-
-    function updateYouthRatingDisplay(yr) {
-      const pct = (yr / 200) * 100;
-      const fill = document.getElementById("nation-youth-gauge-fill");
-      if (fill) fill.style.width = `${pct}%`;
-
-      const badge = document.getElementById("nation-youth-tier");
-      if (!badge) return;
-
-      if (yr >= 176) {
-        badge.className = "rating-tier-badge tier-wonderkid";
-        badge.innerText = "Tier 1: Wonderkid Hotbed / World Dominance 🌟";
-      } else if (yr >= 146) {
-        badge.className = "rating-tier-badge tier-elite";
-        badge.innerText = "Tier 2: Elite Football Power ⚡";
-      } else if (yr >= 111) {
-        badge.className = "rating-tier-badge tier-good";
-        badge.innerText = "Tier 3: Established Talent Pool 🏆";
-      } else if (yr >= 61) {
-        badge.className = "rating-tier-badge tier-avg";
-        badge.innerText = "Tier 4: Developing / Modest ⚽";
-      } else {
-        badge.className = "rating-tier-badge tier-low";
-        badge.innerText = "Tier 5: Obscure / Grassroots 🌱";
-      }
-    }
-
-    function stepNationStat(key, delta) {
-      state.nationDirty = true;
-      if (!state.activeNation) return;
-      const current = state.activeNation[key] ?? 10;
-      const maxVal = key === "youth_rating" ? 200 : (key === "tax_rate" ? 100 : 20);
-      const minVal = key === "corruption_index" || key === "tax_rate" ? 0 : 1;
-      const next = Math.max(minVal, Math.min(maxVal, current + delta));
-      state.activeNation[key] = next;
-
-      if (key === "youth_rating") {
-        document.getElementById("nation-youth-slider").value = next;
-        handleYouthRatingInput(next);
-      } else if (key === "tax_rate") {
-        document.getElementById("nation-tax-rate").value = next;
-        document.getElementById("disp-nation-tax").innerText = `${next}%`;
-      } else {
-        const idMap = {
-          economic_factor: ["nation-economic", "disp-nation-econ"],
-          fa_financial_power: ["nation-fa-power", "disp-nation-fa"],
-          corruption_index: ["nation-corruption", "disp-nation-corruption"],
-          game_importance: ["nation-game-importance", "disp-nation-importance"],
-          youth_facilities_avg: ["nation-fac-avg", "disp-nation-fac-avg"],
-          youth_coaching_avg: ["nation-coaching-avg", "disp-nation-coaching-avg"],
-          youth_recruitment_avg: ["nation-rec-avg", "disp-nation-rec-avg"]
-        };
-        const mapping = idMap[key];
-        if (mapping) {
-          setNationStatUI(mapping[0], mapping[1], next);
-        }
-      }
-    }
-
-    function handleNationRepChange(val) {
-      state.nationDirty = true;
-      const parsedRep = parseInt(val);
-      if (!Number.isFinite(parsedRep)) return;
-      const num = Math.max(1, Math.min(10000, parsedRep));
-      document.getElementById("nation-rep-num").innerText = `${num.toLocaleString()} / 10,000`;
-      document.getElementById("nation-rep-stars").innerText = getReputationStars(num);
-      if (state.activeNation) state.activeNation.reputation = num;
-    }
-
-    function debouncedSaveNation() {
-      state.nationDirty = true;
-    }
-
-    async function writeNationChanges(isQuiet = false) {
-      if (!state.activeNation) return false;
-      state.nationDirty = true;
-
-      if (state.connected) {
-        state.activeNation.reputation = numberInput(document.getElementById("nation-reputation")?.value, state.activeNation.reputation || 7500);
-        state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, state.activeNation.youth_rating || 120);
-        state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, state.activeNation.state_of_development ?? 2);
-        state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, state.activeNation.economic_factor || 15);
-        state.activeNation.population = numberInput(document.getElementById("nation-population")?.value, state.activeNation.population || 50000000);
-      } else {
-        state.activeNation.reputation = numberInput(document.getElementById("nation-reputation")?.value, 7500);
-        state.activeNation.youth_rating = numberInput(document.getElementById("nation-youth-slider")?.value, 120);
-        state.activeNation.state_of_development = numberInput(document.getElementById("nation-development")?.value, 2);
-        state.activeNation.economic_factor = numberInput(document.getElementById("nation-economic")?.value, 15);
-        state.activeNation.population = numberInput(document.getElementById("nation-population")?.value, 50000000);
-        state.activeNation.fa_financial_power = numberInput(document.getElementById("nation-fa-power")?.value, 15);
-        state.activeNation.tax_rate = numberInput(document.getElementById("nation-tax-rate")?.value, 25);
-        state.activeNation.corruption_index = numberInput(document.getElementById("nation-corruption")?.value, 2);
-        state.activeNation.game_importance = numberInput(document.getElementById("nation-game-importance")?.value, 18);
-        state.activeNation.youth_facilities_avg = numberInput(document.getElementById("nation-fac-avg")?.value, 15);
-        state.activeNation.youth_coaching_avg = numberInput(document.getElementById("nation-coaching-avg")?.value, 15);
-        state.activeNation.youth_recruitment_avg = numberInput((document.getElementById("nation-recruitment-avg") || document.getElementById("nation-rec-avg"))?.value, 15);
-      }
-
-      const submittedEntity = JSON.stringify(state.activeNation);
-      try {
-        const res = await fetch("/api/nation/update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: submittedEntity
-        });
-        const data = await readJson(res);
-        if (res.ok) {
-          if (JSON.stringify(state.activeNation) === submittedEntity) {
-            state.nationDirty = false;
-            nativeNationSyncedId = null;
-          }
-          if (!isQuiet) showToast(`Saved ${state.activeNation.name}: youth rating, reputation, economic factor, development and population are written natively; governance fields are not live-writable.`, "success");
+    async function syncNationNative(id) {
+      if (!state.connected || !id || state.nationDirty) return false;
+      if (nationBaseline?.id === id && nativeNationSyncedId === id) return true;
+      if (nationRead?.id === id) return nationRead.promise;
+      const epoch = nationReadEpoch;
+      const promise = (async () => {
+        try {
+          const res = await fetch("/api/nation/native", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nation_id: id }) });
+          const data = await readJson(res);
+          if (!res.ok) throw new Error(data.message || "Native nation read failed");
+          if (state.activeNation?.id !== id || state.nationDirty || epoch !== nationReadEpoch) return false;
+          if (data.nation?.id !== id) throw new Error("Native nation identity did not match");
+          nationBaseline = { ...data.nation };
+          nativeNationSyncedId = id;
+          for (const [, field] of NATION_FIELDS) state.activeNation[field] = data.nation[field];
+          renderNationValues();
           return true;
-        } else {
-          showToast(data.message || "Failed to save nation", "error");
-        }
-      } catch (e) {
-        showToast("Nation save error: " + e.message, "error");
+        } catch (error) { nativeNationSyncedId = null; return false; }
+      })();
+      nationRead = { id, promise };
+      try { return await promise; } finally { if (nationRead?.promise === promise) nationRead = null; }
+    }
+
+    function setNationStatUI(id, dispId, value) {
+      const valid = Number.isInteger(value) && value >= 1 && value <= 20;
+      const input = document.getElementById(id), display = document.getElementById(dispId);
+      if (input) input.value = valid ? value : "";
+      if (display) { display.innerText = valid ? String(value) : "—"; display.className = `facility-val ${valueBand(value)}`; }
+    }
+    function markNationDirty() { state.nationDirty = true; SaveBar.markDirty("nation"); }
+    function debouncedSaveNation() { markNationDirty(); }
+    function handleYouthRatingInput(value) { markNationDirty(); updateYouthRatingDisplay(Number(value)); }
+    function handleNationRepChange(value) {
+      markNationDirty();
+      const rep = Number(value);
+      const text = document.getElementById("nation-rep-num"), stars = document.getElementById("nation-rep-stars");
+      if (text) text.innerText = Number.isInteger(rep) && rep > 0 && rep <= 10000 ? `${rep.toLocaleString()} / 10,000` : "Unavailable";
+      if (stars) stars.innerText = rep > 0 && rep <= 10000 ? getReputationStars(rep) : "—";
+    }
+    function updateYouthRatingDisplay(value) {
+      const valid = Number.isInteger(value) && value >= 1 && value <= 200;
+      const display = document.getElementById("nation-youth-val"), fill = document.getElementById("nation-youth-gauge-fill"), badge = document.getElementById("nation-youth-tier");
+      if (display) { display.innerText = valid ? String(value) : "—"; display.className = valueBand(valid ? value : null, 200); }
+      if (fill) fill.style.width = valid ? `${value / 2}%` : "0%";
+      if (badge) badge.innerText = valid ? "Native rating · 1–200" : "Native value unavailable";
+    }
+    function stepNationStat(key, delta) {
+      const field = NATION_FIELDS.find(([, name]) => name === key);
+      if (!field) return;
+      const [id, , , min, max] = field;
+      const input = document.getElementById(id);
+      if (!input || input.disabled || input.value === "") return;
+      input.value = Math.max(min, Math.min(max, Number(input.value) + delta));
+      markNationDirty();
+      if (key === "youth_rating") updateYouthRatingDisplay(Number(input.value));
+      if (key === "economic_factor") setNationStatUI(id, "disp-nation-econ", Number(input.value));
+    }
+    function nationFieldChanges() {
+      if (!nationBaseline || !state.activeNation || nationBaseline.id !== state.activeNation.id) return [];
+      return NATION_FIELDS.flatMap(([id, field, label]) => {
+        const input = document.getElementById(id);
+        if (!input || input.disabled || Number(input.value) === nationBaseline[field] && input.value !== "") return [];
+        return [{ label, field, from: nationBaseline[field], to: input.value }];
+      });
+    }
+    function nationPageChanges() {
+      const changes = nationFieldChanges();
+      for (const action of pendingActions.get(`nation:${state.activeNation?.id}`) || []) changes.push({ label: action.label });
+      return changes;
+    }
+    async function writeNationChanges() {
+      if (!state.activeNation || nationBaseline?.id !== state.activeNation.id) return false;
+      const changes = nationFieldChanges();
+      if (!changes.length) { state.nationDirty = false; return true; }
+      const id = state.activeNation.id, submitted = { ...state.activeNation };
+      nationReadEpoch++;
+      for (const change of changes) {
+        const [, , label, min, max] = NATION_FIELDS.find(([, name]) => name === change.field);
+        const value = Number(change.to);
+        if (change.to === "" || !Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be a whole number from ${min} to ${max}`);
+        submitted[change.field] = value;
       }
-      return false;
+      const res = await fetch("/api/nation/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submitted) });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.message || "Nation save failed");
+      if (state.activeNation?.id !== id) return false;
+      for (const change of changes) nationBaseline[change.field] = submitted[change.field];
+      Object.assign(state.activeNation, submitted);
+      state.nationDirty = nationFieldChanges().length > 0;
+      return !state.nationDirty;
     }
-
-    async function applyNationPreset(preset) {
-      return queuePreset("nation", preset);
+    async function loadNationPage() {
+      const id = state.activeNation?.id;
+      if (!id) throw new Error("Select a nation first");
+      const epoch = ++nationReadEpoch;
+      const res = await fetch(state.connected ? "/api/nation/native" : "/api/context/select", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nation_id: id }) });
+      const data = await readJson(res), nation = data.nation || data.active_nation;
+      if (!res.ok) throw new Error(data.message || "Nation load failed");
+      if (state.activeNation?.id !== id || nation?.id !== id || epoch !== nationReadEpoch) throw new Error("Nation changed while loading; retry for the selected nation");
+      nationBaseline = { ...nation }; nativeNationSyncedId = id;
+      state.nationDirty = false;
+      pendingActions.delete(`nation:${id}`);
+      displayNation(nation);
+      return true;
     }
-
+    async function applyNationPreset(preset) { return queuePreset("nation", preset); }
+    SaveBar.register("nation", { load: loadNationPage, discard: loadNationPage, save: () => saveNationToGame(), changes: nationPageChanges });

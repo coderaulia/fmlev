@@ -1,5 +1,15 @@
 # Plan: Staff editor, player/nation enhancements and display settings
 
+## Current UI status — 2026-10-27
+
+The FM26-style frontend work is implemented and integrated; see [UI_PLAN](docs/UI_PLAN.md)
+and [UI_ARCHITECTURE](docs/UI_ARCHITECTURE.md) for current behavior. The old `ui.html`
+references below describe the original plan; sources now live in the manifest-driven
+`crates/fmlev-server/src/ui/` tree. Staff has four ability views; unsupported tab content
+stays unavailable rather than showing editable fixtures. All writes require explicit Save.
+Native evidence gaps in this historical roadmap remain separate from UI completion.
+
+
 Status (2026-10-27): A (settings), B (role presets) and D (read-only registration doctor) implemented. B still needs the in-game proof and an FM26 role-list check. C: discovery logged in `AGENTS.md`, waiting for screen comparison. E: PPM bitset found, bit-to-move table incomplete. F: staff reads done (22 attributes, read-only Staff tab); contracts, career plans, relationships, knowledge, formations/tendencies and all writes not started.
 Date: 2026-10-26.
 Scope: six workstreams (A–F below). Each one is shippable on its own and gets its own phase commit.

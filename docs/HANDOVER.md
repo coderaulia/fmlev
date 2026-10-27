@@ -1,5 +1,18 @@
 # FMLE Handover
 
+## Current UI handover — 2026-10-27
+
+U0–U6 of [UI_PLAN.md](UI_PLAN.md) are integrated. Sources live under
+`crates/fmlev-server/src/ui/`; edit the manifest files rather than a generated HTML asset.
+The shared bar owns Load/Review/Save/Discard, including staged player and registration
+actions. Compact navigation, card spacing, keyboard editing, role highlighting and all
+inline handlers are checked. Staff has four ability views and explicit experimental edits.
+Unverified transfers/cheats and Nation population writes are unavailable in the UI.
+The historical native capability list below is not a claim that those UI controls are enabled.
+Current architecture: [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md). README has two labeled demo
+screenshots because FM26 was closed during final capture. No new game-write evidence.
+
+
 ## State (Completed 2026-10-25)
 
 Verified in game and shipped in Rust production runtime (`fmlev-core` + `fmlev-server` + `ui.html`):

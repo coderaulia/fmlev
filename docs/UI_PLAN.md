@@ -1,6 +1,25 @@
 # UI Plan: an FM26-style, easier editor
 
-Status: in progress (2026-10-27). Step 1 done: `ui.html` split into `crates/fmlev-server/src/ui/` (byte-identical rebuild).
+Status: implemented and integrated (2026-10-27), U0–U6. Native persistence gaps remain
+explicitly unavailable or experimental; this work adds no native offsets or new write capability.
+
+## Completion and verification
+
+- FM26-style tokens, sidebar/history, filtered global search, Player sub-tabs, four Staff ability views,
+  Club/Nation/Competition editors, Settings and read-only Diagnostics use the manifest bundle.
+- One shared Load/Review/Save/Discard bar. Squad number, contract extension, familiarity and registration
+  actions stage identity-bound requests; no field change or action draft writes before Save.
+- The integration audit fixed missing action/role/release-clause handlers, profile facts, goalkeeper
+  attribute layout, stale Player Save callback, contract gates, draft loss on screen changes and save races.
+- U6: compact navigation remains available, controls/save actions wrap, text contrast meets 4.5:1,
+  reduced motion is respected, keyboard editing works, and all editors use consistent card spacing.
+- User spacing follow-ups: Cheats use two balanced columns, padded rows, separated status labels and
+  aligned action buttons; Quick Actions group Presets, Squad Number, Contract and Familiarity into cards.
+  Overlay mode stacks these groups, keeps 12–16px content padding and 36px primary control targets.
+- Verification: 124 Node tests, workspace compile, 153 Rust tests (1 ignored) and 58 C++ synthetic tests. Browser review covers desktop and
+  compact Player/Quick Actions/Cheats plus other editor navigation. The two README screenshots are
+  explicitly demo captures (FM26 was closed); no live writes or new persistence claims were made.
+
 Reference: FM26 player profile (Federico Chiesa) and club profile (Juventus) screenshots from the user's game.
 
 ## 1. Goals
@@ -12,8 +31,7 @@ Reference: FM26 player profile (Federico Chiesa) and club profile (Juventus) scr
 3. **No change to the safety rules.** Native writes stay transactional, unverified fields stay
    disabled with a reason, and an untouched control never writes (the Phase 11 rule).
 
-Constraints: `ui.html` stays a single embedded file with plain HTML/CSS/JS (no build pipeline, per
-`AGENTS.md` rule 1). Existing element IDs and function names that the Node tests use are kept, or the
+Constraints: the manifest sources assemble into one embedded HTML response with plain HTML/CSS/JS (no frontend build pipeline, per `AGENTS.md` rule 1). Existing element IDs and function names that the Node tests use are kept, or the
 tests are updated in the same commit.
 
 ## 2. What FM26 does that we copy
@@ -40,8 +58,7 @@ neutral silhouette), live match/news content.
 - **Click a value to edit it.** Values look like FM's read-only numbers until clicked; then an inline
   1–20 stepper (or the right input) appears. Escape cancels, Enter keeps the edit.
 - **One save bar.** A sticky bar at the bottom: "3 unsaved changes · Review · Save · Discard". Review
-  opens a diff (field, old → new), the same pattern as Role Presets. Replaces scattered Save buttons and
-  the autosave-on-change behaviour, which is easy to trigger by accident.
+  opens a diff (field, old → new), the same pattern as Role Presets. Replaces scattered Save buttons. Every edit remains pending until explicit Save.
 - **Status everywhere, one style.** Every editable value carries one of three marks: verified (no mark),
   experimental (small amber dot, opt-in), unavailable (greyed, tooltip says why). The "unavailable"
   banners per card go away.
@@ -57,7 +74,7 @@ Each phase is one commit with its tests, as the other phases in `AGENTS.md`.
 | U0 | Design tokens | FM26 palette (navy surfaces, teal accent, FM value colour bands), type scale, spacing; light theme dropped or kept as an option | Node: tokens defined, both value bands map 1–20 |
 | U1 | App shell | Sidebar, context header with history, sub-tab row, global search; old tabs mapped into the new structure | Node: navigation reaches every former tab; search result opens the right page |
 | U2 | Player page | Profile card + three-column attribute table + Positions/Roles + Contract + Registration Doctor as sub-tabs | Node: all existing save tests pass with the new markup; untouched cells never write |
-| U3 | Save bar | Unified pending changes, review diff, save/discard, `Ctrl+S`; remove autosave-on-change | Node: one save request per entity, only changed fields, discard restores values |
+| U3 | Save bar | Unified pending changes, review diff, save/discard, `Ctrl+S`; remove autosave-on-change | Node: only changed requests per entity, only changed fields, discard restores values |
 | U4 | Staff page | Preferred jobs, Head Coach/Coaching/Scouting/Medical tabs, label + number, experimental edit through the save bar | Node: labels match the 1–20 bands; edits go through the experimental gate |
 | U5 | Club, nation, competition pages | Info grid, facility stars, finance box, nation rules card, competition rules and prizes | Node: live-editor gating and changed-fields rules still hold |
 | U6 | Polish | Keyboard, focus states, contrast check, compact overlay mode on the new shell, narrow-window layout | Node + manual check in the browser pane at overlay and desktop widths |
@@ -80,10 +97,8 @@ Each phase is one commit with its tests, as the other phases in `AGENTS.md`.
   `src/ui/js/pages/*.js` (one per page). Scripts are classic scripts concatenated in manifest order.
 - `tests/helpers/ui.cjs` assembles the same document for the Node tests.
 
-## 6. Risks
+## 6. Ongoing risks
 
-- `ui.html` is 6,000+ lines; restructuring it in place risks breaking hidden handlers. Mitigation: move
-  one page per phase and keep the old section until its tests pass on the new one.
-- The Node tests pin some markup. Mitigation: update them in the same commit and add page-level tests.
-- No in-browser automated check today. Mitigation: each phase is reviewed in the Claude browser pane at
-  desktop and overlay widths before commit.
+- The assembled asset is large; edit the focused manifest sources, never an assembled copy.
+- Classic scripts share globals. The handler audit checks every static inline callback and unique element ID.
+- DOM tests do not replace browser layout checks or native simulation evidence. Keep those claims separate.

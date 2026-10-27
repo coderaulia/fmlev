@@ -1,6 +1,7 @@
     // Club & Squad Management
     function markClubUnsaved() {
       state.clubDirty = true;
+      SaveBar.markDirty("club");
     }
 
     function autoSaveClub() {
@@ -15,7 +16,7 @@
       if (input !== null) {
         const val = Math.max(1, Math.min(20, parseInt(input) || current));
         slider.value = val;
-        updateFacVal(`${sliderId}-disp`, val);
+        updateClubFacilityDisplay(sliderId, val);
         markClubUnsaved();
       }
     }
@@ -38,16 +39,23 @@
         if (document.getElementById("club-transfer-retention")) state.activeClub.transfer_retention_pct = numberInput(document.getElementById("club-transfer-retention").value, 100);
       }
 
-      // 6 verified native facilities + sugar daddy
-      if (document.getElementById("fac-training")) state.activeClub.training_facilities = numberInput(document.getElementById("fac-training").value, 20);
-      if (document.getElementById("fac-youth")) state.activeClub.youth_facilities = numberInput(document.getElementById("fac-youth").value, 20);
-      if (document.getElementById("fac-recruitment")) state.activeClub.youth_recruitment = numberInput(document.getElementById("fac-recruitment").value, 20);
-      if (document.getElementById("fac-coaching")) state.activeClub.junior_coaching = numberInput(document.getElementById("fac-coaching").value, 20);
-      if (document.getElementById("fac-data-analysis")) state.activeClub.data_analysis_facilities = numberInput(document.getElementById("fac-data-analysis").value, 18);
-      if (document.getElementById("fac-corporate")) state.activeClub.corporate_facilities = numberInput(document.getElementById("fac-corporate").value, 19);
+      // Preserve unavailable and untouched fields exactly; no invented facility defaults.
+      for (const [id, field] of CLUB_FACILITIES) {
+        const input = document.getElementById(id);
+        if (!input || input.disabled) continue;
+        const value = Number(input.value);
+        if (!Number.isInteger(value) || value < 1 || value > 20) {
+          showToast("Facility ratings must be whole numbers from 1 to 20", "error");
+          return false;
+        }
+        state.activeClub[field] = value;
+      }
       if (document.getElementById("club-sugar-daddy")) state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
 
       const submittedEntity = JSON.stringify(state.activeClub);
+      const formSnapshot = () => JSON.stringify(Array.from(document.querySelectorAll?.("#tab-club input, #tab-club select") || [])
+        .map(input => [input.id, input.value, input.checked]));
+      const submittedForm = formSnapshot();
       try {
         const res = await fetch("/api/club/update", {
           method: "POST",
@@ -56,7 +64,7 @@
         });
         const data = await readJson(res);
         if (res.ok) {
-          if (JSON.stringify(state.activeClub) === submittedEntity) {
+          if (JSON.stringify(state.activeClub) === submittedEntity && formSnapshot() === submittedForm) {
             state.clubDirty = false;
           }
           nativeClubSyncedId = null;
@@ -73,17 +81,17 @@
 
     function stepClubFac(sliderId, delta) {
       const slider = document.getElementById(sliderId);
-      if (!slider) return;
+      if (!slider || slider.disabled) return;
       const current = parseInt(slider.value) || 10;
       const next = Math.max(1, Math.min(20, current + delta));
       slider.value = next;
-      updateFacVal(`${sliderId}-disp`, next);
+      updateClubFacilityDisplay(sliderId, next);
       autoSaveClub();
     }
 
     function stepPatience(delta) {
       const slider = document.getElementById("club-board-patience");
-      if (!slider) return;
+      if (!slider || slider.disabled) return;
       const current = parseInt(slider.value) || 10;
       const next = Math.max(1, Math.min(20, current + delta));
       slider.value = next;

@@ -1,4 +1,7 @@
+    // ---- Player CA/PA editing, dirty tracking for the Save bar, and the club jump ----
+
     // A baseline-relative aid, not FM's position/foot-weighted CA calculation.
+    // It only ever suggests a value: CA changes only when the user presses "Stage estimate".
     function recommendedCA() {
       const player = state.activePlayer;
       const baseline = state.caEstimateBaseline;
@@ -31,184 +34,83 @@
 
     const populatePlayerForm = displayPlayer;
 
-    function handleCAInput(val) {
-      dirtyPlayerFields.add("current_ability");
+    // ---- Dirty tracking: the Save bar is the only way edits reach the game ----
+    // A field is dirty only while it differs from the value last read from the game.
+    function playerBaseline() {
+      const base = state.caEstimateBaseline;
+      return base && state.activePlayer && base.id === state.activePlayer.id ? base : null;
+    }
+
+    function trackAbilityEdit(field, value) {
+      const base = playerBaseline();
+      const original = base ? base[field] : undefined;
+      if (original !== undefined && original > 0 && original === value) dirtyPlayerFields.delete(field);
+      else dirtyPlayerFields.add(field);
       markUnsaved();
-      const trimmed = String(val || "").trim();
-      const num = parseInt(trimmed, 10);
-      const starCa = document.getElementById("star-rating-ca");
-      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
-        const clamped = Math.max(1, Math.min(200, num));
-        if (state.activePlayer) state.activePlayer.current_ability = clamped;
-        if (starCa) starCa.innerText = getStarString(clamped);
-      } else {
-        if (state.activePlayer) state.activePlayer.current_ability = 0;
-        if (starCa) starCa.innerText = "—";
-      }
     }
 
-    function handleCAChange(val) {
-      const inputCa = document.getElementById("input-ca");
-      const starCa = document.getElementById("star-rating-ca");
-      const trimmed = String(val || "").trim();
-      const num = parseInt(trimmed, 10);
-      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
-        dirtyPlayerFields.add("current_ability");
-        markUnsaved();
-        const clamped = Math.max(1, Math.min(200, num));
-        if (state.activePlayer) state.activePlayer.current_ability = clamped;
-        if (inputCa) inputCa.value = clamped;
-        if (starCa) starCa.innerText = getStarString(clamped);
-      } else {
-                if (state.activePlayer) state.activePlayer.current_ability = 0;
-        if (inputCa) inputCa.value = "—";
-        if (starCa) starCa.innerText = "—";
-      }
+    // Keep the Save bar in step with the dirty set: dirty while edits or staged actions exist, clean otherwise.
+    function syncPlayerDirty() {
+      const id = state.activePlayer ? state.activePlayer.id : null;
+      const staged = id === null ? [] : (pendingActions.get(`player:${id}`) || []);
+      const dirty = dirtyPlayerFields.size > 0 || staged.length > 0;
+      state.playerDirty = dirty;
+      if (typeof SaveBar === "undefined") return;
+      if (dirty) SaveBar.markDirty("player");
+      else SaveBar.clear("player");
     }
 
-    function handlePAInput(val) {
-      dirtyPlayerFields.add("potential_ability");
-      markUnsaved();
-      const trimmed = String(val || "").trim();
+    function markUnsaved() { syncPlayerDirty(); }
+
+    function parseAbility(val) {
+      const trimmed = String(val ?? "").trim();
       const num = parseInt(trimmed, 10);
-      const starPa = document.getElementById("star-rating-pa");
-      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
-        const clamped = Math.max(1, Math.min(200, num));
-        if (state.activePlayer) state.activePlayer.potential_ability = clamped;
-        if (starPa) starPa.innerText = getStarString(clamped);
-      } else {
-        if (state.activePlayer) state.activePlayer.potential_ability = 0;
-        if (starPa) starPa.innerText = "—";
-      }
+      return trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0 ? Math.max(1, Math.min(200, num)) : null;
     }
 
-    function handlePAChange(val) {
-      const inputPa = document.getElementById("input-pa");
-      const starPa = document.getElementById("star-rating-pa");
-      const trimmed = String(val || "").trim();
-      const num = parseInt(trimmed, 10);
-      if (trimmed !== "" && trimmed !== "—" && !isNaN(num) && num > 0) {
-        dirtyPlayerFields.add("potential_ability");
-        markUnsaved();
-        const clamped = Math.max(1, Math.min(200, num));
-        if (state.activePlayer) state.activePlayer.potential_ability = clamped;
-        if (inputPa) inputPa.value = clamped;
-        if (starPa) starPa.innerText = getStarString(clamped);
-      } else {
-                if (state.activePlayer) state.activePlayer.potential_ability = 0;
-        if (inputPa) inputPa.value = "—";
-        if (starPa) starPa.innerText = "—";
-      }
+    function setAbilityStars(starId, value) {
+      const star = document.getElementById(starId);
+      if (star) star.innerText = value > 0 ? getStarString(value) : "—";
     }
 
-    function promptEditName() {
+    // Typing: update the model only for a valid value; blur or change restores the shown value for invalid text.
+    function handleAbilityInput(field, inputId, starId, val, commit) {
       if (!state.activePlayer) return;
-      const newName = prompt("Edit Player Name:", state.activePlayer.name || "");
-      if (newName && newName.trim()) {
-        state.playerDirtyFields.add("name");
-        handlePlayerFieldChange("name", newName.trim());
+      const num = parseAbility(val);
+      const input = document.getElementById(inputId);
+      if (num === null) {
+        if (commit && input) input.value = state.activePlayer[field] > 0 ? state.activePlayer[field] : "—";
+        return;
+      }
+      state.activePlayer[field] = num;
+      if (commit && input) input.value = num;
+      setAbilityStars(starId, num);
+      trackAbilityEdit(field, num);
+      updateRecommendedCA();
+    }
+
+    function handleCAInput(val) { handleAbilityInput("current_ability", "input-ca", "star-rating-ca", val, false); }
+    function handleCAChange(val) { handleAbilityInput("current_ability", "input-ca", "star-rating-ca", val, true); }
+    function handlePAInput(val) { handleAbilityInput("potential_ability", "input-pa", "star-rating-pa", val, false); }
+    function handlePAChange(val) { handleAbilityInput("potential_ability", "input-pa", "star-rating-pa", val, true); }
+
+    // ---- Writable gates: controls without a verified native write path stay disabled with a reason ----
+    function playerFieldWritable(field) {
+      const fields = state.playerWritableFields;
+      return !state.connected || Array.isArray(fields) && fields.includes(field);
+    }
+
+    function applyAbilityGates() {
+      for (const [field, id] of [["current_ability", "input-ca"], ["potential_ability", "input-pa"]]) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const ok = playerFieldWritable(field);
+        el.disabled = !ok;
+        el.title = ok ? "Edits are written when you click Save." : "No verified write path for this field.";
       }
     }
 
-    function markSaved(timestamp) {
-      const timeStr = timestamp || new Date().toLocaleTimeString();
-      state.playerDirty = false;
-      state.lastSavedTime = timeStr;
-
-      const badge = document.getElementById("save-status-indicator");
-      if (badge) {
-        badge.className = "pill-badge badge-fit";
-        badge.innerText = `✅ Saved [${timeStr}]`;
-      }
-      const label = document.getElementById("last-saved-time");
-      if (label) {
-        label.innerText = `✅ Saved at [${timeStr}]`;
-        label.style.color = "var(--accent-emerald)";
-      }
-    }
-
-    function markUnsaved() {
-      state.playerDirty = true;
-      const badge = document.getElementById("save-status-indicator");
-      if (badge) {
-        badge.className = "pill-badge badge-morale";
-        badge.innerText = `⏳ Unsaved Changes...`;
-      }
-      const label = document.getElementById("last-saved-time");
-      if (label) {
-        label.innerText = `Unsaved changes...`;
-        label.style.color = "var(--accent-gold)";
-      }
-    }
-
-    function handlePlayerFieldChange(field, val) {
-      if (!state.activePlayer) return;
-      state.playerDirtyFields.add(field);
-      markUnsaved();
-
-      if (field === "age") {
-        const num = parseInt(val, 10) || 0;
-        state.activePlayer.age = num;
-        const el = document.getElementById("player-age");
-        if (el) {
-          if (num > 0) {
-            el.innerText = `${num} yrs`;
-            el.className = "pill-badge badge-nat";
-          } else {
-            el.innerText = "—";
-            el.className = "pill-badge badge-muted";
-          }
-        }
-      } else if (field === "name") {
-        state.activePlayer.name = val;
-        const el = document.getElementById("player-name");
-        if (el) el.innerText = val || "Player Name";
-        const cEl = document.getElementById("contract-player-name");
-        if (cEl) cEl.innerText = `${val} — Contract`;
-        const posEl = document.getElementById("pos-player-name");
-        if (posEl) posEl.innerText = `${val} — Positions & Roles`;
-        const godTarget = document.getElementById("god-player-target");
-        if (godTarget) godTarget.innerText = `Target: ${val}`;
-      } else if (field === "nationality") {
-        const str = (val || "").trim();
-        state.activePlayer.nationality = str;
-        const el = document.getElementById("player-nat");
-        if (el) {
-          if (str) {
-            el.innerText = `${getCountryFlag(str)} ${str}`;
-            el.className = "pill-badge badge-nat";
-          } else {
-            el.innerText = "Unknown (live)";
-            el.className = "pill-badge badge-muted";
-          }
-        }
-      } else if (field === "club_name") {
-        const str = (val || "").trim();
-        state.activePlayer.club_name = str;
-        const el = document.getElementById("player-club");
-        if (el) {
-          if (str) {
-            el.innerText = str;
-            el.className = "pill-badge badge-club";
-          } else {
-            el.innerText = "Unknown (live)";
-            el.className = "pill-badge badge-muted";
-          }
-        }
-        const cEl = document.getElementById("contract-club-name");
-        if (cEl) cEl.innerText = str || "Unknown (live)";
-        const posEl = document.getElementById("pos-club-name");
-        if (posEl) posEl.innerText = str || "Unknown (live)";
-      } else if (field === "position") {
-        state.activePlayer.position = val;
-        const el = document.getElementById("player-pos");
-        if (el) el.innerText = val;
-        const posBadge = document.getElementById("pos-summary-badge");
-        if (posBadge) posBadge.innerText = val;
-      }
-
-    }
-
+    // ---- Club jump ----
     async function jumpToPlayerClub() {
       if (!state.activePlayer) {
         showToast("No active player loaded", "warning");
@@ -222,7 +124,7 @@
         return;
       }
       if (!clubName || clubName === "Free Agent" || clubName === "Unknown (live)") {
-        showToast("Player club is not exposed or player is Free Agent", "info");
+        showToast("Player club is not exposed or player is a free agent", "info");
         return;
       }
 
@@ -244,6 +146,4 @@
       }
 
       showToast(`Club "${clubName}" was not found in the loaded game data.`, "warning");
-      return;
     }
-

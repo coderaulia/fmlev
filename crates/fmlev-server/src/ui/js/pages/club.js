@@ -1,7 +1,14 @@
     // Render Club Data
     function displayClub(club) {
       state.activeClub = JSON.parse(JSON.stringify(club));
-      if (displayEntityAvailability("club", club)) return;
+      if (displayEntityAvailability("club", club)) {
+        renderClubOverview(club);
+        renderClubFacilities(state.activeClub);
+        return;
+      }
+      renderClubOverview(club);
+      const status = document.getElementById("save-club-status-indicator");
+      if (status) status.innerText = "Offline demo";
 
       const titleEl = document.getElementById("club-title");
       if (titleEl) titleEl.innerText = club.club_name || "Club";
@@ -78,14 +85,17 @@
       if (godClubTarget) godClubTarget.innerText = `Target: ${club.club_name || "Active Club"}`;
       const godSquadTarget = document.getElementById("god-squad-target");
       if (godSquadTarget) godSquadTarget.innerText = `Target: ${club.club_name || "Club"} 1st Team`;
+      renderClubFacilities(club);
       refreshPendingActionIndicators();
     }
 
     // The facility sliders start from binding caches. Load the verified native values once per club
     // (and again after a save) so untouched controls match the game and are never written back.
     let nativeClubSyncedId = null;
+    let clubNativeRecord = null;
     async function syncClubNative(clubId) {
-      if (!state.connected || !clubId || nativeClubSyncedId === clubId || state.clubDirty) return;
+      if (!state.connected || !clubId || state.clubDirty) return false;
+      if (nativeClubSyncedId === clubId) return true;
       nativeClubSyncedId = clubId;
       try {
         const res = await fetch("/api/club/native", {
@@ -93,20 +103,78 @@
           body: JSON.stringify({ club_id: clubId })
         });
         const data = await readJson(res);
-        if (!res.ok) { nativeClubSyncedId = null; return; }
+        if (!res.ok) { nativeClubSyncedId = null; return false; }
         if (state.clubDirty || state.activeClub?.club_id !== clubId) return;
         const club = data.club;
+        clubNativeRecord = { ...club, club_id: clubId };
         Object.assign(state.activeClub, {
           training_facilities: club.training_facilities, youth_facilities: club.youth_facilities,
           junior_coaching: club.junior_coaching, youth_recruitment: club.youth_recruitment,
           data_analysis_facilities: club.data_analysis_facilities, corporate_facilities: club.corporate_facilities
         });
-        setFacVal("fac-training", "fac-training-disp", club.training_facilities);
-        setFacVal("fac-youth", "fac-youth-disp", club.youth_facilities);
-        setFacVal("fac-recruitment", "fac-recruitment-disp", club.youth_recruitment);
-        setFacVal("fac-coaching", "fac-coaching-disp", club.junior_coaching);
-        setFacVal("fac-corporate", "fac-corporate-disp", club.corporate_facilities);
-        if (club.data_analysis_facilities > 0) setFacVal("fac-data-analysis", "fac-data-analysis-disp", club.data_analysis_facilities);
-      } catch (e) { nativeClubSyncedId = null; }
+        renderClubFacilities(state.activeClub);
+        return true;
+      } catch (e) { nativeClubSyncedId = null; return false; }
     }
 
+
+    const CLUB_FACILITIES = [
+      ["fac-training", "training_facilities", "Training facilities"],
+      ["fac-youth", "youth_facilities", "Youth facilities"],
+      ["fac-recruitment", "youth_recruitment", "Youth recruitment"],
+      ["fac-coaching", "junior_coaching", "Junior coaching"],
+      ["fac-data-analysis", "data_analysis_facilities", "Data analysis facilities"],
+      ["fac-corporate", "corporate_facilities", "Corporate facilities"],
+    ];
+
+    function updateClubFacilityDisplay(id, value) {
+      const valid = Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 20;
+      const display = document.getElementById(id + "-disp");
+      if (display) {
+        display.innerText = valid ? String(value) : "—";
+        display.className = `facility-val ${valueBand(valid ? Number(value) : null)}`;
+      }
+      const stars = document.getElementById(id + "-stars");
+      if (stars) {
+        const filled = valid ? Math.round(Number(value) / 4) : 0;
+        stars.innerText = valid ? "★".repeat(filled) + "☆".repeat(5 - filled) : "—";
+        stars.title = valid ? `${value} / 20 (stars rounded)` : "Native value unavailable";
+      }
+    }
+
+    function renderClubFacilities(club) {
+      const native = clubNativeRecord?.club_id === club.club_id ? clubNativeRecord : null;
+      for (const [id, field] of CLUB_FACILITIES) {
+        const value = state.connected ? native?.[field] : club[field];
+        const valid = Number.isInteger(value) && value >= 1 && value <= 20;
+        const input = document.getElementById(id);
+        if (input) {
+          input.disabled = !valid;
+          input.value = valid ? value : "";
+          input.title = valid ? `${value} / 20` : "Native value unavailable. Use Load from game to retry.";
+          const row = input.closest?.(".facility-row");
+          for (const button of row?.querySelectorAll?.("button") || []) button.disabled = !valid;
+        }
+        if (native && state.activeClub) state.activeClub[field] = value;
+        updateClubFacilityDisplay(id, value);
+      }
+    }
+
+    function renderClubOverview(club) {
+      if (state.loadedMoney?.club_id !== club.club_id) {
+        for (const id of ["club-money-balance", "club-money-transfer"]) {
+          const input = document.getElementById(id);
+          if (input) { input.value = ""; input.disabled = true; }
+        }
+      }
+      const value = (id, v) => {
+        const node = document.getElementById(id);
+        if (node) node.innerText = v === undefined || v === null || v === "" || v === 0 ? "Unavailable" : String(v);
+      };
+      value("club-info-id", club.club_id);
+      value("club-info-stadium", club.stadium_name);
+      value("club-info-capacity", club.stadium_capacity > 0 ? club.stadium_capacity.toLocaleString() : null);
+      value("club-info-expansion", club.stadium_expansion_cap > 0 ? club.stadium_expansion_cap.toLocaleString() : null);
+      if (typeof Shell !== "undefined") Shell.setContext({ section: "club", kind: "club", id: club.club_id,
+        title: club.club_name || "Club unavailable", subtitle: club.league_name || "" });
+    }

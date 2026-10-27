@@ -1,34 +1,47 @@
-
     <section id="tab-settings" class="tab-view">
-      <div class="card" id="settings-card">
-        <h3 style="font-size: 15px; font-weight: 800; margin-bottom: 6px;">Display Settings</h3>
-        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 14px;">
-          These change how values are shown and typed. The game always stores raw GBP (wages per week) and metric units;
-          settings never write game memory. Rates are a fixed table, not live exchange rates.
-        </p>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Currency</label>
-            <select id="settings-currency" class="form-control" onchange="saveDisplaySettings()"></select>
-            <div id="settings-rate" style="font-size: 11px; color: var(--text-dim); margin-top: 4px;"></div>
+      <div class="panel" id="settings-card">
+        <div class="panel-head"><span>Display settings</span></div>
+        <div class="panel-body">
+          <p class="cheat-note">
+            These change how values are shown and typed. The game always stores raw GBP (wages per week) and metric units;
+            settings never write game memory. Rates are a fixed table, not live exchange rates.
+            Changes apply when you press Save.
+          </p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="settings-currency">Currency</label>
+              <select id="settings-currency" class="form-control" onchange="markSettingsDirty()"></select>
+              <div id="settings-rate" class="settings-hint"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="settings-measurement">Measurement</label>
+              <select id="settings-measurement" class="form-control" onchange="markSettingsDirty()">
+                <option value="metric">Metric (cm, kg, km)</option>
+                <option value="imperial">Imperial (ft/in, lb, miles)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="settings-wage-period">Contract wage period</label>
+              <select id="settings-wage-period" class="form-control" onchange="markSettingsDirty()">
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly (weekly x 52 / 12)</option>
+                <option value="yearly">Yearly (weekly x 52)</option>
+              </select>
+              <div class="settings-hint">Club wage budget and max wage stay raw: their period is unverified.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="settings-band-scheme">Value colours</label>
+              <select id="settings-band-scheme" class="form-control" onchange="markSettingsDirty()">
+                <option value="fm26">FM bands (1-5 grey, 6-10 light, 11-15 yellow-green, 16-20 green)</option>
+                <option value="legacy">Classic four tiers</option>
+              </select>
+              <div class="settings-hint">Previews immediately. Saved in this browser only.</div>
+              <div class="band-sample" aria-hidden="true">
+                <span class="attr-line-val band-1-5">3</span><span class="attr-line-val band-6-10">8</span><span class="attr-line-val band-11-15">13</span><span class="attr-line-val band-16-20">18</span>
+              </div>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Measurement</label>
-            <select id="settings-measurement" class="form-control" onchange="saveDisplaySettings()">
-              <option value="metric">Metric (cm, kg, km)</option>
-              <option value="imperial">Imperial (ft/in, lb, miles)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Contract wage period</label>
-            <select id="settings-wage-period" class="form-control" onchange="saveDisplaySettings()">
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly (weekly x 52 / 12)</option>
-              <option value="yearly">Yearly (weekly x 52)</option>
-            </select>
-            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Club wage budget and max wage stay raw: their period is unverified.</div>
-          </div>
+          <div id="settings-preview" class="settings-preview"></div>
         </div>
-        <div id="settings-preview" style="margin-top: 12px; font-size: 12px; color: var(--accent-cyan);"></div>
       </div>
     </section>

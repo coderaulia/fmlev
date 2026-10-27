@@ -1,78 +1,187 @@
-    // ---- Staff (read-only native reads) ----
-    const staffState = { results: [], selected: null, editing: false };
-    const staffGroups = [["coaching", "Coaching"], ["mental", "Mental"], ["knowledge", "Knowledge"], ["scouting", "Scouting"], ["medical", "Medical"]];
+    // ---- Staff: search, profile header, ability tabs. Nothing is written until the save bar's Save. ----
+    const staffState = { results: [], selected: null, editing: false, tab: "head_coach", edits: {} };
+    // Ability tabs: which attribute groups (and sub-groups) each one shows, in order.
+    const STAFF_TABS = [
+      { id: "head_coach", label: "Head Coach", groups: [{ group: "coaching", title: "Coaching" }, { group: "mental", title: "Mental" }, { group: "knowledge", title: "Knowledge" }] },
+      { id: "coaching", label: "Coaching", groups: [{ group: "coaching", title: "Coaching" }, { group: "mental", title: "Mental" }] },
+      { id: "scouting", label: "Scouting", groups: [{ group: "knowledge", title: "Knowledge" }, { group: "mental", title: "Mental" }, { group: "scouting", title: "Analyzing Data" }] },
+      { id: "medical", label: "Medical", groups: [{ group: "knowledge", title: "Knowledge" }, { group: "mental", title: "Mental" },
+        { group: "medical", title: "Physiotherapy", match: /physio/i }, { group: "medical", title: "Sports Science", match: /^(?!.*physio)/i }] },
+    ];
+    // FM26 ability labels measured in game (10 seen, 11 inferred).
+    function staffAbilityLabel(value) {
+      const v = Number(value);
+      if (!Number.isInteger(v) || v < 1 || v > 20) return "";
+      if (v <= 3) return "Unsuited";
+      if (v <= 6) return "Reasonable";
+      if (v <= 9) return "Competent";
+      if (v <= 11) return "Average";
+      if (v <= 14) return "Good";
+      if (v <= 17) return "Very Good";
+      if (v <= 19) return "Outstanding";
+      return "Elite";
+    }
     function staffFieldLabel(field) { return field.split("_").map(w => w[0].toUpperCase() + w.slice(1)).join(" "); }
+    function staffByField(field) { return staffState.selected ? staffState.selected.attributes.find(a => a.field === field) : null; }
+    function staffEl(id) { return typeof document !== "undefined" && document.getElementById ? document.getElementById(id) : null; }
+    function staffRequest(url, body) {
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    }
+
     async function searchStaff() {
-      const query = (document.getElementById("staff-query")?.value || "").trim();
+      const query = (staffEl("staff-query")?.value || "").trim();
       if (query.length < 2) { showToast("Type at least 2 letters.", "warning"); return; }
-      const box = document.getElementById("staff-results");
-      if (box) box.innerHTML = "Searching game memory…";
+      const box = staffEl("staff-results");
+      if (box) box.innerHTML = "Searching game memory...";
       try {
-        const res = await fetch("/api/staff/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }) });
+        const res = await staffRequest("/api/staff/search", { query });
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Staff search failed");
         staffState.results = data.staff;
-        box.innerHTML = data.staff.length
-          ? data.staff.map(s => `<div class="search-item" style="cursor:pointer;padding:4px 0;" onclick="selectStaff(${Number(s.index)}, ${Number(s.uid)})">${escapeHtml(s.name)} <span style="color:var(--text-dim);">#${Number(s.index)}</span></div>`).join("")
+        if (box) box.innerHTML = data.staff.length
+          ? `<table class="fm-table"><thead><tr><th>Name</th><th class="num">ID</th></tr></thead><tbody>` +
+            data.staff.map(s => `<tr onclick="selectStaff(${Number(s.index)}, ${Number(s.uid)})"><td>${escapeHtml(s.name)}</td><td class="num">#${Number(s.index)}</td></tr>`).join("") + `</tbody></table>`
           : "No staff found.";
       } catch (error) { if (box) box.innerHTML = ""; showToast(error.message, "error"); }
     }
-    function renderStaffDetail(data) {
-      const detail = document.getElementById("staff-detail");
-      if (!detail) return;
-      const editing = !!staffState.editing;
-      const cell = a => a.value === null
-        ? `<span style="color:var(--accent-gold);" title="${escapeHtml(a.reason || "")}">Unavailable</span>`
-        : editing
-          ? `<input id="staff-attr-${escapeHtml(a.field)}" type="number" min="1" max="20" value="${a.value}" class="form-control" style="width:64px;padding:2px 6px;">`
-          : `<b>${a.value}</b>`;
-      detail.innerHTML = `<div style="font-weight:800;margin-bottom:6px;">${escapeHtml(data.staff.name)} <span style="color:var(--text-dim);font-weight:400;">#${Number(data.staff.index)}</span></div>` +
-        `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">` +
-        staffGroups.map(([key, title]) => {
-          const rows = data.attributes.filter(a => a.group === key);
-          return rows.length ? `<div><div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">${title}</div>` +
-            rows.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0;"><span>${escapeHtml(staffFieldLabel(a.field))}</span>${cell(a)}</div>`).join("") + `</div>` : "";
-        }).join("") + `</div>` +
-        (editing ? `<button class="btn" style="margin-top:10px;" onclick="saveStaffAttributes()">Save staff attributes (experimental)</button>` : "") +
-        `<div style="margin-top:8px;font-size:11px;color:var(--text-dim);">${escapeHtml(data.verification || "")}</div>`;
+
+    function staffAttrLine(a) {
+      if (a.value === null) {
+        return `<div class="attr-line unavailable"><span class="attr-line-name">${escapeHtml(staffFieldLabel(a.field))}</span>` +
+          `<span class="attr-line-val">Unavailable <span class="unverified-note">${escapeHtml(a.reason || "not read from the game")}</span></span></div>`;
+      }
+      const key = escapeHtml(a.field);
+      const edited = Object.prototype.hasOwnProperty.call(staffState.edits, a.field);
+      const shown = edited ? staffState.edits[a.field] : a.value;
+      const num = Number(shown);
+      const value = staffState.editing
+        ? `<span class="stepper"><button type="button" onclick="staffStep('${key}', -1)">-</button>` +
+          `<input id="staff-attr-${key}" type="number" min="1" max="20" value="${escapeHtml(String(shown))}" class="${edited ? "changed" : ""} ${valueBand(num)}" oninput="staffSetEdit('${key}', this.value)">` +
+          `<button type="button" onclick="staffStep('${key}', 1)">+</button></span>`
+        : `<b class="attr-line-val ${valueBand(num)}">${a.value}</b>`;
+      return `<div class="attr-line"><span class="attr-line-name">${escapeHtml(staffFieldLabel(a.field))}</span>${value}` +
+        `<span id="staff-lbl-${key}" class="attr-line-label ${valueBand(num)}">${escapeHtml(staffAbilityLabel(num))}</span></div>`;
     }
+
+    function renderStaffDetail(data) {
+      const detail = staffEl("staff-detail");
+      const profile = staffEl("staff-profile");
+      if (!detail) return;
+      if (!data) { detail.innerHTML = ""; if (profile) profile.hidden = true; return; }
+      if (profile) profile.hidden = false;
+      const header = staffEl("staff-header");
+      if (header) header.innerHTML = `<span class="staff-name">${escapeHtml(data.staff.name)}</span><span class="staff-id">#${Number(data.staff.index)}</span>` +
+        (staffState.editing ? `<span class="pill pill-warn">Experimental editing</span>` : "");
+      const tab = STAFF_TABS.find(t => t.id === staffState.tab) || STAFF_TABS[0];
+      const cols = tab.groups.map(g => {
+        const rows = data.attributes.filter(a => a.group === g.group && (!g.match || g.match.test(a.field)));
+        return rows.length ? `<div class="attr-col"><div class="attr-col-head">${g.title}</div>${rows.map(staffAttrLine).join("")}</div>` : "";
+      }).join("");
+      detail.innerHTML = `<div class="attr-table">${cols}</div>` +
+        `<div class="staff-note">${escapeHtml(data.verification || "")}</div>`;
+    }
+
+    function setStaffTab(id) {
+      if (!STAFF_TABS.some(t => t.id === id)) return;
+      staffState.tab = id;
+      if (typeof Shell !== "undefined") Shell.setActiveSubTab(id, "staff");
+      renderStaffDetail(staffState.selected);
+    }
+
     function toggleStaffEditing(enabled) {
       staffState.editing = !!enabled;
-      if (staffState.selected) renderStaffDetail(staffState.selected);
+      if (!enabled) staffState.edits = {};
+      renderStaffDetail(staffState.selected);
     }
+
+    // Records an edit only; nothing is sent until Save in the save bar.
+    function staffSetEdit(field, raw) {
+      const a = staffByField(field);
+      if (!a || a.value === null || !staffState.editing) return;
+      const text = String(raw).trim();
+      const n = Number(text);
+      if (text !== "" && Number.isInteger(n) && n === a.value) delete staffState.edits[field];
+      else staffState.edits[field] = text !== "" && Number.isInteger(n) ? n : text;
+      const input = staffEl(`staff-attr-${field}`);
+      if (input && input.classList) { if (field in staffState.edits) input.classList.add("changed"); else input.classList.remove("changed"); }
+      const label = staffEl(`staff-lbl-${field}`);
+      if (label) { label.textContent = staffAbilityLabel(n); label.className = `attr-line-label ${valueBand(n)}`; }
+      if (typeof SaveBar !== "undefined") SaveBar.markDirty("staff");
+    }
+    function staffStep(field, delta) {
+      const a = staffByField(field);
+      if (!a || a.value === null) return;
+      const current = Object.prototype.hasOwnProperty.call(staffState.edits, field) ? Number(staffState.edits[field]) : a.value;
+      const next = Math.max(1, Math.min(20, (Number.isInteger(current) ? current : a.value) + delta));
+      const input = staffEl(`staff-attr-${field}`);
+      if (input) input.value = String(next);
+      staffSetEdit(field, next);
+    }
+
+    function staffChanges() {
+      return Object.keys(staffState.edits).map(field => {
+        const a = staffByField(field);
+        return { label: staffFieldLabel(field), from: a ? a.value : undefined, to: staffState.edits[field] };
+      });
+    }
+
+    async function loadStaff(id, uid) {
+      const res = await staffRequest("/api/staff/native", { staff_id: id, staff_uid: uid });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.message || "Staff read failed");
+      staffState.selected = data;
+      staffState.edits = {};
+      renderStaffDetail(data);
+      if (typeof SaveBar !== "undefined") SaveBar.clear("staff");
+      return data;
+    }
+
+    async function selectStaff(id, uid) {
+      try {
+        const data = await loadStaff(id, uid);
+        if (typeof Shell !== "undefined") {
+          Shell.setContext({ section: "staff", kind: "staff", id: data.staff.index, title: data.staff.name, subtitle: "Staff",
+            open: () => { switchTab("tab-staff"); return selectStaff(id, uid); } });
+        }
+      } catch (error) { staffState.selected = null; staffState.edits = {}; renderStaffDetail(null); showToast(error.message, "error"); }
+    }
+
+    // Save bar "Load": re-read the selected member from the game, dropping edits.
+    async function loadStaffFromGame() {
+      const current = staffState.selected;
+      if (!current) { showToast("Select a staff member first.", "warning"); return false; }
+      try { await loadStaff(current.staff.index, current.staff.uid); return true; }
+      catch (error) { showToast(error.message, "error"); return false; }
+    }
+    function discardStaffEdits() { staffState.edits = {}; renderStaffDetail(staffState.selected); if (typeof SaveBar !== "undefined") SaveBar.clear("staff"); return true; }
+
+    // Save bar "Save": only changed fields, with the experimental opt-in and staff identity.
     async function saveStaffAttributes() {
       const data = staffState.selected;
       if (!data || !staffState.editing) return false;
       const attributes = {};
-      for (const a of data.attributes) {
-        const el = document.getElementById(`staff-attr-${a.field}`);
-        if (!el || a.value === null) continue;
-        const v = Number.parseInt(el.value, 10);
-        if (!Number.isInteger(v) || v < 1 || v > 20) { showToast(`${staffFieldLabel(a.field)} must be 1–20.`, "warning"); return false; }
-        if (v !== a.value) attributes[a.field] = v;
+      for (const [field, raw] of Object.entries(staffState.edits)) {
+        const a = staffByField(field);
+        if (!a || a.value === null) continue;
+        const v = typeof raw === "number" ? raw : Number.parseInt(raw, 10);
+        if (!Number.isInteger(v) || v < 1 || v > 20) { showToast(`${staffFieldLabel(field)} must be 1-20.`, "warning"); return false; }
+        if (v !== a.value) attributes[field] = v;
       }
       if (!Object.keys(attributes).length) { showToast("Nothing changed.", "info"); return false; }
       try {
-        const res = await fetch("/api/staff/update", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ staff_id: data.staff.index, staff_uid: data.staff.uid, attributes, experimental: true })
-        });
+        const submittedEdits = { ...staffState.edits };
+        const res = await staffRequest("/api/staff/update", { staff_id: data.staff.index, staff_uid: data.staff.uid, attributes, experimental: true });
         const reply = await readJson(res);
         if (!res.ok) throw new Error(reply.message || "Staff save failed");
-        if (reply.attributes) data.attributes = reply.attributes;
-        renderStaffDetail(data);
+        if (staffState.selected !== data) return false;
         showToast(reply.message, "success");
-        return true;
+        if (reply.attributes) data.attributes = reply.attributes;
+        else for (const a of data.attributes) if (attributes[a.field] !== undefined) a.value = attributes[a.field];
+        for (const [field, value] of Object.entries(submittedEdits)) if (staffState.edits[field] === value) delete staffState.edits[field];
+        renderStaffDetail(data);
+        return Object.keys(staffState.edits).length === 0;
       } catch (error) { showToast(error.message, "error"); return false; }
     }
-    async function selectStaff(id, uid) {
-      const detail = document.getElementById("staff-detail");
-      try {
-        const res = await fetch("/api/staff/native", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ staff_id: id, staff_uid: uid }) });
-        const data = await readJson(res);
-        if (!res.ok) throw new Error(data.message || "Staff read failed");
-        staffState.selected = data;
-        renderStaffDetail(data);
-      } catch (error) { staffState.selected = null; if (detail) detail.innerHTML = ""; showToast(error.message, "error"); }
-    }
 
+    SaveBar.register("staff", { load: loadStaffFromGame, save: saveStaffAttributes, discard: discardStaffEdits, changes: staffChanges });
+    try { Shell.setSubTabs(STAFF_TABS.map(t => ({ id: t.id, label: t.label })), staffState.tab, { section: "staff", onSelect: setStaffTab }); } catch (error) { /* shell not ready in a bare sandbox */ }

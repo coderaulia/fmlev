@@ -14,7 +14,7 @@
         if (!res.ok) throw new Error(data.message || "Selection failed");
         state.isPinned = data.is_pinned;
         updateSyncUI();
-        showToast(state.isPinned ? "📌 Player pinned (game screen auto-follow paused)" : "👁️ Auto-following FM26 game screen", "info");
+        showToast(state.isPinned ? "Player pinned (game screen auto-follow paused)" : "Auto-following the FM26 game screen", "info");
       } catch (e) {
         showToast("Error updating pin state: " + e.message, "error");
       }

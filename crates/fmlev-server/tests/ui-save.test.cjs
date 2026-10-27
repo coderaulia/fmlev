@@ -85,9 +85,8 @@ test('editing never auto-saves even with stored autosave settings or a legacy to
     requests++;
     return { ok: true, json: async () => ({ player: JSON.parse(request.body) }) };
   });
-  assert.equal(app.run('state.autoApply'), false);
+  assert.equal(app.run('"autoApply" in state'), false, 'the autosave flag no longer exists');
   app.run('toggleAutoApply(true)');
-  assert.equal(app.run('state.autoApply'), false);
   app.run(`
     stepPosition("dl", 1);
     handleFootSlider("left", 16);

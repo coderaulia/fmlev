@@ -110,6 +110,7 @@
         const valEl = document.getElementById("pitch-val-" + key);
         if (nodeEl) {
           nodeEl.className = `pitch-node ${getPositionTierClass(val)}`;
+          nodeEl.setAttribute?.("aria-disabled", String(val <= 0 || !playerFieldWritable("positions")));
         }
         if (valEl) {
           valEl.innerText = val > 0 ? val : "—";
@@ -126,8 +127,8 @@
       const dLeft = document.getElementById("foot-desc-left");
       const dRight = document.getElementById("foot-desc-right");
 
-      if (sLeft) sLeft.value = leftVal;
-      if (sRight) sRight.value = rightVal;
+      if (sLeft) { sLeft.value = leftVal; sLeft.disabled = leftVal <= 0 || !playerFieldWritable("positions"); }
+      if (sRight) { sRight.value = rightVal; sRight.disabled = rightVal <= 0 || !playerFieldWritable("positions"); }
       if (vLeft) {
         vLeft.innerText = leftVal > 0 ? leftVal : "—";
         vLeft.style.color = getTierColor(leftVal);
@@ -167,6 +168,7 @@
 
     function cyclePosition(key) {
       if (!state.activePlayer) return;
+      if (!(state.activePlayer.positions?.[key] > 0) || !playerFieldWritable("positions")) return;
       state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {
@@ -191,6 +193,7 @@
 
     function stepPosition(key, delta) {
       if (!state.activePlayer) return;
+      if (!(state.activePlayer.positions?.[key] > 0) || !playerFieldWritable("positions")) return;
       state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {
@@ -210,6 +213,7 @@
 
     function handleFootSlider(foot, val) {
       if (!state.activePlayer) return;
+      if (!(state.activePlayer.positions?.[foot + "_foot"] > 0) || !playerFieldWritable("positions")) return;
       state.playerDirtyFields.add("positions");
       markUnsaved();
       if (!state.activePlayer.positions) {

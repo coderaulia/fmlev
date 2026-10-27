@@ -6,6 +6,10 @@
         const data = await readJson(res);
 
         state.connected = data.connected;
+        for (const button of document.querySelectorAll?.('[data-live-unavailable="true"]') || []) {
+          button.disabled = !!state.connected;
+          button.title = state.connected ? "Unavailable: no verified live write path" : "Offline demonstration only";
+        }
         updateTransferButtons();
         state.liveClubs = data.live_clubs || {};
         state.liveNations = data.live_nations || {};
@@ -30,7 +34,9 @@
         if (data.active_player || data.player) {
           const player = data.active_player || data.player;
           const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
-          if (!isSamePlayer) {
+          if (!isSamePlayer && state.activePlayer && SaveBar.isDirty("player")) {
+            // Keep the selected draft until Save/Discard or an explicit selection.
+          } else if (!isSamePlayer) {
             state.playerDirtyFields.clear();
             state.playerDirty = false;
             displayPlayer(player);
@@ -43,8 +49,9 @@
         if (data.active_club || data.club) {
           const club = data.active_club || data.club;
           const isSameClub = state.activeClub && state.activeClub.club_id === club.club_id;
-          if (!isSameClub) state.clubDirty = false;
-          if (!isSameClub || (!state.clubDirty && !isInputFocused())) {
+          const keepClubDraft = !isSameClub && state.activeClub && SaveBar.isDirty("club");
+          if (!isSameClub && !keepClubDraft) state.clubDirty = false;
+          if (!keepClubDraft && (!isSameClub || (!state.clubDirty && !isInputFocused()))) {
             displayClub(club);
           }
         }
@@ -52,8 +59,9 @@
         if (data.active_nation || data.nation) {
           const nation = data.active_nation || data.nation;
           const isSameNation = state.activeNation && state.activeNation.id === nation.id;
-          if (!isSameNation) state.nationDirty = false;
-          if (!isSameNation || (!state.nationDirty && !isInputFocused())) {
+          const keepNationDraft = !isSameNation && state.activeNation && SaveBar.isDirty("nation");
+          if (!isSameNation && !keepNationDraft) state.nationDirty = false;
+          if (!keepNationDraft && (!isSameNation || (!state.nationDirty && !isInputFocused()))) {
             displayNation(nation);
           }
         }
@@ -66,6 +74,7 @@
             displayCompetition(comp);
           }
         }
+        Shell.syncEntities(state);
       } catch (e) {
         console.warn("Context fetch error:", e);
       }
@@ -79,27 +88,28 @@
       const diagPid = document.getElementById("diag-pid");
 
       if (state.connected) {
-        pill.className = "sync-indicator synced";
+        if (pill) pill.className = "sync-indicator synced";
         const agoSecs = state.lastContextSyncTime ? Math.max(0, Math.floor((Date.now() - state.lastContextSyncTime) / 1000)) : 0;
         const syncAgoStr = `Synced ${agoSecs}s ago`;
-        text.innerText = state.isPinned
-          ? `🟢 ${syncAgoStr} • 📌 Pinned`
-          : `🟢 ${syncAgoStr} • Auto-Following FM26`;
+        if (text) text.innerText = state.isPinned
+          ? `${syncAgoStr} \u00b7 Pinned`
+          : `${syncAgoStr} \u00b7 Auto-following FM26`;
         if (diagConn) diagConn.innerText = `Connected (PID: ${state.pid})`;
       } else {
-        pill.className = "sync-indicator unsynced";
-        text.innerText = "🔴 Game Not Detected • Waiting for FM26...";
+        if (pill) pill.className = "sync-indicator unsynced";
+        if (text) text.innerText = "Game not detected \u00b7 Waiting for FM26...";
         if (diagConn) diagConn.innerText = "Disconnected (Waiting for FM26 process)";
       }
 
       if (diagPid) diagPid.innerText = state.pid || "None";
 
+      if (!pinBtn) return;
       if (state.isPinned) {
         pinBtn.classList.add("btn-pinned");
-        pinBtn.innerText = "📌 Pinned (Click to Unpin)";
+        pinBtn.innerText = "Pinned (click to unpin)";
       } else {
         pinBtn.classList.remove("btn-pinned");
-        pinBtn.innerText = "📌 Pin Player";
+        pinBtn.innerText = "Pin Player";
       }
     }
 

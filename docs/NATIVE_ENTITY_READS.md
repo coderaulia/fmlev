@@ -1,5 +1,14 @@
 # Native club, nation and competition reads
 
+## UI status — 2026-10-27
+
+The [manifest UI](UI_ARCHITECTURE.md) now exposes guarded entity editors through one
+explicit Save workflow. Readable fields are not automatically writable: population is
+read-only, unsupported rules/governance remain unavailable, and unverified transfer
+buttons are disabled. The evidence below is historical discovery evidence; the UI refresh
+adds no new offsets or live persistence proof.
+
+
 2026-10-25: read-only C++ additions after auditing `README.md`,
 `LIVE_READ_WRITE.md`, `docs/HANDOVER.md`, `AGENTS.md`, the native Rust modules and
 the UI models. There is no separate WIP file in this checkout. The fixture models

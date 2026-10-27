@@ -1,5 +1,13 @@
 # fmscan
 
+## Editor integration note — 2026-10-27
+
+The scanner remains read-only and is not invoked by the web runtime. The refreshed
+[web UI](../../docs/UI_ARCHITECTURE.md) uses Rust APIs, native baselines and explicit Save;
+its disabled controls and experimental gates are independent of scanner discovery output.
+README demo screenshots are layout evidence, not new native-write validation.
+
+
 Read-only C++20 discovery tools for FM26 under Proton. Rust remains the editor and
 the only place for verified writes, readback and rollback. The scanner uses
 `process_vm_readv`; it never writes to the target process. It writes only requested

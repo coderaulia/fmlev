@@ -1,6 +1,6 @@
     // Compatibility for older controls: edits always require an explicit Save.
     function toggleAutoApply() {
-      state.autoApply = false;
+      // Legacy handler: edits always require an explicit Save.
     }
 
     function debouncedSavePlayer() {
@@ -59,7 +59,8 @@
           if (state.activePlayer.id === submittedId && JSON.stringify(state.activePlayer) === submittedPlayer) {
             state.playerDirtyFields.clear();
             if (data.player || data.active_player) displayPlayer(data.player || data.active_player);
-            markSaved(new Date().toLocaleTimeString());
+            state.playerDirty = false;
+            SaveBar.clear("player");
           }
           showToast(data.message || "Player saved.", "success");
           return true;

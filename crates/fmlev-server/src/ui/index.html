@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner, fmlev 26 engine -->
+<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner, fmlev 26 engine. Shell: sidebar + top bar + context header + sub-tabs + pages + save bar (docs/UI_ARCHITECTURE.md) -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,106 +10,99 @@
   </style>
 </head>
 <body>
+  <div id="app-shell">
 
-  <!-- Top Context & Auto-Sync Bar -->
-  <header>
-    <div class="topbar-container">
-      <!-- Brand & Mode Title -->
-      <div class="brand-section">
-        <div class="brand-logo" style="background: linear-gradient(135deg, #ec4899, #8b5cf6, #06b6d4); font-size: 13px; font-weight: 900; letter-spacing: -0.5px;">FMLE</div>
-        <div>
-          <div class="brand-name" style="display: flex; align-items: baseline; gap: 6px;">
-            <span style="background: linear-gradient(135deg, #ffffff, #a5f3fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-size: 16px;">FMLE</span>
-            <span style="font-size: 11px; font-weight: 600; color: #a78bfa; letter-spacing: 0.2px;">by Vanaila</span>
-            <span class="badge-sub" style="background: rgba(236, 72, 153, 0.2); border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">Live Editor</span>
+    <!-- Left navigation (items are rendered by Shell.init from Shell.NAV) -->
+    <aside id="sidebar" aria-label="Main navigation">
+      <div class="sidebar-brand">
+        <div class="brand-title">FM<b>LE</b></div>
+        <div class="brand-sub">by Vanaila</div>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div class="sidebar-foot">Football Manager Live Editor</div>
+    </aside>
+
+    <div id="app-main">
+
+      <!-- Top bar: connection status, global search, quick controls -->
+      <header id="topbar">
+        <div class="topbar-container">
+          <button type="button" id="sync-pill" class="sync-indicator unsynced" onclick="toggleAutoAttach()" title="Click to refresh connection to FM26" role="button" tabindex="0">
+            <span class="sync-dot"></span>
+            <span id="sync-status-text">Waiting for FM26...</span>
+          </button>
+
+          <div class="search-wrapper">
+            <span class="search-icon">&#128269;</span>
+            <input
+              id="global-search" aria-label="Search all entities" aria-controls="search-results-dropdown"
+              type="text"
+              class="search-input-box"
+              placeholder="Search players, staff, clubs, nations, competitions   ( / )"
+              autocomplete="off"
+              oninput="handleSearchInput(this.value)"
+              onkeydown="handleSearchKey(event)"
+            >
+            <button type="button" id="search-clear-btn" class="search-clear" onclick="clearSearch()" aria-label="Clear search">&#10005;</button>
+            <div id="search-results-dropdown" class="search-dropdown"></div>
+          </div>
+
+          <div class="top-controls">
+            <button id="discover-players-btn" class="btn" onclick="discoverLoadedPlayers()" title="Open one player's Attributes screen first, then index loaded native player records for search">Scan Loaded Players</button>
+            <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following the game screen">Pin Player</button>
+            <button id="overlay-mode-btn" class="btn" onclick="toggleOverlayMode()" title="Toggle compact overlay HUD for in-game use">Compact Overlay</button>
           </div>
         </div>
+      </header>
+
+      <div id="search-filters" class="search-filters" role="group" aria-label="Search types" hidden>
+        <span>Search:</span>
+        <button class="btn btn-sm" data-search-type="all" aria-pressed="true" onclick="setSearchFilter('all')">All</button>
+        <button class="btn btn-sm" data-search-type="players" aria-pressed="false" onclick="setSearchFilter('players')">Players</button>
+        <button class="btn btn-sm" data-search-type="staff" aria-pressed="false" onclick="setSearchFilter('staff')">Staff</button>
+        <button class="btn btn-sm" data-search-type="clubs" aria-pressed="false" onclick="setSearchFilter('clubs')">Clubs</button>
+        <button class="btn btn-sm" data-search-type="nations" aria-pressed="false" onclick="setSearchFilter('nations')">Nations</button>
+        <button class="btn btn-sm" data-search-type="competitions" aria-pressed="false" onclick="setSearchFilter('competitions')">Competitions</button>
       </div>
 
-      <!-- Live Sync Indicator -->
-      <div id="sync-pill" class="sync-indicator unsynced" onclick="toggleAutoAttach()" title="Click to refresh connection to FM26">
-        <span class="sync-dot"></span>
-        <span id="sync-status-text">🔴 Waiting for FM26...</span>
+      <!-- Context header: current entity + history -->
+      <div id="context-header">
+        <div class="context-nav">
+          <button id="context-back" class="btn btn-ghost" onclick="Shell.back()" title="Back" disabled>&#8592;</button>
+          <button id="context-forward" class="btn btn-ghost" onclick="Shell.forward()" title="Forward" disabled>&#8594;</button>
+        </div>
+        <div class="context-text">
+          <div id="context-title">FMLE</div>
+          <div id="context-subtitle"></div>
+        </div>
+        <div id="context-actions" class="context-actions"></div>
       </div>
 
-      <!-- Instant Search Bar -->
-      <div class="search-wrapper">
-        <span class="search-icon">🔍</span>
-        <input
-          id="global-search"
-          type="text"
-          class="search-input-box"
-          placeholder="Search players, clubs, nations, competitions (e.g. Haaland, Arsenal, England, Premier League)..."
-          autocomplete="off"
-          oninput="handleSearchInput(this.value)"
-          onkeydown="handleSearchKey(event)"
-        >
-        <span id="search-clear-btn" class="search-clear" onclick="clearSearch()">✕</span>
+      <!-- Sub-tab row (filled by Shell.setSubTabs) -->
+      <div id="subtabs" role="tablist" hidden></div>
 
-        <!-- Dropdown Popup -->
-        <div id="search-results-dropdown" class="search-dropdown"></div>
-      </div>
-
-      <!-- Right Controls: Auto-Follow, Pin, Overlay Toggle -->
-      <div class="top-controls">
-        <button id="discover-players-btn" class="btn" onclick="discoverLoadedPlayers()" title="Open one player's Attributes screen first, then index loaded native player records for search">Scan Loaded Players</button>
-        <!-- Follow / Pin Toggle Button -->
-        <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following game screen">
-          📌 Pin Player
-        </button>
-
-        <!-- Overlay Mode Switcher -->
-        <button id="overlay-mode-btn" class="btn btn-primary" onclick="toggleOverlayMode()" title="Toggle compact overlay HUD for in-game use">
-          📱 Compact Overlay
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Navigation Bar -->
-  <nav class="tabs-nav">
-    <div class="tabs-container">
-      <button class="tab-btn active" onclick="switchTab('tab-player')">
-        ⚽ Player Profile & Attributes
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-positions')">
-        📍 Positions & Feet
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-contract')">
-        📝 Contract & Transfer
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-club')">
-        🏟️ Club Details & Facilities
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-nation')">
-        🌍 Nation Details
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-competition')">
-        🏆 Competition Details
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-godmode')">
-        ⚡ God Mode / Quick Cheats
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-staff')">
-        🧑‍🏫 Staff
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-settings')">
-        🎛️ Settings
-      </button>
-      <button class="tab-btn" onclick="switchTab('tab-status')">
-        ⚙️ Game Sync & Diagnostics
-      </button>
-    </div>
-  </nav>
-
-  <!-- Main Content Views -->
-  <main>
+      <!-- Pages: one <section class="tab-view" id="tab-..."> each -->
+      <main>
 
 <!--@PAGES-->
 
-  </main>
+      </main>
 
-  <!-- Toast Notification Hub -->
+      <!-- Save bar: one per app, bound to the active page (SaveBar) -->
+      <div id="savebar" hidden>
+        <div id="savebar-popover" hidden></div>
+        <span id="savebar-status" role="status" aria-live="polite">No unsaved changes</span>
+        <button id="savebar-review" class="btn btn-ghost btn-sm" onclick="SaveBar.toggleReview()" hidden>Review</button>
+        <span id="savebar-error"></span>
+        <div class="savebar-actions">
+          <button id="savebar-load" class="btn" onclick="SaveBar.load()" title="Read the current values from the game">Load from game</button>
+          <button id="savebar-discard" class="btn" onclick="SaveBar.discard()" disabled>Discard</button>
+          <button id="savebar-save" class="btn btn-primary" onclick="SaveBar.save()" disabled title="Ctrl+S">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
 
   <script>

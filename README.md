@@ -40,13 +40,28 @@
   <img src="assets/icon.svg" alt="FMLE by Vanaila Logo" width="160">
 </p>
 
-* **⚽ Real-Time Memory Synchronization**: Live zero-copy memory reads and writes (`process_vm_readv` / `process_vm_writev`) directly hooked into FM26's Unity 6 IL2CPP memory space.
-* **🌍 Nation Details & Youth Rating** *(offline fixtures; live nation writes not yet verified)*: Modify national youth ratings (1–200), international reputation, economic development, FA financial strength, and corruption metrics.
-* **🏟️ Advanced Club Facilities & Board Suite** *(offline fixtures; live club money is verified, see below)*: Full 1–20 facilities matrix (training, youth, recruitment, junior coaching, data analysis), sugar daddy ownership, board patience, and stadium expansion.
-* **🤝 Multi-Tier Affiliated Clubs**: Configure bilateral affiliate link terms (first-option buy, free loan wages, shared scouting, work permit havens, annual fees).
-* **🏆 Competition Rules & Rules Relaxer** *(offline fixtures; live prize money and register-anytime are verified, rules are not)*: Adjust match substitution limits (e.g. 5 from 12), VAR activation, prize money, TV rights, and foreign player quotas.
-* **⚡ Squad God Mode**: One-click condition restoration (100%), match fitness, injury clearance, and morale maximization.
-* **📱 Dual Interfaces**: Rich cyberpunk embedded Web UI (`http://localhost:41789`) plus an ultra-fast in-game Dear ImGui & Terminal HUD overlay.
+The editor uses an FM26-style sidebar, entity header, compact attribute tables and one
+Load/Review/Save/Discard bar. Search includes players, staff, clubs, nations and competitions.
+Nothing is saved by changing a field. Native actions and presets are staged for explicit Save;
+unavailable controls explain why they are disabled.
+
+**Demo screenshots** — captured from the rebuilt editor while FM26 was closed. These show
+layout and interaction, not live-game write or save/reload proof.
+
+![Player profile and FM value bands — demo](docs/screenshots/player-profile.png)
+
+![Cheats with grouped actions and readable spacing — demo](docs/screenshots/cheats.png)
+
+- **Player:** profile, attributes, positions/roles, contract and read-only Registration Doctor sub-tabs.
+- **Staff:** Head Coach, Coaching, Scouting and Medical views. Attribute editing requires experimental opt-in.
+- **Club:** information, facilities and native balance/transfer-budget controls under the shared save bar.
+- **Nation:** youth rating, reputation, economic factor and raw development code. Population is read-only.
+- **Competition:** reputation, raw-GBP prize-table matching and staged registration actions. Match/squad rule editors remain unavailable.
+- **Compact overlay:** horizontally scrollable navigation, stacked cards, larger control targets and wrapped save actions.
+
+Keyboard: `/` focuses search, Ctrl/Cmd+S saves the active editor, Up/Down moves between
+attribute cells, Enter keeps an attribute edit and Escape restores its value at focus.
+See [UI architecture](docs/UI_ARCHITECTURE.md) and [completed UI plan](docs/UI_PLAN.md).
 
 ---
 
@@ -80,27 +95,27 @@ Get started in seconds! Run the 1-click launcher or install a desktop icon to la
 
 FM26 made history by transitioning away from Sports Interactive's legacy proprietary C++ engine to Unity 6 (64-bit IL2CPP). `FMLE` reverse-engineers the IL2CPP metadata v31 runtime, extracting runtime symbol tables, data references, and UI singletons to give you unrestricted control over your save game.
 
-### ✅ Verified Live Write Support (against the running game)
+### Native capabilities and verification limits
 
-Only fields confirmed in FM26 itself are writable while attached; everything else is shown read-only instead of pretending to save. Each write uses identity validation, readback and rollback.
+The table distinguishes native API capabilities from the guarded web editor. Unverified transfer actions are disabled in the UI; staff writes require explicit experimental opt-in. UI verification does not replace in-game day-tick and save/reload evidence. Native writes use identity validation, readback and rollback.
 
 | Area | What you can do live | Notes |
 | --- | --- | --- |
 | **Players** | 60 attributes, positions and feet, CA/PA, weekly wage, contract expiry, condition/sharpness heal | Screen-independent discovery for any player (user & opposition); no need to open profile on screen |
 | **Contract extension** | Extend expiry by 1–10 years (`POST /api/player/contract/extend`) | Same date, later year; loaned-out players extend the parent contract; shows after the next day |
-| **Contract termination** | Release player as free agent (`POST /api/player/contract/terminate`) | Multi-object detachment: compacts squad vectors, nulls `0x1e8` contract and `0x130`/`0x138` team pointers **UNVERIFIED in game; see AGENTS.md Phase 11** |
-| **Free agent signing** | Sign unemployed free agents (`POST /api/transfer/sign`) | Formats aligned 200-byte `FULL_CONTRACT` object, sets RTTI/wage/expiry/team pointers, and appends to target squad **UNVERIFIED in game; see AGENTS.md Phase 11** |
-| **Loan recall** | Recall player from loan (`POST /api/player/loan/terminate`) | Compacts loan squad vector, returns team to parent club, clears `+0x1f0` loan node **UNVERIFIED in game; see AGENTS.md Phase 11** |
-| **Player transfers** | Move player between clubs (`POST /api/transfer/move`) | Compacts source squad vector, appends to destination team (verifying spare capacity), updates team pointers **UNVERIFIED in game; see AGENTS.md Phase 11** |
-| **Pending transfer acceleration** | Accelerate or instantly complete arranged transfers (`POST /api/transfer/accelerate`) | Updates scheduled join dates in future contract and transfer queue, or switches contract immediately **UNVERIFIED in game; see AGENTS.md Phase 11** |
+| **Contract termination** | API implemented; UI unavailable (`POST /api/player/contract/terminate`) | Multi-object detachment: compacts squad vectors, nulls `0x1e8` contract and `0x130`/`0x138` team pointers **UNVERIFIED in game; see AGENTS.md Phase 11** |
+| **Free agent signing** | API implemented; UI unavailable (`POST /api/transfer/sign`) | Formats aligned 200-byte `FULL_CONTRACT` object, sets RTTI/wage/expiry/team pointers, and appends to target squad **UNVERIFIED in game; see AGENTS.md Phase 11** |
+| **Loan recall** | API implemented; UI unavailable (`POST /api/player/loan/terminate`) | Compacts loan squad vector, returns team to parent club, clears `+0x1f0` loan node **UNVERIFIED in game; see AGENTS.md Phase 11** |
+| **Player transfers** | API implemented; UI unavailable (`POST /api/transfer/move`) | Compacts source squad vector, appends to destination team (verifying spare capacity), updates team pointers **UNVERIFIED in game; see AGENTS.md Phase 11** |
+| **Pending transfer acceleration** | API implemented; UI unavailable (`POST /api/transfer/accelerate`) | Updates scheduled join dates in future contract and transfer queue, or switches contract immediately **UNVERIFIED in game; see AGENTS.md Phase 11** |
 | **Display settings** | Currency, measurement (metric/imperial) and wage period (weekly/monthly/yearly) in the Settings tab (`GET/POST /api/settings`) | Display only, never writes game memory. Fixed approximate rate table (dated 2026-10-26), no live rates. Club wage budget / max wage stay raw (period unverified) |
 | **Role presets** | Raise a player to a role at Level 1/2/3 (`POST /api/player/role-preset` previews, Positions tab stages, normal Save writes) | Only raises values. **Role lists unverified against FM26's role screens; CA increase is an estimate; no in-game proof yet** |
-| **Registration doctor** | Read-only check of registration gates for a competition (`POST /api/player/eligibility`, Contract tab) with a copyable support report | Only the registration window is judged blocked/ok; squad size, home-grown, work permit, non-EU quota, continental registration and appearance limits are reported as unknown. Read live on La Liga only |
+| **Registration doctor** | Read-only check of registration gates for a competition (`POST /api/player/eligibility`, Player → Registration) with a copyable support report | Only the registration window is judged blocked/ok; squad size, home-grown, work permit, non-EU quota, continental registration and appearance limits are reported as unknown. Read live on La Liga only |
 | **Staff (read-only)** | Search any staff member and read 22 attributes (coaching, mental, knowledge, scouting, medical) in the Staff tab (`POST /api/staff/search`, `POST /api/staff/native`) | Values match the screen for seven staff profiles (Rust and C++ readers agree). Editing (`POST /api/staff/update`) is **experimental** (opt-in checkbox, 501 without `experimental: true`): transactional with readback/rollback; one native field (Tactical) proven in game after a day tick and save/reload, the 1–20 fields not yet |
 | **Squad numbers** | Set a number (1–99 or none); a teammate wearing it is swapped | Shows in game after the next day |
 | **Tactical familiarity** | Max for one player or the whole squad | Same change as the game's own action |
 | **Club money & facilities** | Balance, transfer budget, training/youth/coaching/recruitment/data analysis/corporate facilities, sugar daddy status, reputations, stadium capacity | User & opposition clubs supported; reopen Club > Finances / Facilities; saved natively via `NativeClubRecord` |
-| **Nation macro, youth & population** | Youth rating (1–200), international reputation (1–10,000), economic factor, state of development, population | Native container architecture (`NativeNationRecord`); live slider updates youth rating |
+| **Nation macro & youth** | Youth rating (1–200), international reputation (1–10,000), economic factor, raw development code | Population writes are unconfirmed and disabled; changes require Save |
 | **Competition reputation** | Native league reputation (1–200 scale) | Saved natively via `NativeCompetitionRecord` |
 | **Competition stage rules** | Dynamic registration squad cap (`POST /api/competition/stage-rules`) | Queries and edits active simulation engine `stage_rule_entry` (`+0x98`/`+0xd6`) |
 | **Competition prize money** | Edit the per-position prize table | Match first/last prize on Rules; payout source at season end unconfirmed |
@@ -108,50 +123,26 @@ Only fields confirmed in FM26 itself are writable while attached; everything els
 | **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Screen-independent discovery via native records |
 
 **Remaining frontiers & limits**:
-1. **Creating loans from scratch**: Recalling loans is fully supported (`/api/player/loan/terminate`), but establishing a brand-new loan agreement between two clubs from scratch requires instantiating the game's complex `LOAN_CONTRACT` object graph with multi-party clauses.
+1. **Creating loans from scratch**: Loan recall has native API code but remains unavailable in the UI pending persistence evidence. Establishing a brand-new loan agreement between two clubs from scratch requires instantiating the game's complex `LOAN_CONTRACT` object graph with multi-party clauses.
 2. **In-match simulation rules**: Dynamic stage registration caps are writable, but matchday in-play rules (substitutions count, bench slots, VAR toggles) reside in static competition rule blueprints.
 3. **Unmapped club & nation fields**: Club board patience and fan confidence remain unmapped. Nation tax rate, corruption index, languages, and FIFA world ranking points are unmapped.
 
 > ⚠️ **Never edit a player's injury vector.** An emptied vector for an injured player crashes FM26 on the next day and the damage is saved into the career.
 > Always test on a throwaway save, and Save As a new file after live edits.
 
-The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because every route can write game memory.
+The server only accepts requests from `localhost` / `127.0.0.1` pages (foreign `Origin`/`Host` headers are rejected), because the service includes routes that write game memory.
 
 **Diagnostics:** `tools/fmscan` is a read-only C++ memory scanner for differential investigation and screen-independent native entity discovery. `entity PID club|nation|competition --name TEXT --editor --json` reads guarded facilities, finance, grounds, gender-specific nation youth/reputation and competition reputation/stage-gate data. `fmwrite` is a standalone journaled CLI writer for test-save plan/apply/restore experiments. See [exact native field coverage and remaining WIP](docs/NATIVE_ENTITY_READS.md) and [scanner usage](tools/fmscan/README.md).
 
-### Core Capabilities:
+### Editing boundaries
 
-1. **⚽ Player Attributes & Hidden Ratings Editor**:
-   - Technical, Mental, Physical, and Goalkeeping attributes (1–20).
-   - Hidden attributes: Consistency, Important Matches, Injury Proneness, Versatility, Ambition, Loyalty, Pressure, Professionalism, Sportsmanship, and Temperament.
-   - CA (Current Ability: 1–200) and PA (Potential Ability: 1–200).
-   - Position versatility matrix (GK, DL, DC, DR, WBL, WBR, DM, ML, MC, MR, AML, AMC, AMR, ST) and foot ratings.
-   - Contract editor: Weekly wages, contract expiry year, release clauses, squad status, and happiness.
+The UI never fills unread fields with plausible game data. Unsupported player release clauses,
+squad status/happiness, club board metrics, nation governance and matchday competition rules
+remain disabled while connected. Role attribute lists and CA estimates are labeled unverified.
+Prize edits affect the displayed table; authoritative season-end payouts remain unconfirmed.
 
-2. **🌍 Nation Details & Regen Youth Rating**:
-   - **Youth Rating (1–200)**: The single most influential parameter determining the quality of regenerated wonderkids (newgens).
-   - **Macro Metrics**: International reputation (1–10,000), economic factor (1–20), state of development (Developed / Developing / Third World), FA financial power (1–20), tax rate (0–100%), and game importance.
-   - **Corruption Index (0–20)**: Simulates match-fixing and governance scandal tendencies.
-   - **⭐ Golden Generation Preset**: Instantly elevates a nation's youth rating to 200/200 and youth facilities to 20/20.
-
-3. **🏟️ Club Facilities, Board & Sugar Daddy Suite**:
-   - **Facilities Matrix (1–20)**: Training Facilities, Youth Facilities, Youth Recruitment, Junior Coaching, Data Analysis Facilities, and Corporate / VIP Suites.
-   - **Board & Ownership**: Sugar Daddy status (`None`, `FrontEnd`, `Underwriter`, `Foreground`), Board Patience (1–20), Fan Confidence (1–100%), Board Confidence (1–100%), and Transfer Revenue Retention % (0–100%).
-   - **Finances & Stadium**: Transfer budget, wage budget, overall balance, stadium capacity, and expansion limits.
-
-4. **🤝 Affiliated Clubs Manager**:
-   - Manage feeder clubs and parent club partnerships.
-   - Configure bilateral link terms: *First Option to Buy*, *Send Players on Loan (100% wage coverage)*, *Shared Scouting Knowledge*, *Work Permit Havens*, and annual financial fees.
-
-5. **🏆 Competition Rules & Prize Pools**:
-   - In-match rules: Max substitutes allowed (e.g. 5), bench size (e.g. 9 or 12), stoppage windows (e.g. 3).
-   - VAR toggle (`Active` / `Disabled`).
-   - Registration restrictions: Maximum foreign / non-EU players, squad size limit, and homegrown player quotas.
-   - Financial awards: Winner prize money and TV rights pool distributions.
-   - **⚡ Relax Rules Preset**: Removes foreign player caps (99 max) and unlocks 12 substitutes on the bench.
-
-6. **🔍 4-Way Omni-Search**:
-   - Universal search bar supporting instant auto-complete across **Players**, **Clubs**, **Nations**, and **Competitions**.
+The read-only scanner and experimental native APIs expose more than the web editor. Refer to
+[LIVE_READ_WRITE.md](LIVE_READ_WRITE.md) before treating an API implementation as game-verified.
 
 ---
 
@@ -219,8 +210,10 @@ If you are developing or customizing FMLE:
 git clone https://github.com/coderaulia/fmlev.git
 cd fmlev
 
-# 2. Run test suite
+# 2. Verify Rust and assembled UI
+cargo check --workspace --all-targets --examples
 cargo test --workspace
+node --test crates/fmlev-server/tests/*.test.cjs
 
 # 3. Start live editor RPC server on custom port
 cargo run -p fmlev-cli -- serve --port 41789
@@ -265,7 +258,7 @@ fmlev/
 │   ├── fmlev-il2cpp/           # IL2CPP types, singleton reader, metadata parser
 │   ├── fmlev-core/             # Domain models (Player, Club, Nation, Competition)
 │   ├── fmlev-server/           # Embedded Axum REST/WebSocket server + embedded UI
-│   ├── fmlev-overlay/          # Dear ImGui in-game overlay & Terminal HUD controller
+│   ├── fmlev-overlay/          # Browser app-window launcher & Terminal HUD controller
 │   └── fmlev-cli/              # CLI executable (fmlev status, fmlev serve)
 ├── output_dump/                # Decompiled C# structures (dump.cs, script.json)
 └── tools/                      # IL2CPP Dumper extraction utilities
@@ -288,7 +281,7 @@ To get in touch or collaborate, connect via GitHub or email [care@vanaila.com](m
 
 ## 📜 License & Credits
 
-- Built with ❤️ using Rust, Axum, Dear ImGui, and modern Web Components.
+- Built with ❤️ using Rust, Axum and plain HTML/CSS/JavaScript.
 - Reverse-engineering research assisted by Il2CppDumper.
 - Distributed under the MIT License.
 

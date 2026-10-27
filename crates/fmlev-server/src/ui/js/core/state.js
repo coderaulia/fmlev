@@ -6,7 +6,6 @@
       playerWritableFields: null,
       pid: null,
       isPinned: false,
-      autoApply: false,
       activePlayer: null,
       activeClub: null,
       activeNation: null,
@@ -23,7 +22,6 @@
       clubDirty: false,
       nationDirty: false,
       competitionDirty: false,
-      lastSavedTime: null,
     };
 
     // Pending requests are bound to entity identity and survive read-only polling.

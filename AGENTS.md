@@ -75,7 +75,8 @@ crates/
         │   └── memory.rs       # Process attach, memory read/write/scan, godmode, heal
         ├── state.rs            # ServerState, AppState, and request/response DTOs
         ├── tests.rs            # Server integration & unit tests
-        └── ui.html             # Embedded single-page web UI asset
+        ├── ui/                 # Manifest-driven HTML, CSS and classic JS sources
+        └── ui_bundle.rs        # Single embedded HTML response assembly
 ```
 
 ---
@@ -404,3 +405,15 @@ crates/
 - **Experimental staff writes (2026-10-27)**: `NativeStaffRecord::write_attributes` sets display values 1..=20 in one `apply_transaction` (pre-check, write, readback, rollback). Native fields are written as `value * 5`; attributes already showing the requested value are skipped (exact native byte kept); unknown/duplicate fields, values outside 1..=20 and fields currently out of range refuse the whole write. `POST /api/staff/update {staff_id, staff_uid, attributes:{field:value}, experimental}` returns 501 unless `experimental: true`. UI: unchecked "Enable experimental staff editing" checkbox; Save sends only changed fields. **Not proven in game**: no live write has been made yet; needs the screen check after a day tick and save/reload on the throwaway save before it can be called verified. Tests: core 108, server 23, Node 54.
 - **In-game proof (staff write, throwaway save, PID 5907)**: Nana Supriyatna 22412 Tactical 6 -> 10 through the UI (native 28 -> 50 at +0x37, readback OK). FM26 showed "Average" on his profile; the user reported it was still "Average" after the requested day tick and save/reload. This proves one native field; raw 1..20 fields (Working With Youngsters, Authority, Adaptability) are not yet tried in game, so the experimental opt-in stays.
 - **Launcher**: `./start.sh` (and `start`) now always runs `cargo build --release` first; a running server on an outdated binary is replaced, a current one is reused; a failed build leaves the running server alone. `tools/test_server_control.py` 9 passed.
+
+
+### FM26-style UI U0–U6 integration (2026-10-27)
+- Manifest-driven shell, tokens and page sources preserve one embedded response without a frontend build pipeline.
+- Player profile/goalkeeper columns, roles, staged actions, four Staff views, entity native editors, Settings and Diagnostics are wired.
+- Unified Load/Review/Save/Discard; no field-change writes. In-flight edits and identity-bound pending actions are retained.
+- Compact mode keeps navigation, stacks panels/action groups, wraps the save bar and uses readable padding and larger targets.
+- Cheats have balanced columns, padded rows, separated status badges and aligned buttons. Quick Actions use labeled groups.
+- Audited every static inline handler and element ID; fixed stale save callbacks, missing handlers, capability gates and profile facts.
+- Unverified transfer controls and unsupported cheats stay disabled. Population remains read-only. No native safety guard was weakened.
+- Verification: workspace check; Rust 153 passed / 1 ignored; Node UI 124 passed; C++ synthetic process suite 58 passed. Browser review in normal and compact layouts. README includes two labeled demo screenshots, not new native write proof.
+- Current UI source contract and evidence: docs/UI_ARCHITECTURE.md and docs/UI_PLAN.md. Historical native findings above remain historical.

@@ -1,5 +1,17 @@
 # Live read/write verification — 24 October 2026
 
+## UI integration update — 2026-10-27
+
+The FM26-style editor is implemented in `crates/fmlev-server/src/ui/` and assembled from
+its manifest. See [UI architecture](docs/UI_ARCHITECTURE.md) for current controls and
+[README screenshots](README.md#-overview--live-dashboard) for labeled demo views.
+Every write draft requires the shared Save. Population is read-only in the current Nation UI;
+transfer buttons and unsupported cheat cards are disabled pending the evidence ladder.
+Staff writes remain experimental and require opt-in. The older evidence sections below are
+historical observations, not additional proof from this UI refresh. No new live writes,
+day ticks or save/reload validation were performed for this change.
+
+
 FM26's IL2CPP `PersonReference`, `ClubReference`, `NationReference`, and
 `CompReference` are handles, not simulation records. The previous domain writers
 used test-layout offsets against those handles. They must not be used for live edits.

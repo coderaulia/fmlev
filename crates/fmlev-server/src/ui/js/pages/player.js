@@ -1,6 +1,7 @@
     // Render Player Data
     function displayPlayer(player) {
       if (!player) return;
+      if (attrLayoutGk !== playerIsGoalkeeper(player)) buildAttributeLists(playerIsGoalkeeper(player));
       const isSamePlayer = state.activePlayer && state.activePlayer.id === player.id;
       state.caEstimateBaseline = JSON.parse(JSON.stringify(player));
       if (!isSamePlayer) {
@@ -210,8 +211,27 @@
         state.activePlayer.positions = JSON.parse(JSON.stringify(player.positions));
       }
       renderPositionsTab();
+      renderRoleList();
+      applyAbilityGates();
+      applyContractGates();
+      renderPlayerFacts(state.activePlayer);
       updateRecommendedCA();
       refreshPendingActionIndicators();
+    }
+
+    function renderPlayerFacts(player) {
+      const text = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value || "Unavailable"; };
+      const name = String(player.name || "").trim();
+      text("player-avatar", name ? name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase() : "?");
+      text("player-sub", [player.position, player.club_name].filter(Boolean).join(" · "));
+      text("fact-age", player.age > 0 ? `${player.age} years` : null);
+      text("fact-nat", player.nationality);
+      text("fact-club", player.club_name);
+      const contract = player.contract;
+      text("fact-contract", contract?.expiry_year > 0 ? `${contract.wage_per_week > 0 ? formatMoney(contract.wage_per_week, {kind: "wage", compact: true}) + " · " : ""}${contract.expiry_year}` : null);
+      text("fact-feet", getFootSummaryString(player.positions?.left_foot, player.positions?.right_foot));
+      // Reputation, value and physical measurements are not provided by this Player API.
+      for (const id of ["fact-rep", "fact-value", "fact-body"]) text(id, null);
     }
 
     // Live non-player native records are not verified. Keep identity visible, but

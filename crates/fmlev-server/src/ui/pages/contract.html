@@ -1,134 +1,122 @@
-
-    <!-- VIEW 3: CONTRACT, TRANSFER & PERSONAL -->
+    <!-- PLAYER > CONTRACT & TRANSFER. Contract fields are saved by the Save bar; unverified transfer actions stay unavailable. -->
     <section id="tab-contract" class="tab-view">
-      <div class="card">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
-          <div>
-            <h2 id="contract-player-name" style="font-size: 18px; font-weight: 800;">Contract & Dynamics</h2>
-            <div id="contract-club-name" style="font-size: 12px; color: var(--text-muted);">Manchester City</div>
-          </div>
-          <div class="presets-bar" style="margin: 0;">
-            <button class="preset-btn" onclick="applyPlayerPreset('extend_contract')">✍️ +5 Years Extension</button>
-            <button class="preset-btn" data-money-tpl onclick="applyPlayerPreset('free_release')">🔓 {m:0} Release Clause</button>
-            <button class="preset-btn" onclick="applyPlayerPreset('morale')">❤️ Delighted & Loyal</button>
-          </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span><span id="contract-player-name">Contract</span> <span id="contract-club-name" class="muted">Club unavailable</span></span>
+          <span class="panel-hint">Edits are written when you click Save</span>
         </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="contract-wage">
+                <span data-money-label="Contract wage" data-money-kind="wage">Contract wage</span>
+                <span id="currency-symbol-label"></span>
+              </label>
+              <div class="inline-field">
+                <input title="Stored natively as GBP per week; shown in your wage period" id="contract-wage" data-money="wage" type="number" class="form-control" placeholder="Unavailable" onchange="autoSaveContract('wage_per_week')" oninput="autoSaveContract('wage_per_week')">
+                <button class="btn btn-sm" onclick="adjustWage(50000)" data-step-raw="50000" data-step-kind="wage">+50k</button>
+                <button class="btn btn-sm" onclick="adjustWage(-50000)" data-step-raw="-50000" data-step-kind="wage">-50k</button>
+              </div>
+            </div>
 
-        <div class="form-grid">
-          <!-- Weekly Wage -->
-          <div class="form-group">
-            <label class="form-label">
-              <span data-money-label="Contract Wage" data-money-kind="wage">Contract Wage</span>
-              <span id="currency-symbol-label">GBP (£)</span>
-            </label>
-            <div style="display: flex; gap: 8px;">
-              <input title="Stored natively as GBP per week; shown in your wage period" id="contract-wage" data-money="wage" type="number" class="form-control" value="400000" onchange="autoSaveContract('wage_per_week')">
-              <button class="btn" onclick="adjustWage(50000)" data-step-raw="50000" data-step-kind="wage">+50k</button>
-              <button class="btn" onclick="adjustWage(-50000)" data-step-raw="-50000" data-step-kind="wage">-50k</button>
+            <div class="form-group">
+              <label class="form-label" for="contract-expiry">Contract expiry year</label>
+              <input id="contract-expiry" type="number" min="2000" max="2100" class="form-control" placeholder="Unavailable" onchange="autoSaveContract('expiry_year')" oninput="autoSaveContract('expiry_year')">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="contract-release">
+                <span>Release clause</span>
+                <span data-money-tpl class="link-action" onclick="setReleaseClauseFree()">Set to {m:0} (free)</span>
+              </label>
+              <input id="contract-release" data-money="money" type="number" class="form-control" placeholder="Unavailable" onchange="autoSaveContract('release_clause')" oninput="autoSaveContract('release_clause')">
+              <div class="unverified-note" id="contract-release-note" hidden></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="contract-status">Squad status</label>
+              <select id="contract-status" class="form-control" onchange="autoSaveContract('squad_status')">
+                <option value="">Unavailable</option>
+                <option value="Star Player">Star Player</option>
+                <option value="Important Player">Important Player</option>
+                <option value="Regular Starter">Regular Starter</option>
+                <option value="Squad Player">Squad Player</option>
+                <option value="Impact Sub">Impact Sub</option>
+                <option value="Breakthrough Prospect">Breakthrough Prospect</option>
+                <option value="Youth Prospect">Youth Prospect</option>
+              </select>
+              <div class="unverified-note" id="contract-status-note" hidden></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="contract-happiness">Player happiness</label>
+              <select id="contract-happiness" class="form-control" onchange="autoSaveContract('happiness')">
+                <option value="">Unavailable</option>
+                <option value="Delighted">Delighted</option>
+                <option value="Happy">Happy</option>
+                <option value="Content">Content</option>
+                <option value="Slightly Concerned">Slightly Concerned</option>
+                <option value="Unhappy">Unhappy</option>
+              </select>
+              <div class="unverified-note" id="contract-happiness-note" hidden></div>
             </div>
           </div>
-
-          <!-- Expiry Year -->
-          <div class="form-group">
-            <label class="form-label">Contract Expiry Year</label>
-            <select id="contract-expiry" class="form-control" onchange="autoSaveContract('expiry_year')">
-              <option value="2026">2026</option>
-              <option value="2027">2027</option>
-              <option value="2028">2028</option>
-              <option value="2029">2029</option>
-              <option value="2030">2030</option>
-              <option value="2031">2031</option>
-              <option value="2032">2032</option>
-              <option value="2033">2033</option>
-              <option value="2034">2034</option>
-              <option value="2035">2035</option>
-            </select>
-          </div>
-
-          <!-- Minimum Fee Release Clause -->
-          <div class="form-group">
-            <label class="form-label">
-              <span>Release Clause</span>
-              <span data-money-tpl style="font-size: 10px; color: var(--accent-cyan); cursor: pointer;" onclick="document.getElementById('contract-release').value = 0; autoSaveContract('release_clause');">Set to {m:0} (Free)</span>
-            </label>
-            <input id="contract-release" data-money="money" type="number" class="form-control" value="200000000" onchange="autoSaveContract('release_clause')">
-          </div>
-
-          <!-- Squad Status -->
-          <div class="form-group">
-            <label class="form-label">Squad Status</label>
-            <select id="contract-status" class="form-control" onchange="autoSaveContract('squad_status')">
-              <option value="Star Player">Star Player</option>
-              <option value="Important Player">Important Player</option>
-              <option value="Regular Starter">Regular Starter</option>
-              <option value="Squad Player">Squad Player</option>
-              <option value="Impact Sub">Impact Sub</option>
-              <option value="Breakthrough Prospect">Breakthrough Prospect</option>
-              <option value="Youth Prospect">Youth Prospect</option>
-            </select>
-          </div>
-
-          <!-- Player Happiness / Morale -->
-          <div class="form-group">
-            <label class="form-label">Player Happiness</label>
-            <select id="contract-happiness" class="form-control" onchange="autoSaveContract('happiness')">
-              <option value="Delighted">Delighted (Ecstatic)</option>
-              <option value="Happy">Happy</option>
-              <option value="Content">Content</option>
-              <option value="Slightly Concerned">Slightly Concerned</option>
-              <option value="Unhappy">Unhappy</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="margin-top: 18px; display: flex; justify-content: flex-end;">
-          <button class="btn btn-emerald" style="padding: 8px 20px;" onclick="saveContractToGame()">
-            💾 Save Contract to FM26
-          </button>
-        </div>
-      </div>
-
-      <!-- NATIVE CONTRACT & TRANSFER ACTIONS -->
-      <div id="transfer-actions-card" class="card" style="margin-top: 16px;">
-        <div style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-          <h3 style="font-size: 15px; font-weight: 800;">⚡ Native Transfer & Contract Lifecycle</h3>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-            Release players as free agents, recall loans, move contracted players or sign free agents (first team squad must have a spare slot). Verified in game on a throwaway save; always use a backup.
-          </div>
-        </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button id="btn-terminate-contract" class="btn" style="background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444;" onclick="terminateContract()">
-              🚪 Terminate Contract (Free Agent)
-            </button>
-            <button id="btn-terminate-loan" class="btn" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b;" onclick="terminateLoan()">
-              ↩️ Recall from Loan
-            </button>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input id="transfer-target-club-id" type="number" class="form-control" placeholder="Target Club ID..." style="width: 140px; font-size: 12px;">
-            <button id="btn-move-player" class="btn btn-emerald" style="padding: 6px 14px; font-size: 12px;" onclick="movePlayer()">
-              📦 Move Player
-            </button>
-            <button id="btn-sign-free-agent" class="btn btn-emerald" style="padding: 6px 14px; font-size: 12px;" onclick="signFreeAgent()">
-              ✍️ Sign Free Agent
-            </button>
+          <div class="presets-bar">
+            <span class="presets-label">Staged presets</span>
+            <button class="preset-btn" onclick="applyPlayerPreset('extend_contract')">+5 years extension</button>
+            <button class="preset-btn" data-money-tpl onclick="applyPlayerPreset('free_release')">{m:0} release clause</button>
+            <button class="preset-btn" onclick="applyPlayerPreset('morale')">Delighted and loyal</button>
           </div>
         </div>
       </div>
-          <div class="card" id="eligibility-card" style="margin-top: 16px;">
-        <h3 style="font-size: 14px; font-weight: 800; margin-bottom: 6px;">🩺 Registration Doctor</h3>
-        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
-          Read-only. Shows which registration gates are blocked, open or unknown for a competition. Gates that are not mapped are
-          reported as unknown, never as OK. Tested competition: La Liga (index 51, uid 67).
-        </p>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-          <input id="elig-comp-index" type="number" class="form-control" style="max-width: 130px;" placeholder="Comp index">
-          <input id="elig-comp-uid" type="number" class="form-control" style="max-width: 130px;" placeholder="Comp uid">
-          <button class="btn" onclick="checkEligibility()">Check gates</button>
-          <button class="btn" onclick="copySupportReport()">Copy support report</button>
+
+      <!-- Native contract and transfer actions: run immediately when clicked, not part of the Save bar. -->
+      <div id="transfer-actions-card" class="panel">
+        <div class="panel-head">
+          <span>Native transfer and contract actions</span>
+          <span class="pill pill-warn">Unavailable</span>
         </div>
-        <textarea id="elig-message" class="form-control" rows="2" style="margin-top: 8px;" maxlength="1000" placeholder="Paste the exact in-game registration message here (optional, goes into the report)"></textarea>
-        <div id="elig-results" style="margin-top: 10px; font-size: 12px;"></div>
+        <div class="panel-body">
+          <p class="hint">
+            These actions are disabled until their day-tick and save/reload checks are complete.
+            Release players as free agents, recall loans, move contracted players or sign free agents (the first-team squad must have a spare slot).
+            Memory readback alone does not prove safe simulation persistence.
+          </p>
+          <div class="transfer-row">
+            <div class="transfer-group">
+              <button id="btn-terminate-contract" disabled data-unverified="true" class="btn btn-danger" onclick="terminateContract()">Terminate contract (free agent)</button>
+              <button id="btn-terminate-loan" disabled data-unverified="true" class="btn" onclick="terminateLoan()">Recall from loan</button>
+            </div>
+            <div class="transfer-group">
+              <input id="transfer-target-club-id" type="number" class="form-control" placeholder="Target club ID" style="width: 150px;" aria-label="Target club ID">
+              <button id="btn-move-player" disabled data-unverified="true" class="btn" onclick="movePlayer()">Move player</button>
+              <button id="btn-sign-free-agent" disabled data-unverified="true" class="btn" onclick="signFreeAgent()">Sign free agent</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAYER > REGISTRATION (read-only Registration Doctor) -->
+    <section id="tab-registration" class="tab-view">
+      <div class="panel" id="eligibility-card">
+        <div class="panel-head">
+          <span>Registration Doctor</span>
+          <span class="pill">Read-only</span>
+        </div>
+        <div class="panel-body">
+          <p class="hint">
+            Shows which registration gates are blocked, open or unknown for a competition. Gates that are not mapped are
+            reported as unknown, never as OK. Tested competition: La Liga (index 51, uid 67).
+          </p>
+          <div class="reg-controls">
+            <input id="elig-comp-index" type="number" class="form-control" style="max-width: 140px;" placeholder="Competition index" aria-label="Competition index">
+            <input id="elig-comp-uid" type="number" class="form-control" style="max-width: 140px;" placeholder="Competition uid" aria-label="Competition uid">
+            <button class="btn btn-primary btn-sm" onclick="checkEligibility()">Check gates</button>
+            <button class="btn btn-sm" onclick="copySupportReport()">Copy support report</button>
+          </div>
+          <textarea id="elig-message" class="form-control" rows="2" maxlength="1000" placeholder="Paste the exact in-game registration message here (optional, goes into the report)"></textarea>
+          <div id="elig-results" class="elig-results"></div>
+        </div>
       </div>
     </section>

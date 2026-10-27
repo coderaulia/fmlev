@@ -1,5 +1,13 @@
 # Contract and transfer discovery
 
+## Current editor boundary — 2026-10-27
+
+Transfer discovery and API implementation described below do not establish safe
+simulation persistence. The [current UI](../../docs/UI_ARCHITECTURE.md) disables
+unverified sign/move/terminate/recall actions until day-tick and save/reload evidence
+is complete. The UI completion work made no new game writes or transfer experiments.
+
+
 The C++ scanner reads native contracts and follows the unresolved transfer paths.
 It does not sign, loan, release or move players. Changing language does not supply
 the missing game object lifecycle or prove a writable schema.

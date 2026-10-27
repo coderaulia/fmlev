@@ -47,7 +47,7 @@ fn fourcc(key: u64) -> String {
     }
 }
 
-fn describe_dynamic(driver: &LinuxMemoryDriver, object: usize) -> String {
+fn describe_dynamic(driver: &LinuxMemoryDriver, object: usize, depth: u8) -> String {
     let Ok(entries) = driver.read_ptr(object + 0x18) else {
         return "DynamicReference(unreadable)".into();
     };
@@ -60,12 +60,15 @@ fn describe_dynamic(driver: &LinuxMemoryDriver, object: usize) -> String {
         let entry = entries + 0x20 + i * 24;
         let key = driver.read::<u64>(entry + 8).unwrap_or(0);
         let tv = driver.read_ptr(entry + 16).unwrap_or(0);
-        parts.push(format!("{}={}", fourcc(key), describe_value(driver, tv)));
+        parts.push(format!("{}={}", fourcc(key), describe_value(driver, tv, depth)));
     }
     format!("DynamicReference[{}]", parts.join(", "))
 }
 
-fn describe_value(driver: &LinuxMemoryDriver, tv: usize) -> String {
+fn describe_value(driver: &LinuxMemoryDriver, tv: usize, depth: u8) -> String {
+    if depth > 3 {
+        return "(nested too deep)".into();
+    }
     match read_typed_value(driver, tv) {
         Some(DecodedTypedValue::Signed(v)) => format!("i64 {v}"),
         Some(DecodedTypedValue::Unsigned(v)) => format!("u64 {v}"),
@@ -76,9 +79,9 @@ fn describe_value(driver: &LinuxMemoryDriver, tv: usize) -> String {
             format!("ref type={ref_type} id={m_index}")
         }
         Some(DecodedTypedValue::Object(ptr)) => match class_name(driver, ptr) {
-            Some((name, _)) if name == "DynamicReference" => describe_dynamic(driver, ptr),
+            Some((name, _)) if name == "DynamicReference" => describe_dynamic(driver, ptr, depth + 1),
             Some((name, ns)) if name.starts_with("List`1") => {
-                format!("object {ns}.{name} {}", describe_list(driver, ptr))
+                format!("object {ns}.{name} {}", describe_list(driver, ptr, depth + 1))
             }
             Some((name, ns)) => format!("object {ns}.{name}"),
             None => "object(unknown)".into(),
@@ -87,8 +90,8 @@ fn describe_value(driver: &LinuxMemoryDriver, tv: usize) -> String {
     }
 }
 
-/// Summarises a managed `List<T>`: element count and the class of each element (first 24).
-fn describe_list(driver: &LinuxMemoryDriver, list: usize) -> String {
+/// Summarises a managed `List<T>`: element count and each element (first 24); typed values are decoded.
+fn describe_list(driver: &LinuxMemoryDriver, list: usize, depth: u8) -> String {
     let items = driver.read_ptr(list + 0x10).unwrap_or(0);
     let size = driver.read::<i32>(list + 0x18).unwrap_or(-1);
     if !valid_ptr(items) || !(0..=4096).contains(&size) {
@@ -97,9 +100,11 @@ fn describe_list(driver: &LinuxMemoryDriver, list: usize) -> String {
     let classes: Vec<String> = (0..size.min(24) as usize)
         .map(|i| {
             let element = driver.read_ptr(items + 0x20 + i * 8).unwrap_or(0);
-            class_name(driver, element)
-                .map(|(n, ns)| format!("{ns}.{n}@{element:#x}"))
-                .unwrap_or_else(|| "?".into())
+            match class_name(driver, element) {
+                Some((n, _)) if n.ends_with("TypedValue") || n.starts_with("TypedValue") => describe_value(driver, element, depth),
+                Some((n, ns)) => format!("{ns}.{n}@{element:#x}"),
+                None => "?".into(),
+            }
         })
         .collect();
     format!("size={size} [{}]", classes.join(", "))
@@ -177,7 +182,7 @@ pub fn dump_bound_properties(
             reference_id,
             property,
             value_class,
-            value: describe_value(driver, tv),
+            value: describe_value(driver, tv, 0),
         });
     }
     out.sort_by(|a, b| {

@@ -102,6 +102,8 @@ int main(int argc, char** argv) {
     put(heap + 0xb200, text("Pep")); put(heap + 0xb208, text("Guardiola"));
     put(heap + 0xf150, root + 0xb200); put(heap + 0xf158, root + 0xb208);
     for (int i = 0; i < 8; ++i) heap[0xf170 + i] = uint8_t(10 + i);
+    heap[0xf032] = 89; heap[0xf041] = 1; heap[0xf031] = 16; heap[0xf01c] = 16; heap[0xf014] = 15; heap[0xf01d] = 79;
+    for (int o : {0x2b,0x2c,0x2d,0x2e,0x2f,0x33,0x34,0x35,0x36,0x37,0x42,0x43}) heap[0xf000 + o] = 50;
     // A copy of only the first sub-object (no +0x128 owner) must not be discoverable.
     identity(0xf400, staff, 80, 1121); put(heap + 0xf450, root + 0xb200); put(heap + 0xf458, root + 0xb208);
     // A stale copy with conflicting UIDs must not be discoverable.
@@ -115,6 +117,7 @@ int main(int argc, char** argv) {
         if (cmd == "bad-vector-owner") put(heap + 0x3030, root + 0x5000);
         if (cmd == "duplicate") memcpy(heap + 0x8000, heap, 0x400);
         if (cmd == "bad-name") heap[0xc004] = 0xff;
+        if (cmd == "bad-staff-attribute") heap[0xf032] = 101;
         if (cmd == "bad-staff-uid") put(heap + 0xf110, uint32_t{1});
         if (cmd == "bad-attribute") heap[0x148 + 0x1e] = 101;
         if (cmd == "good-attribute") heap[0x148 + 0x1e] = 50;

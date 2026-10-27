@@ -86,7 +86,19 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(staff["record"], hex(self.root + 0xf000))
         editor = staff["editor_data"]
         self.assertEqual(editor["write_support"], "none")
-        self.assertTrue(editor["attributes"].startswith("unavailable"))
+        attrs = {a["field"]: a for a in editor["attributes"]}
+        self.assertEqual(len(attrs), 19)
+        self.assertEqual((attrs["attacking"]["value"], attrs["attacking"]["native"]), (18, 89))
+        self.assertEqual(attrs["negotiating"]["value"], 1, "native 1 displays as 1")
+        self.assertEqual(attrs["tactical_knowledge"]["value"], 3, "native 16 rounds to 3")
+        self.assertEqual(attrs["working_with_youngsters"]["value"], 16)
+        self.assertNotIn("native", attrs["authority"])
+        self.assertEqual(attrs["adaptability"]["value"], 10)
+        self.assertEqual(attrs["determination"]["value"], 16)
+        self.action("bad-staff-attribute")
+        bad = {a["field"]: a for a in self.scan("staff", "--name", "guardiola", "--editor")["matches"][0]["editor_data"]["attributes"]}
+        self.assertIsNone(bad["attacking"]["value"])
+        self.assertIn("out of range", bad["attacking"]["reason"])
         block = editor["raw_blocks"][1]
         self.assertEqual(block["bytes"], list(range(10, 18)))
         self.assertEqual(block["status"], "unmapped_raw_bytes_heuristic")

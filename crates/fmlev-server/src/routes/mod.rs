@@ -46,6 +46,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/player/eligibility", post(player_eligibility))
         .route("/api/staff/search", post(search_staff))
         .route("/api/staff/native", post(read_staff_native))
+        .route("/api/staff/update", post(update_staff))
         .route("/api/roles", get(list_roles))
         .route("/api/player/role-preset", post(role_preset_proposal))
         .route("/api/player/preset", post(apply_player_preset))

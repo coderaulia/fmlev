@@ -7,13 +7,15 @@
 //! - 22 attributes: most are native 1..=100 bytes shown as `max(1, round(native / 5))`; Working With
 //!   Youngsters (+0x1c), Authority (+0x14) and Adaptability (+0x170) are stored 1..=20.
 //!
-//! No write support: staff writes have not passed the evidence ladder (screen check after a day tick
-//! and save/reload on a throwaway save).
+//! Writes (`write_attributes`) are transactional (pre-check, write, readback, rollback) but are
+//! EXPERIMENTAL: they have not passed the in-game evidence ladder (screen check after a day tick and
+//! save/reload on a throwaway save). Native fields are written as `value * 5`, which displays as `value`.
 
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 use serde::Serialize;
 
 use crate::error::{CoreError, Result};
+use crate::native_transfer::{apply_transaction, NativeEdit};
 
 pub const STAFF_VTABLE_RVA: usize = 0x456_5018;
 pub const STAFF_SECOND_VTABLE_RVA: usize = 0x456_4fc8;
@@ -75,6 +77,15 @@ pub struct StaffAttribute {
     pub value: Option<u8>,
     pub native: Option<u8>,
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StaffAttributeChange {
+    pub field: &'static str,
+    pub old_value: u8,
+    pub new_value: u8,
+    pub old_byte: u8,
+    pub new_byte: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -254,6 +265,48 @@ impl NativeStaffRecord {
     }
 }
 
+impl NativeStaffRecord {
+    /// Sets attributes to display values 1..=20 in one transaction. Attributes already showing the
+    /// requested value are left untouched (their exact native byte is kept).
+    pub fn write_attributes(&self, driver: &LinuxMemoryDriver, changes: &[(String, u8)]) -> Result<Vec<StaffAttributeChange>> {
+        self.validate(driver)?;
+        if changes.is_empty() {
+            return Err(invalid("No staff attribute changes given"));
+        }
+        let mut edits = Vec::new();
+        let mut report = Vec::new();
+        for (i, (field, value)) in changes.iter().enumerate() {
+            if changes[..i].iter().any(|(f, _)| f == field) {
+                return Err(invalid(&format!("Staff attribute {field} given twice")));
+            }
+            let def = STAFF_ATTRIBUTES
+                .iter()
+                .find(|d| d.field == field)
+                .ok_or_else(|| invalid(&format!("Unknown staff attribute {field}")))?;
+            if !(1..=20).contains(value) {
+                return Err(invalid(&format!("{field} must be 1..=20 (got {value})")));
+            }
+            let address = self.record + def.offset;
+            let old_byte = driver.read::<u8>(address)?;
+            let valid = if def.native { (1..=100).contains(&old_byte) } else { (1..=20).contains(&old_byte) };
+            if !valid {
+                return Err(invalid(&format!("{field} currently reads out of range ({old_byte}); not writing")));
+            }
+            let old_value = if def.native { display_from_native(old_byte) } else { old_byte };
+            if old_value == *value {
+                continue;
+            }
+            let new_byte = if def.native { value * 5 } else { *value };
+            edits.push(NativeEdit::new(address, vec![old_byte], vec![new_byte], def.field));
+            report.push(StaffAttributeChange { field: def.field, old_value, new_value: *value, old_byte, new_byte });
+        }
+        if !edits.is_empty() {
+            apply_transaction(driver, &edits)?;
+        }
+        Ok(report)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,5 +446,49 @@ mod tests {
         assert_eq!(ranked.iter().map(|s| s.index).collect::<Vec<_>>(), vec![91], "ambiguous id 90 dropped");
         assert!(NativeStaffRecord::search_query("g").is_err());
         assert_eq!(NativeStaffRecord::search_query("  GuArd ").unwrap(), "guard");
+    }
+
+    #[test]
+    fn writes_display_values_and_skips_unchanged() {
+        let mut f = fake(95, 1195, "Write", "Test");
+        f.record[0x37] = 28; // tactical shows 6
+        f.record[0x14] = 9; // authority raw
+        f.record[0x32] = 89; // attacking shows 18
+        let staff = read(&f).unwrap();
+        let d = driver();
+        let report = staff
+            .write_attributes(&d, &[("tactical".into(), 10), ("authority".into(), 12), ("attacking".into(), 18)])
+            .unwrap();
+        assert_eq!(report.len(), 2, "attacking already shows 18");
+        assert_eq!((report[0].old_value, report[0].new_value, report[0].new_byte), (6, 10, 50));
+        assert_eq!(f.record[0x37], 50);
+        assert_eq!(f.record[0x14], 12);
+        assert_eq!(f.record[0x32], 89, "unchanged attribute keeps its exact native byte");
+        let attrs = staff.read_attributes(&d).unwrap();
+        assert_eq!(attrs.iter().find(|a| a.field == "tactical").unwrap().value, Some(10));
+        assert_eq!(staff.write_attributes(&d, &[("tactical".into(), 10)]).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn invalid_writes_change_nothing() {
+        let mut f = fake(96, 1196, "Bad", "Write");
+        f.record[0x2b] = 0; // goalkeeping out of range
+        let before = f.record.clone();
+        let staff = read(&f).unwrap();
+        let d = driver();
+        for changes in [
+            vec![("tactical".to_string(), 0u8)],
+            vec![("tactical".to_string(), 21)],
+            vec![("ambition".to_string(), 10)],
+            vec![("tactical".to_string(), 10), ("tactical".to_string(), 11)],
+            vec![("tactical".to_string(), 12), ("goalkeeping".to_string(), 5)],
+            vec![],
+        ] {
+            assert!(staff.write_attributes(&d, &changes).is_err(), "{changes:?}");
+            assert_eq!(f.record, before, "{changes:?} must not write anything");
+        }
+        put(&mut f.record, IDENTITY_OFFSET + 4, 1i32);
+        assert!(staff.write_attributes(&d, &[("tactical".into(), 12)]).is_err());
+        assert_eq!(f.record[0x37], 50);
     }
 }

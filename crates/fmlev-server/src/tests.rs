@@ -865,7 +865,20 @@ async fn staff_routes_are_read_only_strict_and_require_a_game() {
         ("/api/staff/native", r#"{"staff_id":79}"#),
         ("/api/staff/native", r#"{"staff_id":79,"staff_uid":1120,"attacking":20}"#),
         ("/api/staff/search", r#"{"query":"x","write":true}"#),
+        ("/api/staff/update", r#"{"staff_id":79,"staff_uid":1120,"attributes":{"tactical":300},"experimental":true}"#),
+        ("/api/staff/update", r#"{"staff_id":79,"staff_uid":1120,"attributes":{},"experimental":true,"force":true}"#),
     ] {
         assert!(app.clone().oneshot(post(uri, body)).await.unwrap().status().is_client_error(), "{body}");
     }
+    let gated = app
+        .clone()
+        .oneshot(post("/api/staff/update", r#"{"staff_id":79,"staff_uid":1120,"attributes":{"tactical":10}}"#))
+        .await
+        .unwrap();
+    assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED, "unproven writes need an explicit opt-in");
+    let offline = app
+        .oneshot(post("/api/staff/update", r#"{"staff_id":79,"staff_uid":1120,"attributes":{"tactical":10},"experimental":true}"#))
+        .await
+        .unwrap();
+    assert_eq!(offline.status(), StatusCode::BAD_REQUEST);
 }

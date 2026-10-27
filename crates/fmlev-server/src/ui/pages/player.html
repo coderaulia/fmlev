@@ -1,0 +1,198 @@
+    <!-- VIEW 1: PLAYER PROFILE & ATTRIBUTES EDITOR (DEFAULT) -->
+    <section id="tab-player" class="tab-view active">
+
+      <!-- Player Header Card -->
+      <div class="player-header-card">
+        <div class="player-identity">
+          <div id="player-avatar" class="player-avatar">⚽</div>
+          <div>
+            <div class="player-name-row">
+              <span id="player-name" class="player-name-display">Loading Player...</span>
+              <span id="player-live-badge" class="badge-live" style="display: none;" title="Live player active from FM26 game memory">LIVE</span>
+              <span id="player-synced-ago" class="synced-ago-text" style="display: none;">Synced just now</span>
+              <button class="btn" style="padding: 2px 6px; font-size: 11px;" onclick="promptEditName()" title="Edit Player Name">✏️</button>
+            </div>
+            <div class="player-meta-row">
+              <span id="player-nat" class="pill-badge badge-nat">🇳🇴 Norway</span>
+              <span id="player-age" class="pill-badge badge-nat">24 yrs</span>
+              <span id="player-pos" class="pill-badge badge-pos">ST (C)</span>
+              <span id="player-club" class="pill-badge badge-club" onclick="jumpToPlayerClub()" style="cursor: pointer;" title="Click to manage this club in Club Details">Manchester City</span>
+              <span id="player-morale" class="pill-badge badge-morale">🔥 Superb</span>
+              <span id="player-injury" class="pill-badge badge-fit">💚 Match Fit</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fitness & Condition Rings -->
+        <div class="fitness-metrics">
+          <div class="metric-group">
+            <div style="font-size: 10px; font-weight: 700; color: var(--text-dim);">CONDITION</div>
+            <div id="disp-condition-pct" style="font-size: 16px; font-weight: 800; color: var(--accent-emerald);">100%</div>
+            <div class="metric-bar-bg">
+              <div id="fill-condition" class="metric-bar-fill" style="width: 100%;"></div>
+            </div>
+          </div>
+          <div class="metric-group">
+            <div style="font-size: 10px; font-weight: 700; color: var(--text-dim);">SHARPNESS</div>
+            <div id="disp-sharpness-pct" style="font-size: 16px; font-weight: 800; color: var(--accent-cyan);">100%</div>
+            <div class="metric-bar-bg">
+              <div id="fill-sharpness" class="metric-bar-fill sharpness" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- Current & Potential Ability Block -->
+          <div class="ca-pa-container">
+            <div class="ca-pa-block">
+              <div class="ca-pa-label">CA (Ability)</div>
+              <input id="input-ca" type="text" inputmode="numeric" class="ca-pa-val-input ca-color" value="—" placeholder="—" onfocus="if(this.value==='—')this.value=''" oninput="handleCAInput(this.value)" onblur="handleCAChange(this.value)" onchange="handleCAChange(this.value)">
+              <div id="star-rating-ca" class="star-rating">—</div>
+              <div id="ca-suggestion" style="font-size: 10px; color: var(--text-dim); margin-top: 6px;" aria-live="polite">CA estimate unavailable: open a player's Attributes screen.</div>
+              <button id="apply-ca-suggestion" class="preset-btn" type="button" onclick="applyRecommendedCA()" disabled style="margin-top: 5px;">Apply estimate</button>
+            </div>
+            <div style="width: 1px; height: 36px; background: var(--border-color);"></div>
+            <div class="ca-pa-block">
+              <div class="ca-pa-label">PA (Potential)</div>
+              <input id="input-pa" type="text" inputmode="numeric" class="ca-pa-val-input pa-color" value="—" placeholder="—" onfocus="if(this.value==='—')this.value=''" oninput="handlePAInput(this.value)" onblur="handlePAChange(this.value)" onchange="handlePAChange(this.value)">
+              <div id="star-rating-pa" class="star-rating">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Identity & Current Club Quick Editor Bar -->
+      <div class="card" style="margin: 12px 0; padding: 12px 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 800; color: var(--accent-cyan); text-transform: uppercase;">✏️ Player Identity & Current Team</span>
+            <span id="save-status-indicator" class="pill-badge badge-fit">✅ All Changes Saved</span>
+          </div>
+          <button class="btn" style="font-size: 11px; padding: 4px 10px; display: flex; align-items: center; gap: 4px;" onclick="jumpToPlayerClub()" title="Jump to player's current club in Club Details">
+            <span>🏟️ Manage Club</span>
+            <span style="font-size: 13px;">↗</span>
+          </button>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr 2fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">FULL NAME</label>
+            <input id="edit-player-name" type="text" class="form-control" placeholder="Player Name" oninput="handlePlayerFieldChange('name', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">AGE</label>
+            <input id="edit-player-age" type="number" min="14" max="50" class="form-control" placeholder="Age" oninput="handlePlayerFieldChange('age', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">NATIONALITY</label>
+            <input id="edit-player-nat" type="text" class="form-control" placeholder="Nationality" oninput="handlePlayerFieldChange('nationality', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">CURRENT CLUB</label>
+            <input id="edit-player-club" type="text" class="form-control" placeholder="Club Name (e.g. Persib)" oninput="handlePlayerFieldChange('club_name', this.value)">
+          </div>
+          <div>
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-dim); display: block; margin-bottom: 3px;">POSITION</label>
+            <input id="edit-player-pos" type="text" class="form-control" placeholder="Position" readonly title="Derived from aptitude ratings. Edit ratings in the Positions tab.">
+          </div>
+        </div>
+      </div>
+
+      <div id="player-write-support" style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;"></div>
+
+      <!-- 1-Click Player Presets Bar -->
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">1-Click Presets:</span>
+        <button class="preset-btn" onclick="applyPlayerPreset('heal')">💚 Heal & 100% Fitness</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('morale')">🔥 Max Morale</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('wonderkid')">💎 Wonderkid (195 PA)</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('max_outfield_attributes')">Outfield Attributes 20</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('goat')">Max Attributes + CA/PA</button>
+        <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">+2 Player Attributes</button>
+      </div>
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Squad Number:</span>
+        <input id="squad-number-input" type="number" min="0" max="99" class="form-control" style="width: 80px;" placeholder="1-99, 0 = none">
+        <button class="preset-btn" onclick="saveSquadNumber()">💾 Save Squad Number</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Shown in FM26 after the next day. A teammate wearing it is swapped.</span>
+      </div>
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Contract:</span>
+        <button class="preset-btn" onclick="extendContract(1)">📅 Extend 1 year</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Moves the expiry date one year later. Shown in FM26 after the next day.</span>
+      </div>
+      <div class="presets-bar">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Tactical Familiarity:</span>
+        <button class="preset-btn" onclick="maxFamiliarity(false)">🎯 Max (this player)</button>
+        <button class="preset-btn" onclick="maxFamiliarity(true)">🎯 Max (whole squad)</button>
+        <span style="font-size: 11px; color: var(--text-dim);">Same change as the game's own action. Reopen the familiarity screen to see it.</span>
+      </div>
+
+      <!-- Authentic FM 3-Column Attribute Table -->
+      <div class="attributes-columns">
+        <!-- Technical Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-tech">
+            <span>⚽ Technical</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-technical" class="attr-list"></div>
+        </div>
+
+        <!-- Mental Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-mental">
+            <span>🧠 Mental</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-mental" class="attr-list"></div>
+        </div>
+
+        <!-- Physical Column -->
+        <div class="attr-column-card">
+          <div class="attr-column-header header-phys">
+            <span>⚡ Physical</span>
+            <span style="font-size: 10px; color: var(--text-dim);">1 - 20</span>
+          </div>
+          <div id="list-physical" class="attr-list"></div>
+        </div>
+      </div>
+
+      <!-- Collapsible Hidden & Goalkeeping Attributes Section -->
+      <div class="card" style="padding: 12px 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="toggleHiddenAttributes()">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; color: #c4b5fd;">
+            <span>🛡️ Hidden & Goalkeeping Attributes</span>
+            <span style="font-size: 10px; color: var(--text-dim);">(Consistency, Big Matches, Pressure, GK Reflexes...)</span>
+          </div>
+          <span id="hidden-toggle-arrow">▼</span>
+        </div>
+        <div id="hidden-attributes-panel" style="display: none; margin-top: 14px;">
+          <div class="attributes-columns">
+            <div class="attr-column-card">
+              <div class="attr-column-header header-hidden">
+                <span>🎭 Hidden Personality</span>
+              </div>
+              <div id="list-hidden" class="attr-list"></div>
+            </div>
+            <div class="attr-column-card" style="grid-column: span 2;">
+              <div class="attr-column-header header-hidden">
+                <span>🧤 Goalkeeping Attributes</span>
+              </div>
+              <div id="list-goalkeeping" class="attr-list" style="display: grid; grid-template-columns: 1fr 1fr;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Save Control Bar -->
+      <div class="action-control-bar">
+        <div class="toggle-wrapper">
+          <span>💾 Manual save — click Save to apply your edits</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span id="last-saved-time" style="font-size: 11px; color: var(--text-dim);">All changes synced</span>
+          <button class="btn btn-emerald" style="padding: 8px 18px;" onclick="applyPlayerChanges()">
+            💾 Save Changes to FM26
+          </button>
+        </div>
+      </div>
+    </section>

@@ -1,0 +1,186 @@
+
+    <!-- VIEW 5: NATION DETAILS & YOUTH RATING GAUGE -->
+    <section id="tab-nation" class="tab-view">
+      <!-- Nation Header -->
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(6, 182, 212, 0.35);">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div id="nation-flag-avatar" class="player-avatar" style="border-color: var(--accent-cyan);">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 id="nation-name" style="font-size: 22px; font-weight: 800;">England</h2>
+              <span id="nation-code" class="pill-badge badge-nat">ENG</span>
+              <span id="nation-continent" class="pill-badge badge-pos">Europe</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+              <span style="font-size: 11px; color: var(--text-muted);">International Reputation:</span>
+              <span id="nation-rep-num" style="font-weight: 800; color: var(--accent-gold);">8,800 / 10,000</span>
+              <span id="nation-rep-stars" class="star-rating">★★★★☆</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="preset-btn" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(6, 182, 212, 0.3)); border-color: var(--accent-cyan);" onclick="applyNationPreset('golden_generation')">
+            ⭐ Trigger Golden Generation (Rating 200)
+          </button>
+          <button class="btn btn-emerald" onclick="saveNationToGame()">
+            💾 Save Nation to Game
+          </button>
+        </div>
+      </div>
+
+      <!-- Visual Youth Rating Gauge & Slider (1 - 200) -->
+      <div class="youth-gauge-container" id="nation-youth-card" data-live-editor="true">
+        <div class="gauge-header">
+          <div>
+            <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-cyan);">🧬 National Youth Rating Gauge (1 - 200)</span>
+            <span style="font-size: 11px; color: var(--text-dim); margin-left: 8px;">Controls raw newgen wonderkid spawn potential</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="nation-youth-val" style="font-size: 20px; font-weight: 900; color: #fff;">145</span>
+            <span style="font-size: 13px; color: var(--text-dim);">/ 200</span>
+            <span id="nation-youth-tier" class="rating-tier-badge tier-elite">Tier 2: Elite Football Power</span>
+          </div>
+        </div>
+
+        <div class="gauge-bar-track">
+          <div id="nation-youth-gauge-fill" class="gauge-bar-fill" style="width: 72.5%;"></div>
+        </div>
+
+        <div class="gauge-markers">
+          <span>1: Obscure</span>
+          <span>60: Grassroots</span>
+          <span>110: Developing</span>
+          <span>145: Established</span>
+          <span>175: Elite Power</span>
+          <span>200: Wonderkid Hotbed</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 14px;">
+          <button class="stepper-btn" onclick="stepNationStat('youth_rating', -1)">−</button>
+          <input id="nation-youth-slider" type="range" min="1" max="200" value="145" class="facility-slider" style="accent-color: var(--accent-cyan);" oninput="handleYouthRatingInput(this.value)">
+          <button class="stepper-btn" onclick="stepNationStat('youth_rating', 1)">+</button>
+        </div>
+      </div>
+
+      <!-- Card 1: Economic & Governance Macro -->
+      <div class="card" id="nation-macro-card" data-live-editor="true" style="margin: 16px 0;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <span>🌐 Macro & Economic Factors</span>
+          <button class="btn btn-emerald" style="padding: 3px 10px; font-size: 11px;" onclick="saveNationToGame()">💾 Save Nation</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">International Reputation (1 - 10,000)</label>
+          <div class="stepper-input-group">
+            <input id="nation-reputation" type="number" min="1" max="10000" class="form-control" value="8800" onchange="handleNationRepChange(this.value)">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">State of Development</label>
+          <select id="nation-development" class="form-control">
+            <option value="0">0: Third World / Emerging Nation</option>
+            <option value="1">1: Developing Economy</option>
+            <option value="2" selected>2: Developed Nation</option>
+          </select>
+        </div>
+
+        <div class="facility-row">
+          <span class="facility-name">Economic Factor (1-20)</span>
+          <button class="stepper-btn" onclick="stepNationStat('economic_factor', -1)">−</button>
+          <input id="nation-economic" type="range" min="1" max="20" value="19" class="facility-slider" oninput="updateDisp('disp-nation-econ', this.value)">
+          <button class="stepper-btn" onclick="stepNationStat('economic_factor', 1)">+</button>
+          <span id="disp-nation-econ" class="facility-val tier-elite">19</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Population</label>
+          <div class="stepper-input-group">
+            <input id="nation-population" type="number" min="1" max="2000000000" class="form-control" value="50000000" onchange="debouncedSaveNation()">
+          </div>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">FA Financial Power (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('fa_financial_power', -1)">−</button>
+          <input id="nation-fa-power" type="range" min="1" max="20" value="18" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('fa_financial_power', 1)">+</button>
+          <span id="disp-nation-fa" class="facility-val tier-elite" style="cursor: not-allowed;">18</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Tax Rate (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('tax_rate', -5)">−</button>
+          <input id="nation-tax-rate" type="range" min="0" max="100" value="45" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('tax_rate', 5)">+</button>
+          <span id="disp-nation-tax" class="facility-val tier-good" style="width: 42px; cursor: not-allowed;">45%</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Corruption Index (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('corruption_index', -1)">−</button>
+          <input id="nation-corruption" type="range" min="0" max="20" value="2" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('corruption_index', 1)">+</button>
+          <span id="disp-nation-corruption" class="facility-val tier-elite" style="cursor: not-allowed;">2</span>
+        </div>
+
+        <div class="facility-row" style="opacity: 0.6;">
+          <span class="facility-name">Game Importance (Unverified)</span>
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('game_importance', -1)">−</button>
+          <input id="nation-game-importance" type="range" min="1" max="20" value="20" class="facility-slider" disabled data-unverified="true">
+          <button class="stepper-btn" disabled data-unverified="true" onclick="stepNationStat('game_importance', 1)">+</button>
+          <span id="disp-nation-importance" class="facility-val tier-elite" style="cursor: not-allowed;">20</span>
+        </div>
+
+        <button class="btn btn-emerald" style="width: 100%; margin-top: 14px;" onclick="saveNationToGame()">
+          💾 Save Nation Macro & Youth
+        </button>
+      </div>
+
+      <!-- Card 2: Youth Facilities, Coaching & Recruitment Averages (Unverified in live session) -->
+      <div class="card" id="nation-averages-card" style="margin: 16px 0;">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>🌱 National Youth System Averages (1 - 20)</span>
+          </div>
+
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;">
+            These nationwide baseline metrics govern the training quality, coaching standards, and grassroots scouting networks for youth academy newgens generated across every club in the nation.
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Facilities Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_facilities_avg', -1)">−</button>
+            <input id="nation-fac-avg" type="range" min="1" max="20" value="17" class="facility-slider" oninput="updateDisp('disp-nation-fac-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_facilities_avg', 1)">+</button>
+            <span id="disp-nation-fac-avg" class="facility-val tier-elite">17</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Coaching Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_coaching_avg', -1)">−</button>
+            <input id="nation-coaching-avg" type="range" min="1" max="20" value="16" class="facility-slider" oninput="updateDisp('disp-nation-coaching-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_coaching_avg', 1)">+</button>
+            <span id="disp-nation-coaching-avg" class="facility-val tier-elite">16</span>
+          </div>
+
+          <div class="facility-row">
+            <span class="facility-name">Youth Recruitment Avg</span>
+            <button class="stepper-btn" onclick="stepNationStat('youth_recruitment_avg', -1)">−</button>
+            <input id="nation-recruitment-avg" type="range" min="1" max="20" value="17" class="facility-slider" oninput="updateDisp('disp-nation-rec-avg', this.value)">
+            <button class="stepper-btn" onclick="stepNationStat('youth_recruitment_avg', 1)">+</button>
+            <span id="disp-nation-rec-avg" class="facility-val tier-elite">17</span>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-sm); padding: 12px; margin-top: 24px;">
+            <div style="font-weight: 700; font-size: 12px; color: #34d399; margin-bottom: 4px;">💡 Golden Generation Preset</div>
+            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+              Triggering the Golden Generation quick action immediately elevates Youth Rating to 200 and unlocks level 20 nationwide youth facilities, coaching, and FA wealth.
+            </div>
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 20px;" onclick="saveNationToGame()">
+            💾 Save Nation Details to Game
+          </button>
+        </div>
+    </section>

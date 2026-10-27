@@ -15,11 +15,11 @@ use crate::state::{
     NationPresetRequest, PlayerPresetRequest, PlayerUpdateRequest, SearchQuery, ServerState,
     StatusResponse,
 };
-use crate::EMBEDDED_UI_HTML;
+use crate::embedded_ui_html;
 use super::api_error;
 
 pub async fn serve_ui() -> impl IntoResponse {
-    Html(EMBEDDED_UI_HTML)
+    Html(embedded_ui_html())
 }
 
 pub async fn get_status(State(state): State<ServerState>) -> impl IntoResponse {

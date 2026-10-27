@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<!-- Architecture Reference: Squad God Mode, Player Editor, Club Finances, Memory Scanner, fmlev 26 engine -->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FMLE by Vanaila - Football Manager Live Editor</title>
+  <style>
+/*@STYLES*/
+  </style>
+</head>
+<body>
+
+  <!-- Top Context & Auto-Sync Bar -->
+  <header>
+    <div class="topbar-container">
+      <!-- Brand & Mode Title -->
+      <div class="brand-section">
+        <div class="brand-logo" style="background: linear-gradient(135deg, #ec4899, #8b5cf6, #06b6d4); font-size: 13px; font-weight: 900; letter-spacing: -0.5px;">FMLE</div>
+        <div>
+          <div class="brand-name" style="display: flex; align-items: baseline; gap: 6px;">
+            <span style="background: linear-gradient(135deg, #ffffff, #a5f3fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; font-size: 16px;">FMLE</span>
+            <span style="font-size: 11px; font-weight: 600; color: #a78bfa; letter-spacing: 0.2px;">by Vanaila</span>
+            <span class="badge-sub" style="background: rgba(236, 72, 153, 0.2); border-color: rgba(236, 72, 153, 0.4); color: #f472b6;">Live Editor</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Sync Indicator -->
+      <div id="sync-pill" class="sync-indicator unsynced" onclick="toggleAutoAttach()" title="Click to refresh connection to FM26">
+        <span class="sync-dot"></span>
+        <span id="sync-status-text">🔴 Waiting for FM26...</span>
+      </div>
+
+      <!-- Instant Search Bar -->
+      <div class="search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input
+          id="global-search"
+          type="text"
+          class="search-input-box"
+          placeholder="Search players, clubs, nations, competitions (e.g. Haaland, Arsenal, England, Premier League)..."
+          autocomplete="off"
+          oninput="handleSearchInput(this.value)"
+          onkeydown="handleSearchKey(event)"
+        >
+        <span id="search-clear-btn" class="search-clear" onclick="clearSearch()">✕</span>
+
+        <!-- Dropdown Popup -->
+        <div id="search-results-dropdown" class="search-dropdown"></div>
+      </div>
+
+      <!-- Right Controls: Auto-Follow, Pin, Overlay Toggle -->
+      <div class="top-controls">
+        <button id="discover-players-btn" class="btn" onclick="discoverLoadedPlayers()" title="Open one player's Attributes screen first, then index loaded native player records for search">Scan Loaded Players</button>
+        <!-- Follow / Pin Toggle Button -->
+        <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following game screen">
+          📌 Pin Player
+        </button>
+
+        <!-- Overlay Mode Switcher -->
+        <button id="overlay-mode-btn" class="btn btn-primary" onclick="toggleOverlayMode()" title="Toggle compact overlay HUD for in-game use">
+          📱 Compact Overlay
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="tabs-nav">
+    <div class="tabs-container">
+      <button class="tab-btn active" onclick="switchTab('tab-player')">
+        ⚽ Player Profile & Attributes
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-positions')">
+        📍 Positions & Feet
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-contract')">
+        📝 Contract & Transfer
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-club')">
+        🏟️ Club Details & Facilities
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-nation')">
+        🌍 Nation Details
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-competition')">
+        🏆 Competition Details
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-godmode')">
+        ⚡ God Mode / Quick Cheats
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-staff')">
+        🧑‍🏫 Staff
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-settings')">
+        🎛️ Settings
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-status')">
+        ⚙️ Game Sync & Diagnostics
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content Views -->
+  <main>
+
+<!--@PAGES-->
+
+  </main>
+
+  <!-- Toast Notification Hub -->
+  <div id="toast-container"></div>
+
+  <script>
+/*@SCRIPTS*/
+  </script>
+</body>
+</html>

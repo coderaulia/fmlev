@@ -1,0 +1,242 @@
+
+    <!-- VIEW 7: GOD MODE & QUICK CHEATS -->
+    <section id="tab-godmode" class="tab-view">
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(139, 92, 246, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(245, 158, 11, 0.4);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 style="font-size: 22px; font-weight: 800; background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">⚡ God Mode & Quick Cheats</h2>
+            <span class="pill-badge badge-pos" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">Instant Live Memory Cheats</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 6px;">
+            One-click instantaneous game cheats across Active Player, Entire Squad, Club Finances, and National / Competition Rules.
+          </div>
+          <div class="god-legend">
+            <span class="god-status god-live">✅ Working</span> native live write path exists in code.
+            <span class="god-status god-dev">🚧 In development</span> not applied to the game yet.
+            Status comes from reading the code. Re-test each cheat in a live game.
+            <div style="margin-top: 6px;">Ultimate mode stages 9 presets. 5 fail on live save: Squad Morale, Sugar Daddy, Invincible Board, Golden Generation, Relax Rules. Save stops at the first failing action on each tab, and later queued actions on that tab stay pending.</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-emerald" onclick="applyGodModeAll()">
+            ⚡ Apply Ultimate God Mode (All Active)
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid of 4 Cheat Domains -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+        <!-- Card 1: Active Player God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-cyan);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-cyan);">
+              👤 Active Player God Mode
+            </div>
+            <span id="god-player-target" class="pill-badge badge-nat">Target: Active Player</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Instant cheat modifications applied directly to the loaded player profile.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">Max Player Ratings</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Maxes player attributes and CA/PA; injury proneness and adverse traits set to 1</div>
+                <div class="god-status god-live">✅ Working: native live write of attributes and CA/PA 200. Injury proneness and adverse traits set to 1.</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('goat')">Max Player Ratings</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💎 Wonderkid Forge (195 PA)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Unlocks elite 195 potential ability and boosts natural development rate</div>
+                <div class="god-status god-dev">🚧 In development: no native write path, so live save fails. Label says 195 PA, but code sets PA 200 and CA 165+.</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('wonderkid')">Forge Wonderkid</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">💚 100% Fitness & Cure All</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Restores condition & sharpness to 100%, cures all major injuries</div>
+                <div class="god-status god-live">✅ Working: native live write of condition, sharpness, and injury.</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('heal')">Instant Cure</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔥 Max Morale (Superb)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets individual player morale to 100 Superb and delight</div>
+                <div class="god-status god-dev">🚧 In development: no verified native morale field. Live save fails. Offline edit only.</div>
+              </div>
+              <button class="preset-btn" onclick="applyPlayerPreset('morale')">Max Morale</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">👟 Both Feet 20/20 Master</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Grants Left Foot 20 & Right Foot 20 (Either Foot mastery)</div>
+                <div class="god-status god-live">✅ Working: applied through the Positions tab Save (native foot-rating path).</div>
+              </div>
+              <button class="preset-btn" onclick="applyBothFeetGodMode()">Max Both Feet</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Squad God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-emerald);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-emerald);">
+              ⚡ Squad God Mode
+            </div>
+            <span id="god-squad-target" class="pill-badge badge-club">Target: First Team Squad</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Batch operations affecting all active players in your club squad simultaneously.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏥 100% Squad Fitness</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Restores 100% condition & sharpness across all squad players</div>
+                <div class="god-status god-live">✅ Working: native heal written to every bound squad player record.</div>
+              </div>
+              <button class="btn btn-emerald" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('heal_squad')">Heal Squad</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔥 Superb Squad Morale</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets whole-squad morale to Superb (100) and delight</div>
+                <div class="god-status god-dev">🚧 In development: live save returns 'not implemented'. No native squad morale write.</div>
+              </div>
+              <button class="btn btn-primary" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('morale_squad')">Max Morale</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🛡️ Clear Injuries & Bans</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Wipes yellow/red suspensions and injury timers across squad</div>
+                <div class="god-status god-dev">🚧 In development: live save returns 'not implemented'. No verified native ban or injury write.</div>
+              </div>
+              <button class="btn" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('clear_bans')">Wipe Bans</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🔓 Unlock Built-In IGE</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Patches game memory to display FM26 official pencil icon toolbar</div>
+                <div class="god-status god-dev">🚧 In development: placeholder. No verified memory binding, so it always returns 'not implemented'.</div>
+              </div>
+              <button class="btn" style="padding: 5px 12px; font-size: 11px;" onclick="applyClubPreset('unlock_ige')">Unlock IGE</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Club & Financial God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-gold);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: var(--accent-gold);">
+              💰 Club & Financial God Mode
+            </div>
+            <span id="god-club-target" class="pill-badge badge-pos">Target: Active Club</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Elevate your club to unstoppable global financial and infrastructural dominance.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div data-money-tpl style="font-weight: 700; font-size: 12px;">💎 Foreground Sugar Daddy ({m:1000000000})</div>
+                <div data-money-tpl style="font-size: 10px; color: var(--text-dim);">Limitless state-backed wealth, wipes debt, {m:1000000000} balance, {m:500000000} budget</div>
+                <div class="god-status god-dev">🚧 In development: preset has no native write path, so live save fails. Balance and transfer budget can still be saved from the Club tab.</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('sugar_daddy')">Infinite Wealth</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏟️ Max Facilities Matrix (All 20/20)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">State of the art training, youth academy, recruitment & data analysis</div>
+                <div class="god-status god-live">✅ Working: native write of training, youth, coaching, recruitment, and corporate facilities. Data analysis is not verified natively and stays unchanged.</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('max_facilities')">Max Facilities</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🛡️ Invincible Board Job Security</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Board patience 20/20, fan & board confidence 100%, 100% transfer retention</div>
+                <div class="god-status god-dev">🚧 In development: board patience, confidence, and transfer retention have no verified native write. Live save is rejected.</div>
+              </div>
+              <button class="preset-btn" onclick="applyInvincibleBoard()">Invincible Board</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🏦 Wipe Club Debt</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Clears all outstanding loans, debentures, and bank interest payments</div>
+                <div class="god-status god-dev">🚧 In development: no native debt write path, so live save fails. Offline edit only.</div>
+              </div>
+              <button class="preset-btn" onclick="applyClubPreset('wipe_debt')">Wipe Debt</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Nation & Competition God Mode -->
+        <div class="card" style="border-top: 3px solid var(--accent-purple);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-size: 14px; font-weight: 800; color: #c4b5fd;">
+              🌍 Nation & Competition God Mode
+            </div>
+            <span id="god-nation-target" class="pill-badge badge-nat">Target: Active Nation</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 14px;">
+            Transform national youth production and remove restrictive competition rules.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🧬 Trigger Golden Generation (Youth Rating 200)</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Max national youth rating (200), FA wealth (20), youth facilities (20)</div>
+                <div class="god-status god-dev">🚧 In development: preset has no native write path, so live save fails. Youth rating and reputation save from the Nation tab; facility averages and game importance do not.</div>
+              </div>
+              <button class="preset-btn" onclick="applyNationPreset('golden_generation')">Trigger Golden Gen</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">🌍 Relax Rules & Unlimited Foreigners</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets foreign limit to 99, 12 bench size, 5 subs across 3 windows</div>
+                <div class="god-status god-dev">🚧 In development: no native write path for competition rules (only reputation saves), so live save fails.</div>
+              </div>
+              <button class="preset-btn" onclick="applyCompetitionPreset('relax_rules')">Relax Comp Rules</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div data-money-tpl style="font-weight: 700; font-size: 12px;">💰 Massive Prize Pool ({m:500000000})</div>
+                <div data-money-tpl style="font-size: 10px; color: var(--text-dim);">Sets winner prize money to {m:500000000} and TV pool to {m:3000000000}</div>
+                <div class="god-status god-dev">🚧 In development: prize money and TV pool are not in the native competition writer. Values will not persist in the game.</div>
+              </div>
+              <button class="preset-btn" onclick="applyMassivePrizeMoney()">Massive Prizes</button>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(10, 14, 26, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <div>
+                <div style="font-weight: 700; font-size: 12px;">⚖️ Zero Corruption & Maximum Importance</div>
+                <div style="font-size: 10px; color: var(--text-dim);">Sets national corruption index to 0 and football importance to 20</div>
+                <div class="god-status god-dev">🚧 In development: corruption index and game importance are not in the native nation writer. Values will not persist in the game.</div>
+              </div>
+              <button class="preset-btn" onclick="applyCleanNationGovernance()">Clean Governance</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

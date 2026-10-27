@@ -87,12 +87,17 @@ fn test_offsets_json_embed() {
 
 #[test]
 fn test_embedded_ui_html() {
-    assert!(EMBEDDED_UI_HTML.contains("<!DOCTYPE html>"));
-    assert!(EMBEDDED_UI_HTML.contains("fmlev 26"));
-    assert!(EMBEDDED_UI_HTML.contains("Squad God Mode"));
-    assert!(EMBEDDED_UI_HTML.contains("Player Editor"));
-    assert!(EMBEDDED_UI_HTML.contains("Club Finances"));
-    assert!(EMBEDDED_UI_HTML.contains("Memory Scanner"));
+    let ui = embedded_ui_html();
+    assert!(!ui.contains("@STYLES") && !ui.contains("@PAGES") && !ui.contains("@SCRIPTS"));
+    let manifest: serde_json::Value = serde_json::from_str(include_str!("ui/manifest.json")).unwrap();
+    let listed: Vec<String> = ["styles", "pages", "scripts"].iter().flat_map(|g| manifest[*g].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string())).collect();
+    assert_eq!(crate::ui_bundle::ui_files(), listed);
+    assert!(ui.contains("<!DOCTYPE html>"));
+    assert!(ui.contains("fmlev 26"));
+    assert!(ui.contains("Squad God Mode"));
+    assert!(ui.contains("Player Editor"));
+    assert!(ui.contains("Club Finances"));
+    assert!(ui.contains("Memory Scanner"));
 }
 
 #[test]

@@ -2,8 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
-const html = readFileSync(require('node:path').join(__dirname, '../src/ui.html'), 'utf8');
-const script = html.split('<script>')[1].split('</script>')[0];
+const { html } = require('./helpers/ui.cjs');
+const { script } = require('./helpers/ui.cjs');
 
 function app() {
   const nodes = new Map();

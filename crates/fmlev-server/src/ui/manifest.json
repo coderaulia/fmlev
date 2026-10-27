@@ -1,0 +1,44 @@
+{
+  "styles": [
+    "styles/app.css"
+  ],
+  "pages": [
+    "pages/player.html",
+    "pages/positions.html",
+    "pages/contract.html",
+    "pages/club.html",
+    "pages/nation.html",
+    "pages/competition.html",
+    "pages/godmode.html",
+    "pages/staff.html",
+    "pages/settings.html",
+    "pages/status.html"
+  ],
+  "scripts": [
+    "js/core/helpers.js",
+    "js/pages/staff.js",
+    "js/pages/eligibility.js",
+    "js/pages/role-presets.js",
+    "js/core/format.js",
+    "js/core/state.js",
+    "js/core/app.js",
+    "js/pages/attributes.js",
+    "js/core/sync.js",
+    "js/pages/player.js",
+    "js/pages/club.js",
+    "js/pages/player-actions.js",
+    "js/pages/player-ca.js",
+    "js/core/pin-attach.js",
+    "js/pages/player-save.js",
+    "js/pages/godmode.js",
+    "js/pages/contract.js",
+    "js/pages/positions.js",
+    "js/pages/club-edit.js",
+    "js/pages/nation.js",
+    "js/pages/competition.js",
+    "js/core/search.js",
+    "js/core/input-guard.js",
+    "js/core/tools.js",
+    "js/core/http.js"
+  ]
+}

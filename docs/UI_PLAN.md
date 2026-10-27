@@ -1,6 +1,6 @@
 # UI Plan: an FM26-style, easier editor
 
-Status: plan only, nothing implemented. Date: 2026-10-27.
+Status: in progress (2026-10-27). Step 1 done: `ui.html` split into `crates/fmlev-server/src/ui/` (byte-identical rebuild).
 Reference: FM26 player profile (Federico Chiesa) and club profile (Juventus) screenshots from the user's game.
 
 ## 1. Goals
@@ -62,17 +62,23 @@ Each phase is one commit with its tests, as the other phases in `AGENTS.md`.
 | U5 | Club, nation, competition pages | Info grid, facility stars, finance box, nation rules card, competition rules and prizes | Node: live-editor gating and changed-fields rules still hold |
 | U6 | Polish | Keyboard, focus states, contrast check, compact overlay mode on the new shell, narrow-window layout | Node + manual check in the browser pane at overlay and desktop widths |
 
-## 5. Decisions needed
+## 5. Decisions (user, 2026-10-27)
 
-1. **Fidelity:** a close copy of FM26's look (colours, spacing, typography), or "FM-inspired" with our
-   own branding? Recommendation: close copy of layout and value colours, keep the FMLE header brand.
-2. **Language:** your FM26 runs in Italian. Labels in English only, or follow the game language
-   (Italian/English to start)? Recommendation: English first, keep labels in one table so a second
-   language is a later, small change.
-3. **Save behaviour:** replace autosave-on-change with the save bar everywhere? Recommendation: yes;
-   autosave is the main source of accidental writes.
-4. **Value colour bands:** FM's exact bands for 1–20 (taken from your screenshots) or the current four
-   tiers? Recommendation: FM's bands, with the current tiers as a Settings option.
+1. **Fidelity:** about 80% close to FM26 (layout, value colours, density); keep FMLE branding.
+2. **Language:** English only.
+3. **Saving:** no autosave anywhere and no autosave label. Every change needs an explicit Save. Each
+   page has one Load (read from the game) and one Save button, e.g. club money uses the same pair.
+4. **Value colours:** FM's 1–20 bands.
+
+## 5b. File structure (done in step 1)
+
+- `src/ui/index.html`: document shell with `/*@STYLES*/`, `<!--@PAGES-->` and `/*@SCRIPTS*/` markers.
+- `src/ui/manifest.json`: style, page and script files in load order. `build.rs` embeds every listed
+  file with `include_str!`, so adding a file needs no Rust change; `ui_bundle.rs` assembles the
+  document once in memory (one request, no disk access at runtime).
+- `src/ui/styles/*.css`, `src/ui/pages/*.html` (one per page), `src/ui/js/core/*.js` (shared) and
+  `src/ui/js/pages/*.js` (one per page). Scripts are classic scripts concatenated in manifest order.
+- `tests/helpers/ui.cjs` assembles the same document for the Node tests.
 
 ## 6. Risks
 

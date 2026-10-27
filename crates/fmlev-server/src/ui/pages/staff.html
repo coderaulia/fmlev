@@ -1,0 +1,25 @@
+
+    <!-- VIEW 4: SYNC & STATUS -->
+    <section id="tab-staff" class="tab-view">
+      <div class="card" id="staff-card">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+          <h3 style="font-size: 15px; font-weight: 800;">Staff Attributes</h3>
+          <span class="pill-badge badge-nat" title="Matched against seven on-screen staff profiles">Verified reads · experimental edits</span>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Reads any staff member from game memory, no screen needed. Values are the 1–20 numbers behind FM26's ability labels.
+          Editing is experimental: writes are checked by readback but not yet proven after a day tick and save/reload,
+          so only edit on a throwaway save.
+        </p>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 10px;">
+          <input id="staff-experimental" type="checkbox" onchange="toggleStaffEditing(this.checked)">
+          Enable experimental staff editing (throwaway save only)
+        </label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <input id="staff-query" type="text" class="form-control" style="max-width: 280px;" placeholder="Search staff by name (2+ letters)" onkeydown="if (event.key === 'Enter') searchStaff()">
+          <button class="btn" onclick="searchStaff()">Search</button>
+        </div>
+        <div id="staff-results" style="margin-top: 10px; font-size: 12px;"></div>
+        <div id="staff-detail" style="margin-top: 12px;"></div>
+      </div>
+    </section>

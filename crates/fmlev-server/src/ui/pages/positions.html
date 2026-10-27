@@ -1,0 +1,216 @@
+
+    <!-- VIEW 2: PLAYER POSITIONS & FOOT ABILITY EDITOR -->
+    <section id="tab-positions" class="tab-view">
+      <div class="card" id="role-preset-card" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <h3 style="font-size: 14px; font-weight: 800;">🎭 Role Presets</h3>
+          <span id="role-data-badge" class="pill-badge badge-morale" title="Role attribute lists follow the standard FM role model and are not yet checked against FM26's role screens">Role data: unverified</span>
+        </div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Raises the player's attributes and positions to a role level. Values are only ever raised, never lowered.
+          Preview first, then stage it and press Save. CA changes are a rough estimate, not the game's formula.
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <select id="role-select" class="form-control" style="max-width: 260px;" onchange="clearRoleProposal()"></select>
+          <select id="role-ca-mode" class="form-control" style="max-width: 190px;" onchange="clearRoleProposal()">
+            <option value="">CA: level default</option>
+            <option value="keep">CA: keep</option>
+            <option value="raise_to_fit">CA: raise to fit</option>
+          </select>
+          <button class="btn" onclick="previewRolePreset(1)">Level 1 · Competent</button>
+          <button class="btn" onclick="previewRolePreset(2)">Level 2 · Strong</button>
+          <button class="btn" onclick="previewRolePreset(3)">Level 3 · Elite</button>
+        </div>
+        <div id="role-diff" style="margin-top: 10px; font-size: 12px;"></div>
+        <button id="role-stage-btn" class="btn" style="margin-top: 8px; display: none;" onclick="stageRoleProposal()">Stage these changes</button>
+      </div>
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 id="pos-player-name" style="font-size: 18px; font-weight: 800;">Player Positions & Roles</h2>
+              <span id="pos-summary-badge" class="pill-badge badge-pos">ST (C)</span>
+              <span id="pos-foot-summary" class="pill-badge badge-nat">Right Only</span>
+            </div>
+            <div id="pos-club-name" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Manchester City</div>
+          </div>
+          <div class="presets-bar" style="margin: 0;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Presets:</span>
+            <button class="preset-btn" onclick="applyPositionPreset('all_positions_20')">🌟 Total Football (All 20s)</button>
+            <button class="preset-btn" onclick="applyPositionPreset('both_feet_20')">👟 Both Feet (20 L/R)</button>
+            <button class="preset-btn" onclick="applyPositionPreset('pure_striker')">🎯 Pure Striker</button>
+            <button class="preset-btn" onclick="applyPositionPreset('universal_winger')">⚡ Universal Winger</button>
+            <button class="preset-btn" onclick="applyPositionPreset('midfield_maestro')">🧠 Midfield Maestro</button>
+            <button class="preset-btn" onclick="applyPositionPreset('complete_defender')">🛡️ Complete Defender</button>
+            <button class="preset-btn" onclick="applyPositionPreset('goalkeeper')">🧤 Goalkeeper</button>
+          </div>
+        </div>
+
+        <!-- 2-Column Tactical Editor Layout -->
+        <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+          
+          <!-- Column 1: Interactive Tactical Football Pitch -->
+          <div class="football-pitch-container">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px;">
+              Tactical Pitch Matrix
+            </div>
+
+            <div class="football-pitch">
+              <!-- Pitch Markings -->
+              <div class="pitch-box-top"></div>
+              <div class="pitch-circle-center"></div>
+              <div class="pitch-line-half"></div>
+              <div class="pitch-box-bottom"></div>
+
+              <!-- Row 1: Striker -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-natural" id="pitch-node-st" onclick="cyclePosition('st')" title="Striker (Centre)">
+                  <span class="node-role">ST</span>
+                  <span class="node-val" id="pitch-val-st">20</span>
+                </div>
+              </div>
+
+              <!-- Row 2: Attacking Midfield -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-aml" onclick="cyclePosition('aml')" title="Attacking Midfielder (Left)">
+                  <span class="node-role">AML</span>
+                  <span class="node-val" id="pitch-val-aml">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-amc" onclick="cyclePosition('amc')" title="Attacking Midfielder (Centre)">
+                  <span class="node-role">AMC</span>
+                  <span class="node-val" id="pitch-val-amc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-amr" onclick="cyclePosition('amr')" title="Attacking Midfielder (Right)">
+                  <span class="node-role">AMR</span>
+                  <span class="node-val" id="pitch-val-amr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 3: Central & Wide Midfield -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-ml" onclick="cyclePosition('ml')" title="Midfielder (Left)">
+                  <span class="node-role">ML</span>
+                  <span class="node-val" id="pitch-val-ml">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-mc" onclick="cyclePosition('mc')" title="Midfielder (Centre)">
+                  <span class="node-role">MC</span>
+                  <span class="node-val" id="pitch-val-mc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-mr" onclick="cyclePosition('mr')" title="Midfielder (Right)">
+                  <span class="node-role">MR</span>
+                  <span class="node-val" id="pitch-val-mr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 4: Defensive Midfield & Wingbacks -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-wbl" onclick="cyclePosition('wbl')" title="Wing Back (Left)">
+                  <span class="node-role">WBL</span>
+                  <span class="node-val" id="pitch-val-wbl">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dm" onclick="cyclePosition('dm')" title="Defensive Midfielder (Centre)">
+                  <span class="node-role">DM</span>
+                  <span class="node-val" id="pitch-val-dm">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-wbr" onclick="cyclePosition('wbr')" title="Wing Back (Right)">
+                  <span class="node-role">WBR</span>
+                  <span class="node-val" id="pitch-val-wbr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 5: Defence -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dl" onclick="cyclePosition('dl')" title="Defender (Left)">
+                  <span class="node-role">DL</span>
+                  <span class="node-val" id="pitch-val-dl">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dc" onclick="cyclePosition('dc')" title="Defender (Centre)">
+                  <span class="node-role">DC</span>
+                  <span class="node-val" id="pitch-val-dc">1</span>
+                </div>
+                <div class="pitch-node pos-ineffectual" id="pitch-node-dr" onclick="cyclePosition('dr')" title="Defender (Right)">
+                  <span class="node-role">DR</span>
+                  <span class="node-val" id="pitch-val-dr">1</span>
+                </div>
+              </div>
+
+              <!-- Row 6: Goalkeeper -->
+              <div class="pitch-row">
+                <div class="pitch-node pos-ineffectual" id="pitch-node-gk" onclick="cyclePosition('gk')" title="Goalkeeper">
+                  <span class="node-role">GK</span>
+                  <span class="node-val" id="pitch-val-gk">1</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pitch Legend -->
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+              <span><b style="color: #10b981;">● 20</b> Natural</span>
+              <span><b style="color: #059669;">● 15-19</b> Accomplished</span>
+              <span><b style="color: #f59e0b;">● 10-14</b> Competent</span>
+              <span><b style="color: #ea580c;">● 6-9</b> Unconvincing</span>
+              <span><b style="color: #64748b;">● 1-5</b> Ineffectual</span>
+            </div>
+            <div style="font-size: 10px; color: var(--text-dim); text-align: center; margin-top: 4px;">
+              💡 Click any position circle to cycle tier (20 ➔ 15 ➔ 10 ➔ 1)
+            </div>
+          </div>
+
+          <!-- Column 2: Foot Abilities & Position Rating Steppers -->
+          <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 16px;">
+            
+            <!-- Foot Ability Sliders -->
+            <div class="foot-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);">Foot Ability Ratings</h3>
+                <span style="font-size: 11px; color: var(--text-dim);">1 (Very Weak) — 20 (Very Strong)</span>
+              </div>
+
+              <!-- Left Foot -->
+              <div class="foot-row">
+                <div class="foot-label-group">
+                  <div class="foot-name">Left Foot</div>
+                  <div id="foot-desc-left" class="foot-desc">Very Strong</div>
+                </div>
+                <input id="slider-foot-left" type="range" min="1" max="20" class="foot-slider" oninput="handleFootSlider('left', this.value)">
+                <div id="foot-val-left" class="foot-rating-badge" style="color: var(--accent-emerald);">20</div>
+              </div>
+
+              <!-- Right Foot -->
+              <div class="foot-row">
+                <div class="foot-label-group">
+                  <div class="foot-name">Right Foot</div>
+                  <div id="foot-desc-right" class="foot-desc">Very Strong</div>
+                </div>
+                <input id="slider-foot-right" type="range" min="1" max="20" class="foot-slider" oninput="handleFootSlider('right', this.value)">
+                <div id="foot-val-right" class="foot-rating-badge" style="color: var(--accent-emerald);">20</div>
+              </div>
+            </div>
+
+            <!-- Position Ratings Matrix (14 Positions) -->
+            <div class="card" style="margin: 0; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);">
+                  All 14 Tactical Positions
+                </h3>
+                <span style="font-size: 11px; color: var(--text-dim);">Click value or use - / + steppers</span>
+              </div>
+              <div class="pos-table-grid" id="pos-grid-container">
+                <!-- Dynamically populated by JS renderPositionsTab() -->
+              </div>
+            </div>
+
+            <!-- Quick Action & Save Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px 16px;">
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <span>💾 Position and foot changes are pending until you click Save</span>
+              </div>
+              <button class="btn btn-emerald" style="padding: 8px 20px;" onclick="savePositionsToGame()">
+                💾 Save Positions to FM26
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>

@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
-const script = readFileSync(require('node:path').join(__dirname, '../src/ui.html'), 'utf8').split('<script>')[1].split('</script>')[0];
+const { script } = require('./helpers/ui.cjs');
 
 function ui(fetch) {
   const els = {};

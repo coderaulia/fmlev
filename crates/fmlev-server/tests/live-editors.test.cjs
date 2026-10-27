@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
-const html = readFileSync(path.join(__dirname, '../src/ui.html'), 'utf8');
+const { html } = require('./helpers/ui.cjs');
 const router = readFileSync(path.join(__dirname, '../src/routes/mod.rs'), 'utf8');
 
 // Connected mode hides every direct child of the club/nation/competition tabs except marked live editors,

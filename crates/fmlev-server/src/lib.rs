@@ -4,7 +4,8 @@ use tracing::info;
 
 use fmlev_mem::{find_fm_process, find_module_bases};
 
-pub const EMBEDDED_UI_HTML: &str = include_str!("ui.html");
+pub mod ui_bundle;
+pub use ui_bundle::embedded_ui_html;
 pub const DEFAULT_OFFSETS_JSON: &str = include_str!("../../../offsets/v26.0.0.json");
 
 pub mod routes;

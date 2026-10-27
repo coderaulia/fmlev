@@ -1,0 +1,185 @@
+
+    <!-- VIEW 6: COMPETITION DETAILS, RULES & PRIZE MONEY -->
+    <section id="tab-competition" class="tab-view">
+      <!-- Competition Header -->
+      <div class="player-header-card" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(10, 14, 26, 0.95)); border-color: rgba(168, 85, 247, 0.35);">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div class="player-avatar" style="border-color: var(--accent-purple); font-size: 26px;">🏆</div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 id="comp-name" style="font-size: 22px; font-weight: 800;">Premier League</h2>
+              <span id="comp-short-name" class="pill-badge badge-pos">EPL</span>
+              <span id="comp-nation" class="pill-badge badge-nat">England</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+              <span style="font-size: 11px; color: var(--text-muted);">Competition Reputation:</span>
+              <span id="comp-rep-num" style="font-weight: 800; color: var(--accent-gold);">9,200 / 10,000</span>
+              <span id="comp-rep-stars" class="star-rating">★★★★★</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="preset-btn" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(6, 182, 212, 0.3)); border-color: var(--accent-emerald);" onclick="applyCompetitionPreset('relax_rules')">
+            ⚡ Relax Rules (Unlimited Foreign & 12 Bench Subs)
+          </button>
+          <button class="btn btn-emerald" onclick="saveCompetitionToGame()">
+            💾 Save Competition Rules
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-card" id="registration-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">📝 Register Anytime</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Open this competition's Rules page in FM26 once so its unique id is known, then enable. Close and reopen
+          Squad &gt; Registration to see it. It stays until a new season or stage change rebuilds the rules (enable again then).
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-emerald" onclick="setRegistration(true)">Allow registration anytime</button>
+          <button class="btn" onclick="setRegistration(false)">Restore rules</button>
+        </div>
+      </div>
+      <div class="glass-card" id="prize-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">🏆 Live Prize Money (raw GBP per position)</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Open Competition &gt; Rules in FM26, enter the team count and the first and last prize shown there
+          (in the game's display currency, as raw amounts), then Load. Changes appear on the Rules page after you leave
+          and reopen it. <strong>Caveat:</strong> the season-end payout source is unconfirmed; this edits the table the Rules page reads.
+        </p>
+        <div class="form-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <input id="prize-teams" type="number" min="2" max="64" class="form-control" placeholder="Teams (18)">
+          <input id="prize-first" type="number" min="1" class="form-control" placeholder="First prize (165000)">
+          <input id="prize-last" type="number" min="1" class="form-control" placeholder="Last prize (80000)">
+          <input id="prize-tol" type="number" min="0" class="form-control" placeholder="Tolerance (0; 60000 if rounded like £53.1M)">
+        </div>
+        <textarea id="prize-list" class="form-control" rows="4" style="margin-top: 8px;" placeholder="One amount per line, position 1 first"></textarea>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button class="btn" onclick="loadPrizeTable()">Load from game</button>
+          <button class="btn btn-emerald" onclick="savePrizeTable()">💾 Save Prize Money</button>
+        </div>
+      </div>
+
+      <!-- Live Competition Reputation -->
+      <div class="glass-card" id="competition-reputation-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">⭐ Live Competition Reputation</h3>
+        <p style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">
+          Competition reputation is stored natively (1 - 200) and mapped to the 1 - 10,000 UI scale. Saved natively with transactional readback and rollback.
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="comp-reputation" type="number" min="1" max="10000" class="form-control" style="max-width: 220px;" placeholder="Reputation (1-10000)" oninput="handleCompRepChange(this.value)">
+          <button class="btn btn-emerald" onclick="saveCompetitionToGame()">💾 Save Competition Reputation</button>
+        </div>
+      </div>
+
+      <!-- Competition Grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+        <!-- Left: Match Rules & VAR Active -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>⏱️ Match Rules & Substitutions</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Substitutes Allowed (In-Game)</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-max-subs', -1, 1, 11)">−</button>
+              <input id="comp-max-subs" type="number" min="1" max="11" class="form-control" value="5">
+              <button class="stepper-btn" onclick="stepCompField('comp-max-subs', 1, 1, 11)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Bench Size (Substitutes Named)</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-bench-size', -1, 1, 20)">−</button>
+              <input id="comp-bench-size" type="number" min="1" max="20" class="form-control" value="9">
+              <button class="stepper-btn" onclick="stepCompField('comp-bench-size', 1, 1, 20)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Substitution Stoppage Windows</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-sub-windows', -1, 1, 10)">−</button>
+              <input id="comp-sub-windows" type="number" min="1" max="10" class="form-control" value="3">
+              <button class="stepper-btn" onclick="stepCompField('comp-sub-windows', 1, 1, 10)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Yellow Cards for Ban</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-yellow-ban', -1, 1, 20)">−</button>
+              <input id="comp-yellow-ban" type="number" min="1" max="20" class="form-control" value="5">
+              <button class="stepper-btn" onclick="stepCompField('comp-yellow-ban', 1, 1, 20)">+</button>
+            </div>
+          </div>
+
+          <!-- VAR Active Toggle -->
+          <div style="background: rgba(10, 14, 26, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; margin-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 700; font-size: 12px; color: var(--text-main);">Video Assistant Referee (VAR)</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Enable or disable goal/penalty VAR reviews</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span id="comp-var-status" class="pill-badge badge-fit">🟢 VAR Active</span>
+              <label class="switch">
+                <input id="comp-var-active" type="checkbox" checked onchange="handleVarToggle(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Squad Rules & Prize Money Pool -->
+        <div class="card">
+          <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span>📋 Squad Registration & Commercial Pool</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Squad Size</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-squad-size', -1, 11, 99)">−</button>
+              <input id="comp-squad-size" type="number" min="11" max="99" class="form-control" value="25">
+              <button class="stepper-btn" onclick="stepCompField('comp-squad-size', 1, 11, 99)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Max Foreign / Non-EU Players</label>
+            <div class="stepper-input-group">
+              <button class="stepper-btn" onclick="stepCompField('comp-foreign-limit', -1, 0, 99)">−</button>
+              <input id="comp-foreign-limit" type="number" min="0" max="99" class="form-control" value="17">
+              <button class="stepper-btn" onclick="stepCompField('comp-foreign-limit', 1, 0, 99)">+</button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label class="form-label">Min Homegrown (Club)</label>
+              <input id="comp-hg-club" type="number" min="0" max="25" class="form-control" value="4">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Min Homegrown (Nation)</label>
+              <input id="comp-hg-nation" type="number" min="0" max="25" class="form-control" value="8">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label" data-money-label="Winner Prize Money">Winner Prize Money</label>
+            <input id="comp-prize-money" data-money="money" type="number" class="form-control" value="44000000">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" data-money-label="TV Rights Pool">TV Rights Pool</label>
+            <input id="comp-tv-rights" data-money="money" type="number" class="form-control" value="2400000000">
+          </div>
+
+          <button class="btn btn-emerald" style="width: 100%; margin-top: 8px;" onclick="saveCompetitionToGame()">
+            💾 Save Competition Rules
+          </button>
+        </div>
+      </div>
+    </section>

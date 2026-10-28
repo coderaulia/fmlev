@@ -176,3 +176,50 @@ test("prize edits entered during a reputation save need another Save", async () 
   assert.equal(ui.requests.filter(r => r.body?.prizes).length, 0);
   assert.equal(ui.run("prizeChanges().length"), 1);
 });
+
+const ruleIds = ["nation-rule-years", "nation-rule-type", "nation-rule-dual"];
+const unavailable = reason => ({ status: "unavailable", confidence: "probable", value: null, reason });
+function ruleApp(rules) {
+  const ui = createUi({ ids: [...ids, ...ruleIds], fetch: async url => url === "/api/nation/native" ? ok({ nation, nationality_rules: rules }) : ok({}) });
+  ui.run("displayEntityAvailability = () => true; state.connected = true; state.activeNation = " + JSON.stringify(nation) + "; Shell.init()");
+  return ui;
+}
+
+test("Nationality rules card shows unavailable reasons and stages nothing for unverified fields", async () => {
+  const ui = ruleApp({
+    years_to_gain_nationality: unavailable("candidate layout is Probable: not verified"),
+    gain_nationality_type_code: unavailable("candidate layout is Unverified"),
+    dual_nationality_allowed: unavailable("candidate layout is Unverified"),
+    write_support: "none",
+  });
+  ui.run("switchTab('tab-nation')");
+  assert.equal(await ui.run("SaveBar.load()"), true);
+  assert.match(ui.els["nation-rule-years"].innerText, /^Unavailable: candidate layout is Probable/);
+  assert.doesNotMatch(ui.els["nation-rule-years"].innerText, /\d+ years/);
+  assert.match(ui.els["nation-rule-dual"].innerText, /^Unavailable/);
+  assert.deepEqual(ui.run("nationFieldChanges()"), []);
+  assert.equal(ui.requests.length, 1);
+});
+
+test("Nationality rules card shows only verified values, read-only", async () => {
+  const ui = ruleApp({
+    years_to_gain_nationality: { status: "verified", confidence: "verified", value: 10, reason: null },
+    gain_nationality_type_code: unavailable("labels unknown"),
+    dual_nationality_allowed: { status: "verified", confidence: "verified", value: false, reason: null },
+  });
+  ui.run("switchTab('tab-nation')");
+  await ui.run("SaveBar.load()");
+  assert.equal(ui.els["nation-rule-years"].innerText, "10 years");
+  assert.equal(ui.els["nation-rule-dual"].innerText, "No");
+  assert.match(ui.els["nation-rule-type"].innerText, /^Unavailable: labels unknown/);
+  assert.equal(ui.run("nationFieldChanges().length"), 0);
+});
+
+test("Nationality rules card has no inputs and a switched nation drops the previous rules", async () => {
+  assert.doesNotMatch(read("pages/nation.html").split('id="nation-rules-card"')[1], /<(?:input|select|button)/);
+  const ui = ruleApp({ years_to_gain_nationality: { status: "verified", confidence: "verified", value: 10, reason: null } });
+  ui.run("switchTab('tab-nation')");
+  await ui.run("SaveBar.load()");
+  ui.run("displayNation({ id: 9, name: 'Other' })");
+  assert.match(ui.els["nation-rule-years"].innerText, /^Unavailable/);
+});

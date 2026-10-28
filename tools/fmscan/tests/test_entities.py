@@ -248,6 +248,57 @@ class EntityTests(unittest.TestCase):
         self.assertIsNone(d["state_of_development"])
         self.assertIsNone(d["men"]["fifa_rank"])
 
+    def confidence(self, d):
+        return {row["field"]: row["confidence"] for row in d["field_confidence"]}
+
+    def test_nationality_rule_candidates_carry_confidence_labels(self):
+        spain, japan = self.details("nation", 170), self.details("nation", 171)
+        self.assertEqual((spain["nationality_years"], japan["nationality_years"]), (10, 5))
+        self.assertEqual((spain["gain_nationality_type_native_code"], japan["gain_nationality_type_native_code"]), (1, 2))
+        self.assertIs(spain["dual_nationality_allowed"], True)
+        self.assertIs(japan["dual_nationality_allowed"], False)
+        self.assertIsNone(spain["gain_nationality_type"])
+        labels = self.confidence(spain)
+        self.assertEqual(labels["nationality_years"], "probable")
+        for key in ("gain_nationality_type_native_code", "dual_nationality_allowed",
+                    "economic_factor", "state_of_development_native_code"):
+            self.assertEqual(labels[key], "unverified", key)
+        self.assertNotIn("verified", labels.values())
+        evidence = {e["field"]: e for e in spain["field_evidence"]}
+        self.assertEqual(evidence["nationality_years"]["address"], hex(self.root + 0x41ed))
+        self.assertEqual(evidence["dual_nationality_allowed"]["address"], hex(self.root + 0x41e9))
+        self.assertIn("Nygn", evidence["nationality_years"]["evidence"])
+        self.assertEqual(spain["write_support"], "none")
+
+    def test_nationality_type_outside_seen_range_is_unavailable(self):
+        self.action("bad-nation-type")
+        d = self.details("nation", 170)
+        self.assertIsNone(d["gain_nationality_type_native_code"])
+        self.assertTrue(any(u["field"] == "gain_nationality_type_native_code" for u in d["unavailable"]))
+        self.assertEqual(d["nationality_years"], 10)
+
+    def test_nationality_rules_require_known_build(self):
+        self.action("unknown-build")
+        d = self.details("nation", 170)
+        for key in ("nationality_years", "gain_nationality_type_native_code", "dual_nationality_allowed"):
+            self.assertIsNone(d[key], key)
+
+    def test_nation_rules_report_summarises_distribution_without_claiming_verified(self):
+        report = subprocess.run(
+            ["python3", str(ROOT / "nation_rules.py"), self.pid, "--fmscan", str(self.binary),
+             "--near", f"{self.root + 0x8000:x}:8000", "--json"],
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(report.returncode, 0, report.stderr)
+        data = json.loads(report.stdout)
+        self.assertEqual(data["nations"], 2)
+        self.assertEqual(data["distribution"]["years"], {"5": 1, "10": 1})
+        self.assertEqual(data["distribution"]["dual_nationality_allowed"], {"false": 1, "true": 1})
+        self.assertEqual(data["hints"]["Spain"]["status"], "agree")
+        self.assertEqual(data["hints"]["Japan"]["status"], "agree")
+        self.assertEqual(data["hints"]["Italy"]["status"], "not_found")
+        self.assertNotEqual(data["verdict"]["nationality_years"], "verified")
+        self.assertIn("screen", data["verdict"]["note"])
+
     def test_competition_native_reputation_scale_and_stage(self):
         d = self.details("competition", 51)
         self.assertEqual(d["reputation"], 178)

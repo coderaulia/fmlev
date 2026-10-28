@@ -120,6 +120,12 @@ those fields unavailable. Examples:
 ./fmscan entity PID competition --name "Spanish First Division" --editor --json
 ```
 
+Nation exports also carry nationality-rule candidates (`nationality_years`,
+`gain_nationality_type_native_code`, `dual_nationality_allowed`) with a
+`field_confidence` array (`probable`/`unverified`; never `verified` from the scanner).
+`python3 nation_rules.py PID` summarises them for every nation (read-only):
+distributions, a few well-known nations as hints, and the current confidence.
+
 Club exports include facilities, guarded finance values, reputation and main
 stadium capacity/expansion. Nation youth/reputation are separate under `men` and
 `women`; economic factor and a raw development-state code are also readable.

@@ -95,6 +95,11 @@ int main(int argc, char** argv) {
     put(heap + 0x141e0, root + 0x15000); put(heap + 0x15060, root + 0x1a020); put(heap + 0x15068, root + 0x1a028);
     put(heap + 0x1a020, root + 0x16000); heap[0x1609a]=1;
     heap[0x41f0]=17;heap[0x41ec]=1;put(heap+0x41e4,uint32_t{49570725});
+    // Nationality rule candidates (Spain: 10 years, type 1, dual allowed).
+    heap[0x41ed]=10;heap[0x41eb]=1;heap[0x41e9]=0;
+    // Second nation (Japan: 5 years, type 2, dual NOT allowed) for distributions.
+    identity(0x7000, nation, 171, 797); put(heap + 0x7018, text("Japan"));
+    heap[0x71ed]=5;heap[0x71eb]=2;heap[0x71e9]=0x02;heap[0x71f0]=12;heap[0x71ec]=2;
     identity(0x18000,stadium,374,1040);identity(0x1b000,stadium,375,1041);
     put(heap+0x18040,text("Camp Nou"));put(heap+0x1b040,text("Training Ground"));
     put(heap+0x1807c,uint32_t{62500});put(heap+0x1808c,uint32_t{105000});
@@ -129,6 +134,7 @@ int main(int argc, char** argv) {
         if (cmd == "bad-finance-owner") put(heap + 0xd008, root + 0x5000);
         if (cmd == "bad-container-owner") put(heap + 0x10170, root + 0x5000);
         if (cmd == "bad-national-team-owner") put(heap + 0x12030, root + 0x5000);
+        if (cmd == "bad-nation-type") heap[0x41eb] = 7;
         if (cmd == "bad-youth") put(heap + 0x10864, uint16_t{300});
         if (cmd == "bad-comp-reputation") put(heap + 0x5188, uint16_t{10000});
         if (cmd == "bad-stage") put(heap + 0x15068, root + 0x1a000);

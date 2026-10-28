@@ -67,8 +67,8 @@ pub async fn search_staff(State(state): State<ServerState>, Json(req): Json<Staf
     };
     let max = req.max.unwrap_or(20).clamp(1, MAX_SEARCH_RESULTS);
     if req.query.trim().chars().count() >= 2 {
-        if let Some(staff) = search::indexed_staff_search(&state, &driver, req.query.trim(), max) {
-            return Json(serde_json::json!({ "status": "ok", "staff": staff, "source": "index" })).into_response();
+        if let Some((staff, clubs)) = search::indexed_staff_search(&state, &driver, req.query.trim(), max) {
+            return Json(serde_json::json!({ "status": "ok", "staff": staff, "clubs": clubs, "source": "index" })).into_response();
         }
     }
     let query = req.query.clone();

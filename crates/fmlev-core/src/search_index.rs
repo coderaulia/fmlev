@@ -47,18 +47,21 @@ pub struct IndexEntry {
     pub id: i32,
     pub uid: u32,
     pub name: String,
-    /// Player: club name. Club and competition: nation name. Only set when the link was validated.
+    /// Player and staff: club name. Club and competition: nation name. Only set when the link was validated.
     pub detail: Option<String>,
     #[serde(skip)]
     pub address: usize,
     #[serde(skip)]
     folded: String,
+    #[serde(skip)]
+    folded_detail: String,
 }
 
 impl IndexEntry {
     pub fn new(kind: EntityKind, id: i32, uid: u32, name: String, detail: Option<String>, address: usize) -> Self {
         let folded = fold(&name);
-        Self { kind, id, uid, name, detail, address, folded }
+        let folded_detail = detail.as_deref().map(fold).unwrap_or_default();
+        Self { kind, id, uid, name, detail, address, folded, folded_detail }
     }
 }
 
@@ -146,7 +149,9 @@ fn score(entry: &IndexEntry, folded: &str, tokens: &[&str], number: Option<i64>)
     if number.is_some_and(|n| n == i64::from(entry.id) || n == i64::from(entry.uid)) {
         return Some(0);
     }
-    if !tokens.iter().all(|token| entry.folded.contains(token)) {
+    // Staff are also found by their club ("madrid" lists the club's staff); the rank stays name-based.
+    let by_club = entry.kind == EntityKind::Staff;
+    if !tokens.iter().all(|token| entry.folded.contains(token) || (by_club && entry.folded_detail.contains(token))) {
         return None;
     }
     if entry.folded == folded {
@@ -241,6 +246,28 @@ mod tests {
             0,
             5,
         )
+    }
+
+    #[test]
+    fn staff_are_also_found_by_club_but_players_are_not() {
+        let with_club = |kind, id, name: &str, club: &str| {
+            IndexEntry::new(kind, id, 1000 + id as u32, name.to_string(), Some(club.to_string()), 0x1000 * id as usize)
+        };
+        let index = SearchIndex::new(
+            42,
+            vec![
+                with_club(EntityKind::Staff, 1, "Antonio Pintus", "R. Madrid"),
+                with_club(EntityKind::Staff, 2, "Iván Ortega", "R. Madrid"),
+                with_club(EntityKind::Staff, 3, "Madrid Smith", "Barcelona"),
+                with_club(EntityKind::Player, 4, "Kylian Mbappé", "R. Madrid"),
+            ],
+            0,
+            5,
+        );
+        let ids = |q: &str, kind| index.query(q, Some(kind), 10, 0)[&kind].hits.iter().map(|h| h.id).collect::<Vec<_>>();
+        assert_eq!(ids("madrid", EntityKind::Staff), vec![3, 1, 2], "name match ranks first, then club matches");
+        assert_eq!(ids("ortega madrid", EntityKind::Staff), vec![2], "every token must match name or club");
+        assert!(ids("madrid", EntityKind::Player).is_empty(), "player search stays name-only");
     }
 
     #[test]

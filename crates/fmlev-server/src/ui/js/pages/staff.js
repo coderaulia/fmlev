@@ -31,6 +31,31 @@
       return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     }
 
+    // Recently opened staff, remembered in this browser only (the list may be empty or unavailable).
+    const STAFF_RECENT_KEY = "fmle.staff.recent";
+    const STAFF_RECENT_MAX = 8;
+    function staffRecent() {
+      try {
+        const list = JSON.parse(localStorage.getItem(STAFF_RECENT_KEY) || "[]");
+        return Array.isArray(list) ? list.filter(r => r && Number.isInteger(r.index) && Number.isInteger(r.uid) && typeof r.name === "string") : [];
+      } catch (error) { return []; }
+    }
+    function rememberStaff(entry) {
+      const list = [entry, ...staffRecent().filter(r => r.index !== entry.index)].slice(0, STAFF_RECENT_MAX);
+      try { localStorage.setItem(STAFF_RECENT_KEY, JSON.stringify(list)); } catch (error) { /* private mode: recents last for this tab only */ }
+    }
+    function staffTable(rows) {
+      return `<table class="fm-table"><thead><tr><th>Name</th><th>Club</th><th class="num">ID</th></tr></thead><tbody>` +
+        rows.map(s => `<tr onclick="selectStaff(${Number(s.index)}, ${Number(s.uid)})"><td>${escapeHtml(s.name)}</td>` +
+          `<td>${s.club ? escapeHtml(s.club) : '<span class="muted">-</span>'}</td><td class="num">#${Number(s.index)}</td></tr>`).join("") + `</tbody></table>`;
+    }
+    function showStaffRecents() {
+      const box = staffEl("staff-results");
+      if (!box) return;
+      const recent = staffRecent();
+      box.innerHTML = recent.length ? `<div class="muted">Recently opened</div>` + staffTable(recent) : "";
+    }
+
     async function searchStaff() {
       const query = (staffEl("staff-query")?.value || "").trim();
       if (query.length < 2) { showToast("Type at least 2 letters.", "warning"); return; }
@@ -40,11 +65,9 @@
         const res = await staffRequest("/api/staff/search", { query });
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Staff search failed");
-        staffState.results = data.staff;
-        if (box) box.innerHTML = data.staff.length
-          ? `<table class="fm-table"><thead><tr><th>Name</th><th class="num">ID</th></tr></thead><tbody>` +
-            data.staff.map(s => `<tr onclick="selectStaff(${Number(s.index)}, ${Number(s.uid)})"><td>${escapeHtml(s.name)}</td><td class="num">#${Number(s.index)}</td></tr>`).join("") + `</tbody></table>`
-          : "No staff found.";
+        const clubs = data.clubs || {};
+        staffState.results = data.staff.map(s => ({ ...s, club: clubs[s.index] || null }));
+        if (box) box.innerHTML = staffState.results.length ? staffTable(staffState.results) : "No staff found.";
       } catch (error) { if (box) box.innerHTML = ""; showToast(error.message, "error"); }
     }
 
@@ -195,6 +218,8 @@
     async function selectStaff(id, uid) {
       try {
         const data = await loadStaff(id, uid);
+        const known = staffState.results.find(r => r.index === data.staff.index) || staffRecent().find(r => r.index === data.staff.index);
+        rememberStaff({ index: data.staff.index, uid: data.staff.uid, name: data.staff.name, club: known ? known.club || null : null });
         if (typeof Shell !== "undefined") {
           Shell.setContext({ section: "staff", kind: "staff", id: data.staff.index, title: data.staff.name, subtitle: "Staff",
             open: () => { switchTab("tab-staff"); return selectStaff(id, uid); } });
@@ -205,7 +230,13 @@
     // Save bar "Load": re-read the selected member from the game, dropping edits.
     async function loadStaffFromGame() {
       const current = staffState.selected;
-      if (!current) { showToast("Select a staff member first.", "warning"); return false; }
+      if (!current) {
+        // Nothing selected yet: reopen the last staff member used, since FM26 exposes no "open profile" to read.
+        const last = staffRecent()[0];
+        if (!last) { showToast("Search for a staff member (name or club) first.", "warning"); return false; }
+        await selectStaff(last.index, last.uid);
+        return !!staffState.selected;
+      }
       try { await loadStaff(current.staff.index, current.staff.uid); return true; }
       catch (error) { showToast(error.message, "error"); return false; }
     }
@@ -239,5 +270,6 @@
       } catch (error) { showToast(error.message, "error"); return false; }
     }
 
+    showStaffRecents();
     SaveBar.register("staff", { load: loadStaffFromGame, save: saveStaffAttributes, discard: discardStaffEdits, changes: staffChanges });
     try { Shell.setSubTabs(STAFF_TABS.map(t => ({ id: t.id, label: t.label })), staffState.tab, { section: "staff", onSelect: setStaffTab }); } catch (error) { /* shell not ready in a bare sandbox */ }

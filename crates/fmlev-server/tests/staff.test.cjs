@@ -5,10 +5,10 @@ const vm = require('node:vm');
 const { html } = require('./helpers/ui.cjs');
 const { script } = require('./helpers/ui.cjs');
 
-function ui(fetch) {
+function ui(fetch, store = {}) {
   const els = {};
   const context = vm.createContext({
-    els, localStorage: { getItem: () => null, setItem() {} }, fetch, console,
+    els, localStorage: { getItem: key => (key in store ? store[key] : null), setItem(key, value) { store[key] = String(value); } }, fetch, console,
     setTimeout() { return 1; }, clearTimeout() {}, window: { addEventListener() {} },
     document: { addEventListener() {}, querySelectorAll: () => [], getElementById: id => els[id] || null },
   });
@@ -262,4 +262,44 @@ test('a staff save response cannot replace a different selected staff member', a
   finish({ok: true, json: async () => ({attributes: []})});
   assert.equal(await pending, false);
   assert.equal(app.run('staffState.selected.staff.index'), 80);
+});
+
+test('search shows the club and remembers opened staff; Load reopens the last one', async () => {
+  const store = {};
+  const calls = [];
+  const fetch = async (url, request) => {
+    calls.push({ url, body: JSON.parse(request.body) });
+    if (url === '/api/staff/search') {
+      return { ok: true, text: async () => '', json: async () => ({ staff: [{ index: 4460, uid: 4001686, name: 'Antonio Pintus' }], clubs: { 4460: 'R. Madrid' } }) };
+    }
+    return { ok: true, text: async () => '', json: async () => ({ staff: { index: 4460, uid: 4001686, name: 'Antonio Pintus' }, attributes: [] }) };
+  };
+  const app = ui(fetch, store);
+  await app.run('searchStaff()');
+  const table = app.run('els["staff-results"].innerHTML');
+  assert.match(table, /<th>Club<\/th>/);
+  assert.match(table, /Antonio Pintus<\/td><td>R\. Madrid<\/td>/);
+  await app.run('selectStaff(4460, 4001686)');
+  assert.deepEqual(JSON.parse(store['fmle.staff.recent']), [{ index: 4460, uid: 4001686, name: 'Antonio Pintus', club: 'R. Madrid' }]);
+
+  // A fresh page with nothing selected lists the recent staff and Load reopens the last one.
+  const calls2 = [];
+  const app2 = ui(async (url, request) => { calls2.push({ url, body: JSON.parse(request.body) }); return fetch(url, request); }, store);
+  app2.run('showStaffRecents()');
+  assert.match(app2.run('els["staff-results"].innerHTML'), /Recently opened[^]*Antonio Pintus<\/td><td>R\. Madrid/);
+  assert.equal(await app2.run('loadStaffFromGame()'), true);
+  assert.deepEqual(calls2[0], { url: '/api/staff/native', body: { staff_id: 4460, staff_uid: 4001686 } });
+});
+
+test('Load with nothing selected and no recents tells the user to search', async () => {
+  const app = ui(async () => { throw new Error('no request expected'); });
+  assert.equal(await app.run('loadStaffFromGame()'), false);
+  assert.match(app.run('messages[0].message'), /name or club/);
+});
+
+test('recents ignore corrupt or unavailable storage', () => {
+  const app = ui(async () => ({}), { 'fmle.staff.recent': '{not json' });
+  assert.deepEqual(app.run('staffRecent()'), []);
+  const app2 = ui(async () => ({}), { 'fmle.staff.recent': JSON.stringify([{ index: 1, uid: 2, name: 'Ok' }, { index: 'x' }]) });
+  assert.equal(app2.run('staffRecent().length'), 1);
 });

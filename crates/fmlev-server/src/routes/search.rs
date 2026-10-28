@@ -155,14 +155,22 @@ pub(crate) fn indexed_staff(state: &ServerState, driver: &LinuxMemoryDriver, id:
     }
 }
 
-/// Staff name search over the index, revalidating each hit. `None` when no ready index exists.
-pub(crate) fn indexed_staff_search(state: &ServerState, driver: &LinuxMemoryDriver, query: &str, max: usize) -> Option<Vec<NativeStaffRecord>> {
+/// Staff search over the index (name or club), revalidating each hit. Returns the records and their
+/// validated club names by index. `None` when no ready index exists.
+pub(crate) fn indexed_staff_search(
+    state: &ServerState,
+    driver: &LinuxMemoryDriver,
+    query: &str,
+    max: usize,
+) -> Option<(Vec<NativeStaffRecord>, std::collections::BTreeMap<i32, String>)> {
     let hits = {
         let search = state.search_read();
         let index = search.index.as_ref().filter(|index| index.pid == driver.pid())?;
         index.query(query, Some(EntityKind::Staff), max, 0).remove(&EntityKind::Staff).unwrap_or_default().hits
     };
-    Some(hits.into_iter().filter_map(|entry| indexed_staff(state, driver, entry.id, entry.uid as i32)).collect())
+    let clubs = hits.iter().filter_map(|entry| entry.detail.clone().map(|club| (entry.id, club))).collect();
+    let staff = hits.into_iter().filter_map(|entry| indexed_staff(state, driver, entry.id, entry.uid as i32)).collect();
+    Some((staff, clubs))
 }
 
 pub async fn search_status(State(state): State<ServerState>) -> impl IntoResponse {

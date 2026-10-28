@@ -264,6 +264,22 @@ impl Pass<'_> {
         Some((id, uid, pooled_name(self.driver, address + 0x50)?))
     }
 
+    /// Club name of a staff member's contract (`R + 0x1a8`, owner back-pointer `R + 0x100`), only when
+    /// every link validates. Verified on live profiles: wage, expiry and club agree with the game screens.
+    fn staff_club(&self, record: usize, teams: &HashMap<usize, ()>, clubs: &HashMap<usize, String>) -> Option<String> {
+        let driver = self.driver;
+        let contract = driver.read_ptr(record + 0x1a8).ok()?;
+        if contract == 0
+            || !self.catalog.is(driver, contract, CatalogKind::FullContract, 0)
+            || driver.read_ptr(contract + 8).ok()? != record + STAFF_SUBOBJECT as usize
+        {
+            return None;
+        }
+        let team = driver.read_ptr(contract + 0x10).ok()?;
+        teams.get(&team)?;
+        clubs.get(&driver.read_ptr(team + 0x30).ok()?).cloned()
+    }
+
     /// Club name of a player's parent contract, only when every link validates.
     fn player_club(&self, record: usize, teams: &HashMap<usize, ()>, clubs: &HashMap<usize, String>) -> Option<String> {
         let driver = self.driver;
@@ -312,6 +328,7 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
     let mut teams: HashMap<usize, ()> = HashMap::new();
     let mut entries = Vec::new();
     let mut players = Vec::new();
+    let mut staff_found = Vec::new();
     let mut linked = Vec::new();
     for &(address, t) in &candidates {
         match (t.kind, t.subobject_offset) {
@@ -344,7 +361,7 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
             }
             (CatalogKind::Staff, STAFF_SUBOBJECT) => {
                 if let Some((id, uid, name)) = pass.staff(address) {
-                    entries.push(IndexEntry::new(EntityKind::Staff, id, uid, name, None, address - STAFF_SUBOBJECT as usize));
+                    staff_found.push((address - STAFF_SUBOBJECT as usize, id, uid, name));
                 }
             }
             _ => {}
@@ -358,6 +375,10 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
     for (record, id, uid, name) in players {
         let club = pass.player_club(record, &teams, &clubs);
         entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record));
+    }
+    for (record, id, uid, name) in staff_found {
+        let club = pass.staff_club(record, &teams, &clubs);
+        entries.push(IndexEntry::new(EntityKind::Staff, id, uid, name, club, record));
     }
     let (entries, duplicates_dropped) = drop_duplicate_ids(entries);
     Enumeration { entries, duplicates_dropped, candidates: candidates.len() }
@@ -513,6 +534,11 @@ mod tests {
         a.ids(0x3108, 799, 107740);
         a.pooled(0x3150, 0x3400, 0x3500, "Igor");
         a.pooled(0x3158, 0x3408, 0x3600, "Tolić");
+        // Staff contract at 0x3700: owner is the staff sub-object, team is the one the player uses.
+        a.ptr(0x3700, CONTRACT_VT);
+        a.ptr(0x3708, a.at(0x3100));
+        a.ptr(0x3710, team);
+        a.ptr(0x31a8, a.at(0x3700));
         // Rejected: a club whose uid copies disagree, and a player with an out-of-range position.
         a.ptr(0x4000, CLUB_VT);
         a.put(0x4008, &[5u8, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0]);
@@ -539,6 +565,7 @@ mod tests {
         assert_eq!(find(EntityKind::Nation).unwrap().id, 7);
         let staff = find(EntityKind::Staff).unwrap();
         assert_eq!((staff.id, staff.uid, staff.name.as_str(), staff.address), (799, 107740, "Igor Tolić", a.at(0x3000)));
+        assert_eq!(staff.detail.as_deref(), Some("ASEC Mimosas"), "staff club comes from the validated contract chain");
         assert_eq!(mine.len(), 5, "rejected candidates must not be indexed: {mine:?}");
     }
 

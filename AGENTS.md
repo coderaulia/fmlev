@@ -460,6 +460,11 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Not proven**: reputation (the three u16 at +0xd4/+0xd6/+0xd8 read 4746/4747/2248 for "Obscure", 7750/7750/6250 for "National", 8699/8699/8200 for "Continental": order consistent, which slot and thresholds unknown), CA/PA (the screen shows no numbers), club job, role, national team job, any contract for non-R. Madrid clubs or the human manager's own staff, and every staff contract write (still 501).
 - Search index (plan G step 3 and 4): counts, build time 1.85 s, query p95 8.6 ms, six sampled entities matched `fmscan` on a 49,070 player save; a second save (39,514 players) rebuilt the index under 10 s (user-confirmed in the UI). Preferred moves (step 5): Mbappé bitset 0x8008800000000, bit 39 = Cuts Inside From Both Wings still the only named bit. Nation rules (step 6): the game's Nation screen shows no nationality rules, so those candidates cannot be screen-verified there and stay unverified.
 
+### Staff tab: club in search, club search, recents (2026-10-28)
+- Staff index entries now carry the club (`detail`) from the validated contract chain (`R+0x1a8` contract, owner back-pointer `R+0x100`, team `+0x10`, club `team+0x30`); no link means no club, never a guess. Staff search matches name or club ("madrid" lists the club's staff, name matches rank first); player search stays name-only. `POST /api/staff/search` returns a `clubs` map by index. UI: Club column, "Recently opened" list (browser localStorage), and Load with nothing selected reopens the last staff member.
+- Live (PID 5668): `madrid` returned 50 staff, 49 with a club (Getafe, Lleida, R. Madrid, R. Madrid B/C, A. Madrid B, ...); Antonio Pintus shows R. Madrid, matching the game screen. Staff whose contract is absent (e.g. national-team coaches) show no club.
+- **Not done**: detecting which staff profile is open in the game. A bindings dump taken while the FMLE window had focus held no staff-profile bindings; needs a dump taken with the game on a staff profile.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

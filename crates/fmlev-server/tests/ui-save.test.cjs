@@ -275,8 +275,10 @@ test('search shows every returned player and reports the total match count', asy
   const app = ui(async () => ({ ok: true, json: async () => ({ players, total_players: 125 }) }));
   app.run("const dropdown = { style: {}, innerHTML: '' }; document.getElementById = () => dropdown;");
   await app.run('performSearch("Player")');
-  assert.match(app.run('dropdown.innerHTML'), /8 shown of 125/);
+  assert.match(app.run('dropdown.innerHTML'), /Players \(8 of 125\)/);
   assert.match(app.run('dropdown.innerHTML'), /Player 7/);
-  assert.match(app.run('dropdown.innerHTML'), /Unknown position/);
+  assert.match(app.run('dropdown.innerHTML'), /No details yet/);
+  // An older server reports total_players but not per-kind totals, so it cannot page: no Show more.
+  assert.doesNotMatch(app.run('dropdown.innerHTML'), /Show more/);
   assert.equal(app.run('(dropdown.innerHTML.match(/class="search-item"/g) || []).length'), 8);
 });

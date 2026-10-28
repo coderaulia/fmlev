@@ -454,6 +454,12 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Not proven / not done**: every Information offset, reputation meaning, the contract chain (wage, expiry, role/job, club vs national-team), any write. Career Plans, Relationships, Knowledge, Swap Staff, Formations/Tendencies untouched.
 - Tests: new synthetic fmscan test `test_staff_information_candidates_and_contract_survey`, Rust unit tests for unavailable/verified/range handling, server route test, Node tests for both sub-tabs.
 
+### Live verification 2026-10-28 (owner, PID 5668, throwaway save): staff birth year and contract promoted
+- Profiles compared with `fmscan entity PID staff --name X --editor` and the Rust example `staff_data info <id> <uid>` (both agree): Vicente Engonga 690/14652 (Spain U21s coach, no contract, born 1965), Antonio Pintus 4460/4001686 (R. Madrid fitness coach, £245K p/a to 30 Jun 2026, born 1962), Iván Ortega 20414/67055850 (R. Madrid physio, £345K p/a to 30 Jun 2027, born 1981).
+- **Verified (3 profiles, flipped in `native_staff.rs`)**: year of birth `R+0x18a`; contract link `R+0x1a8` -> `FULL_CONTRACT` (vtable RVA 0x4334df8, person back-pointer `+0x8 == R+0x100`), weekly wage u32 `+0x20` (raw 4706 x 52 = £244,712 shown as £245K; 6641 x 52 = £345,332 shown as £345K), expiry u32 `+0x48` = `(year << 16) | day-of-year` (day 181 = 30 June). A null link means no contract (screen shows N/A). Guards: PE timestamp 0x6a229e8a, vtable, back-pointer and range checks.
+- **Not proven**: reputation (the three u16 at +0xd4/+0xd6/+0xd8 read 4746/4747/2248 for "Obscure", 7750/7750/6250 for "National", 8699/8699/8200 for "Continental": order consistent, which slot and thresholds unknown), CA/PA (the screen shows no numbers), club job, role, national team job, any contract for non-R. Madrid clubs or the human manager's own staff, and every staff contract write (still 501).
+- Search index (plan G step 3 and 4): counts, build time 1.85 s, query p95 8.6 ms, six sampled entities matched `fmscan` on a 49,070 player save; a second save (39,514 players) rebuilt the index under 10 s (user-confirmed in the UI). Preferred moves (step 5): Mbappé bitset 0x8008800000000, bit 39 = Cuts Inside From Both Wings still the only named bit. Nation rules (step 6): the game's Nation screen shows no nationality rules, so those candidates cannot be screen-verified there and stay unverified.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

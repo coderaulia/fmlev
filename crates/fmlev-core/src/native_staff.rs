@@ -7,8 +7,11 @@
 //! - 22 attributes: most are native 1..=100 bytes shown as `max(1, round(native / 5))`; Working With
 //!   Youngsters (+0x1c), Authority (+0x14) and Adaptability (+0x170) are stored 1..=20.
 //!
-//! Information candidates (`STAFF_INFORMATION`) and the Contract tab (`read_contract`) are read-only and
-//! report `unavailable` until their offsets pass the evidence ladder; see AGENTS.md "Staff contract/info".
+//! Information candidates (`STAFF_INFORMATION`) and the Contract tab (`read_contract`) are read-only.
+//! Verified against on-screen profiles (Engonga, Pintus, Ortega; see AGENTS.md "Staff contract/info"):
+//! year of birth (`R+0x18a`) and the contract link (`R+0x1a8` -> `FULL_CONTRACT`, person back-pointer
+//! `+0x8 == R+0x100`, weekly wage u32 `+0x20`, expiry `(year << 16) | day-of-year` at `+0x48`).
+//! Reputation slots and CA/PA stay `unavailable` until their offsets pass the evidence ladder.
 //!
 //! Writes (`write_attributes`) are transactional (pre-check, write, readback, rollback) but are
 //! EXPERIMENTAL: they have not passed the in-game evidence ladder (screen check after a day tick and
@@ -313,7 +316,18 @@ impl NativeStaffRecord {
 /// Why Information-tab candidates and the Contract tab stay unavailable (kept in one place for routes/UI/tests).
 pub const UNVERIFIED_INFO_REASON: &str =
     "unverified: offset is a candidate from the task brief; no live range survey or on-screen profile comparison yet";
-pub const CONTRACT_UNMAPPED_REASON: &str = "staff contract link is not mapped: run `fmscan entity PID staff --id N --editor` on a live save and inspect contract_discovery";
+pub const CONTRACT_UNMAPPED_REASON: &str = "unverified: no staff contract field is mapped for this value (club job, role and national team job have no screen-checked offset)";
+pub const NO_CONTRACT_REASON: &str = "no contract object is linked to this staff member (the game shows N/A)";
+
+const CONTRACT_LINK_OFFSET: usize = 0x1a8;
+const CONTRACT_PERSON_OFFSET: usize = 0x8;
+const CONTRACT_WAGE_OFFSET: usize = 0x20;
+const CONTRACT_EXPIRY_OFFSET: usize = 0x48;
+/// `FULL_CONTRACT` vtable RVA (same constant the player transfer code resolves).
+const CONTRACT_VTABLE_RVA: usize = crate::native_transfer::FULL_CONTRACT_VTABLE_RVA;
+const PE_TIMESTAMP: u32 = 0x6a22_9e8a;
+/// Sanity bound for a weekly wage in raw GBP; larger values are reported unavailable, not shown.
+const MAX_WEEKLY_WAGE: u32 = 10_000_000;
 
 /// A staff Information field read from the record. `verified` is flipped to true only after the evidence
 /// ladder (live range survey plus match against the open staff profile for several people).
@@ -330,6 +344,10 @@ const fn info(field: &'static str, label: &'static str, offset: usize, lo: u16, 
     StaffInfoDef { field, label, offset, lo, hi, verified: false }
 }
 
+const fn verified_info(field: &'static str, label: &'static str, offset: usize, lo: u16, hi: u16) -> StaffInfoDef {
+    StaffInfoDef { field, label, offset, lo, hi, verified: true }
+}
+
 /// u16 candidates. Reputation meaning is unknown, so the labels stay neutral.
 pub const STAFF_INFORMATION: [StaffInfoDef; 6] = [
     info("reputation_0xd4", "Reputation (slot 0xd4, meaning unknown)", 0xd4, 0, 10_000),
@@ -337,7 +355,7 @@ pub const STAFF_INFORMATION: [StaffInfoDef; 6] = [
     info("reputation_0xd8", "Reputation (slot 0xd8, meaning unknown)", 0xd8, 0, 10_000),
     info("current_ability", "Current ability", 0xda, 0, 200),
     info("potential_ability", "Potential ability", 0xdc, 0, 200),
-    info("birth_year", "Year of birth", 0x18a, 1900, 2100),
+    verified_info("birth_year", "Year of birth", 0x18a, 1900, 2100),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -346,7 +364,7 @@ pub struct StaffInfoField {
     pub label: &'static str,
     /// `verified` fields carry a value; everything else is `unavailable` with a reason (never a default).
     pub status: &'static str,
-    pub value: Option<u16>,
+    pub value: Option<u32>,
     pub reason: Option<String>,
 }
 
@@ -369,7 +387,7 @@ impl NativeStaffRecord {
                 }
                 match driver.read::<u16>(self.record + d.offset) {
                     Err(_) => unavailable("unreadable".to_string()),
-                    Ok(v) if (d.lo..=d.hi).contains(&v) => StaffInfoField { field: d.field, label: d.label, status: "verified", value: Some(v), reason: None },
+                    Ok(v) if (d.lo..=d.hi).contains(&v) => StaffInfoField { field: d.field, label: d.label, status: "verified", value: Some(u32::from(v)), reason: None },
                     Ok(v) => unavailable(format!("out of range {v}")),
                 }
             })
@@ -381,14 +399,86 @@ impl NativeStaffRecord {
         self.read_info_with(driver, &STAFF_INFORMATION)
     }
 
-    /// Contract-tab read. No staff contract link is verified yet, so every field is unavailable.
+    /// Contract-tab read. The contract link, wage and expiry are screen-verified; job, role and national
+    /// team job are not mapped and stay unavailable. A null link means "no contract" (the game shows N/A).
     pub fn read_contract(&self, driver: &LinuxMemoryDriver) -> Result<StaffContractInfo> {
         self.validate(driver)?;
-        let fields = [("club_job", "Club job"), ("role", "Role"), ("weekly_wage", "Wage"), ("contract_expiry", "Expiry"), ("national_team_job", "National team job")]
-            .into_iter()
-            .map(|(field, label)| StaffInfoField { field, label, status: "unavailable", value: None, reason: Some(CONTRACT_UNMAPPED_REASON.to_string()) })
-            .collect();
-        Ok(StaffContractInfo { status: "unavailable", reason: CONTRACT_UNMAPPED_REASON.to_string(), fields })
+        let unavailable = |field: &'static str, label: &'static str, reason: &str| StaffInfoField {
+            field,
+            label,
+            status: "unavailable",
+            value: None,
+            reason: Some(reason.to_string()),
+        };
+        let unmapped = |fields: &mut Vec<StaffInfoField>| {
+            for (field, label) in [("club_job", "Club job"), ("role", "Role"), ("national_team_job", "National team job")] {
+                fields.push(unavailable(field, label, CONTRACT_UNMAPPED_REASON));
+            }
+        };
+        let mut fields = Vec::new();
+        let (status, reason) = match self.read_contract_values(driver) {
+            Ok(None) => {
+                fields.push(unavailable("weekly_wage", "Wage", NO_CONTRACT_REASON));
+                fields.push(unavailable("contract_expiry", "Expiry", NO_CONTRACT_REASON));
+                ("no_contract", NO_CONTRACT_REASON.to_string())
+            }
+            Ok(Some((wage, year, day))) => {
+                let ok = |field: &'static str, label: &'static str, value: u32| StaffInfoField {
+                    field,
+                    label,
+                    status: "verified",
+                    value: Some(value),
+                    reason: None,
+                };
+                fields.push(ok("weekly_wage", "Wage (raw GBP per week)", wage));
+                fields.push(ok("contract_expiry", "Expiry year", u32::from(year)));
+                fields.push(ok("contract_expiry_day", "Expiry day of year", u32::from(day)));
+                ("ok", "wage and expiry verified against on-screen profiles".to_string())
+            }
+            Err(why) => {
+                fields.push(unavailable("weekly_wage", "Wage", &why));
+                fields.push(unavailable("contract_expiry", "Expiry", &why));
+                ("unavailable", why)
+            }
+        };
+        unmapped(&mut fields);
+        Ok(StaffContractInfo { status, reason, fields })
+    }
+
+    /// `Ok(None)` = no contract linked, `Ok(Some((weekly wage, expiry year, day of year)))`, `Err(reason)` =
+    /// the link failed a guard (reported unavailable, never guessed).
+    fn read_contract_values(&self, driver: &LinuxMemoryDriver) -> std::result::Result<Option<(u32, u16, u16)>, String> {
+        let base = parse_process_maps(driver.pid())
+            .ok()
+            .and_then(|maps| maps.iter().filter(|m| m.pathname.ends_with("game_plugin.dll")).map(|m| m.start).min());
+        if let Some(base) = base {
+            let pe = driver.read::<u32>(base + 0x3c).map_err(|e| e.to_string())? as usize;
+            let stamp = driver.read::<u32>(base + pe + 8).map_err(|e| e.to_string())?;
+            if pe > 0x1000 || stamp != PE_TIMESTAMP {
+                return Err(format!("unknown game_plugin.dll build (PE timestamp {stamp:#x}); contract layout is unverified for it"));
+            }
+        }
+        let link = driver.read_ptr(self.record + CONTRACT_LINK_OFFSET).map_err(|e| format!("contract link unreadable: {e}"))?;
+        if link == 0 {
+            return Ok(None);
+        }
+        if let Some(base) = base {
+            let vtable = driver.read_ptr(link).map_err(|e| format!("contract object unreadable: {e}"))?;
+            if vtable != base + CONTRACT_VTABLE_RVA {
+                return Err("linked object is not a FULL_CONTRACT (vtable mismatch)".to_string());
+            }
+        }
+        let person = driver.read_ptr(link + CONTRACT_PERSON_OFFSET).map_err(|e| format!("contract owner unreadable: {e}"))?;
+        if person != self.record + SUBOBJECT_OFFSET {
+            return Err("contract owner back-pointer does not match this staff member".to_string());
+        }
+        let wage = driver.read::<u32>(link + CONTRACT_WAGE_OFFSET).map_err(|e| e.to_string())?;
+        let expiry = driver.read::<u32>(link + CONTRACT_EXPIRY_OFFSET).map_err(|e| e.to_string())?;
+        let (year, day) = ((expiry >> 16) as u16, (expiry & 0x1ff) as u16);
+        if wage > MAX_WEEKLY_WAGE || !(1900..=2100).contains(&year) || !(1..=366).contains(&day) {
+            return Err(format!("contract values out of range (wage {wage}, expiry year {year}, day {day})"));
+        }
+        Ok(Some((wage, year, day)))
     }
 }
 
@@ -397,7 +487,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn information_candidates_stay_unavailable_until_verified() {
+    fn only_birth_year_is_verified_and_no_link_means_no_contract() {
         let mut f = fake(97, 1197, "Info", "Test");
         put(&mut f.record, 0xda, 120u16);
         put(&mut f.record, 0x18a, 1971u16);
@@ -405,14 +495,65 @@ mod tests {
         let d = driver();
         let fields = staff.read_information(&d).unwrap();
         assert_eq!(fields.len(), 6);
-        assert!(fields.iter().all(|x| x.status == "unavailable" && x.value.is_none()), "{fields:?}");
-        assert!(fields.iter().all(|x| x.reason.as_deref() == Some(UNVERIFIED_INFO_REASON)));
+        for x in &fields {
+            if x.field == "birth_year" {
+                assert_eq!((x.status, x.value), ("verified", Some(1971)));
+            } else {
+                assert!(x.status == "unavailable" && x.value.is_none() && x.reason.as_deref() == Some(UNVERIFIED_INFO_REASON), "{x:?}");
+            }
+        }
         let contract = staff.read_contract(&d).unwrap();
-        assert_eq!(contract.status, "unavailable");
+        assert_eq!(contract.status, "no_contract");
         assert!(contract.fields.iter().all(|x| x.value.is_none() && x.status == "unavailable"));
         put(&mut f.record, IDENTITY_OFFSET + 4, 1i32);
         assert!(staff.read_information(&d).is_err());
         assert!(staff.read_contract(&d).is_err());
+    }
+
+    fn contract_bytes(owner: usize, wage: u32, expiry: u32) -> Vec<u8> {
+        let mut c = vec![0u8; 0xc8];
+        put(&mut c, CONTRACT_PERSON_OFFSET, owner);
+        put(&mut c, CONTRACT_WAGE_OFFSET, wage);
+        put(&mut c, CONTRACT_EXPIRY_OFFSET, expiry);
+        c
+    }
+
+    fn contract_status(owner: Option<usize>, wage: u32, expiry: u32) -> StaffContractInfo {
+        let mut f = fake(99, 1199, "Con", "Tract");
+        let staff = read(&f).unwrap();
+        let contract = contract_bytes(owner.unwrap_or(f.sub()), wage, expiry);
+        put(&mut f.record, CONTRACT_LINK_OFFSET, contract.as_ptr() as usize);
+        // `staff.record` points at `f.record`, so the link written above is visible to the driver.
+        let info = staff.read_contract(&driver()).unwrap();
+        drop(contract);
+        info
+    }
+
+    #[test]
+    fn contract_wage_and_expiry_are_read_after_the_owner_check() {
+        // Ortega (Real Madrid physio): £345K p/a = 6641 per week, expiry 30 Jun 2027 = year 2027, day 181.
+        let info = contract_status(None, 6641, (2027 << 16) | 181);
+        assert_eq!(info.status, "ok", "{info:?}");
+        let value = |name: &str| info.fields.iter().find(|x| x.field == name).and_then(|x| x.value);
+        assert_eq!(value("weekly_wage"), Some(6641));
+        assert_eq!(value("contract_expiry"), Some(2027));
+        assert_eq!(value("contract_expiry_day"), Some(181));
+        let job = info.fields.iter().find(|x| x.field == "club_job").unwrap();
+        assert_eq!((job.status, job.value), ("unavailable", None), "job/role stay unmapped");
+    }
+
+    #[test]
+    fn contract_with_foreign_owner_or_impossible_values_is_unavailable() {
+        let foreign = contract_status(Some(0x1234_5678), 6641, (2027 << 16) | 181);
+        assert_eq!(foreign.status, "unavailable");
+        assert!(foreign.reason.contains("back-pointer"), "{}", foreign.reason);
+        let wage = contract_status(None, MAX_WEEKLY_WAGE + 1, (2027 << 16) | 181);
+        assert_eq!(wage.status, "unavailable");
+        let year = contract_status(None, 100, (1500 << 16) | 181);
+        assert_eq!(year.status, "unavailable");
+        let day = contract_status(None, 100, (2027 << 16) | 0);
+        assert_eq!(day.status, "unavailable");
+        assert!(foreign.fields.iter().all(|x| x.value.is_none()));
     }
 
     #[test]
@@ -434,9 +575,9 @@ mod tests {
     }
 
     #[test]
-    fn information_table_is_unique_and_all_unverified() {
+    fn information_table_is_unique_and_only_birth_year_is_verified() {
         for (i, a) in STAFF_INFORMATION.iter().enumerate() {
-            assert!(!a.verified, "{} must stay unverified until live cross-evidence exists", a.field);
+            assert_eq!(a.verified, a.field == "birth_year", "{} verification must match the recorded live evidence", a.field);
             assert!(STAFF_INFORMATION[i + 1..].iter().all(|b| b.field != a.field && b.offset != a.offset));
         }
     }

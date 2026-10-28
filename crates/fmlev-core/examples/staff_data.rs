@@ -1,6 +1,7 @@
 //! Read-only: search staff by name or read one staff record's 22 attributes.
 //! Usage: cargo run -p fmlev-core --example staff_data -- search <text>
 //!        cargo run -p fmlev-core --example staff_data -- read <id> <uid>
+//!        cargo run -p fmlev-core --example staff_data -- info <id> <uid>   (Information + Contract tabs)
 use fmlev_core::native_staff::NativeStaffRecord;
 use fmlev_mem::{find_fm_process, LinuxMemoryDriver};
 
@@ -25,7 +26,23 @@ fn main() -> fmlev_core::Result<()> {
                 println!("{}.{} = {:?} native={:?} {}", a.group, a.field, a.value, a.native, a.reason.unwrap_or_default());
             }
         }
-        _ => eprintln!("usage: staff_data search <text> | read <id> <uid>"),
+        Some("info") => {
+            let parse = |i: usize| args.get(i).and_then(|v| v.parse().ok()).unwrap_or(-1);
+            let staff = NativeStaffRecord::discover_by_index(&driver, parse(1))?;
+            if staff.uid != parse(2) {
+                return Err(fmlev_core::CoreError::InvalidValue(format!("uid is {}", staff.uid)));
+            }
+            println!("{} {} {}", staff.index, staff.uid, staff.name);
+            for f in staff.read_information(&driver)? {
+                println!("info.{} = {:?} [{}] {}", f.field, f.value, f.status, f.reason.unwrap_or_default());
+            }
+            let contract = staff.read_contract(&driver)?;
+            println!("contract status={} {}", contract.status, contract.reason);
+            for f in contract.fields {
+                println!("contract.{} = {:?} [{}] {}", f.field, f.value, f.status, f.reason.unwrap_or_default());
+            }
+        }
+        _ => eprintln!("usage: staff_data search <text> | read <id> <uid> | info <id> <uid>"),
     }
     Ok(())
 }

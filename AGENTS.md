@@ -434,7 +434,7 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 
 ## Nation rules
 
-### Plan C read path, 2026-10-28, read-only)
+### Plan C read path (2026-10-28, read-only)
 - **No live game in this session**: FM26 was not running (no process mapped `game_plugin.dll`), so the cross-check across all nations could not be repeated and nothing was promoted to "verified". The labels below come from the earlier PID 5690 read recorded in "Plan C discovery log" plus the serializer trace; they are not new live evidence.
 - **Scanner**: `fmscan entity PID nation --editor --json` now adds `nationality_years` (+0x1ed, u8), `gain_nationality_type_native_code` (+0x1eb, u8, accepted range 1..2), `dual_nationality_allowed` (bit 0x02 of +0x1e9 set = NOT allowed, so the output is the negation) and a `field_confidence` array. `gain_nationality_type` (the label) stays null: enum order unknown. PE timestamp 0x6a229e8a is required, as for the other new numeric layouts. Synthetic tests in `tools/fmscan/tests/test_entities.py` (two nations, bad type code, unknown build, report script); C++ suite builds with `-Werror`.
 - **Distribution report** (read-only, run when the game is loaded): `python3 tools/fmscan/nation_rules.py PID` lists every nation's years/type/dual/economic/development, value distributions and agreement with hints (Spain 10, Italy 10, England 5, Andorra 20, San Marino 30, Japan 5). It never prints "verified"; it prints `probable` for years only when at least 5 of the 6 hints agree and more than 3 distinct values exist.

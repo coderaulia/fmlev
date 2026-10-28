@@ -74,7 +74,8 @@ test('search chips filter result kinds without fabricating unread ratings', asyn
   await app.run('setSearchFilter("clubs")');
   assert.match(app.els['search-results-dropdown'].innerHTML, /Test Club/);
   assert.doesNotMatch(app.els['search-results-dropdown'].innerHTML, /Test Player|8,000/);
-  assert.match(app.els['search-results-dropdown'].innerHTML, /Unavailable/);
+  assert.doesNotMatch(app.els['search-results-dropdown'].innerHTML, /Unavailable|Rep:/);
+  assert.equal(app.requests[0].url, '/api/search?q=test&kind=clubs');
 });
 
 test('context polling keeps a dirty selected entity when FM changes screen', async () => {

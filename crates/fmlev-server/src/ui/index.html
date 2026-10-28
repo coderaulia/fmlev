@@ -42,13 +42,15 @@
               autocomplete="off"
               oninput="handleSearchInput(this.value)"
               onkeydown="handleSearchKey(event)"
+              onfocus="showRecentSelections()"
             >
             <button type="button" id="search-clear-btn" class="search-clear" onclick="clearSearch()" aria-label="Clear search">&#10005;</button>
             <div id="search-results-dropdown" class="search-dropdown"></div>
           </div>
+          <span id="search-index-chip" class="search-index-chip" hidden></span>
 
           <div class="top-controls">
-            <button id="discover-players-btn" class="btn" onclick="discoverLoadedPlayers()" title="Open one player's Attributes screen first, then index loaded native player records for search">Scan Loaded Players</button>
+            <button id="rebuild-index-btn" class="btn" onclick="rebuildSearchIndex()" title="Re-index every player, staff member, club, nation and competition in the loaded save">Rebuild index</button>
             <button id="pin-btn" class="btn" onclick="togglePinPlayer()" title="Pin player to stop auto-following the game screen">Pin Player</button>
             <button id="overlay-mode-btn" class="btn" onclick="toggleOverlayMode()" title="Toggle compact overlay HUD for in-game use">Compact Overlay</button>
           </div>

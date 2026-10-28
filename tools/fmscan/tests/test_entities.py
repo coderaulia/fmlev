@@ -108,6 +108,37 @@ class EntityTests(unittest.TestCase):
         self.action("bad-staff-uid")
         self.assertEqual(self.scan("staff", "--name", "guardiola")["total_matches"], 0)
 
+    def test_staff_information_candidates_and_contract_survey(self):
+        editor = self.scan("staff", "--name", "guardiola", "--editor")["matches"][0]["editor_data"]
+        info = editor["information"]
+        self.assertEqual(info["status"], "offsets_from_task_brief_not_cross_checked")
+        fields = {f["field"]: f for f in info["fields"]}
+        self.assertEqual({k: v["value"] for k, v in fields.items()},
+                         {"reputation_0xd4": 5000, "reputation_0xd6": 6000, "reputation_0xd8": 7000,
+                          "current_ability": 120, "potential_ability": 160, "birth_year": 1971})
+        self.assertTrue(all(f["status"] == "candidate_unverified" for f in fields.values()))
+        survey = editor["contract_discovery"]
+        links = {l["offset"]: l for l in survey["links"]}
+        self.assertEqual(set(links), {0x1e0, 0x1f0}, survey)
+        direct = links[0x1e0]
+        self.assertEqual((direct["pattern"], direct["rtti"]), ("direct", ".?AVFULL_CONTRACT@db@@"))
+        self.assertEqual(direct["person_back_pointer_matches_staff"], True)
+        cand = direct["contract_candidate"]
+        self.assertEqual(cand["status"], "player_layout_decode_not_verified_for_staff")
+        self.assertEqual(cand["weekly_wage_raw_u32"], 45000)
+        self.assertEqual((cand["expiry_candidate"]["year"], cand["expiry_candidate"]["day_of_year"]), (2028, 100))
+        self.assertEqual(cand["team_pointer_rtti"], ".?AVTEAM@db@@")
+        node = links[0x1f0]
+        self.assertEqual(node["pattern"], "node_first_qword")
+        self.assertEqual(node["person_back_pointer_matches_staff"], False, "contract owned by another person")
+        self.assertEqual(survey["status"], "heuristic_pointer_survey_of_first_0x240_bytes")
+        self.assertGreaterEqual(survey["unnamed"], 2, "name pooled refs are heap pointers without RTTI")
+        self.action("bad-staff-info")
+        bad = {f["field"]: f for f in self.scan("staff", "--name", "guardiola", "--editor")["matches"][0]["editor_data"]["information"]["fields"]}
+        self.assertIsNone(bad["current_ability"]["value"])
+        self.assertIn("out of range", bad["current_ability"]["reason"])
+        self.assertEqual(bad["potential_ability"]["value"], 160, "other fields stay independent")
+
     def test_broken_relationships_are_reported(self):
         self.action("bad-contract")
         player = self.scan("player", "--name", "Lamine", "--related")["matches"][0]

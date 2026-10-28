@@ -882,8 +882,21 @@ async fn staff_routes_are_read_only_strict_and_require_a_game() {
         .unwrap();
     assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED, "unproven writes need an explicit opt-in");
     let offline = app
+        .clone()
         .oneshot(post("/api/staff/update", r#"{"staff_id":79,"staff_uid":1120,"attributes":{"tactical":10},"experimental":true}"#))
         .await
         .unwrap();
     assert_eq!(offline.status(), StatusCode::BAD_REQUEST);
+    // Information and contract: reads need a game and strict bodies; writes are always 501.
+    for uri in ["/api/staff/information", "/api/staff/contract"] {
+        let detached = app.clone().oneshot(post(uri, r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri}");
+        for body in [r#"{"staff_id":79}"#, r#"{"staff_id":79,"staff_uid":1120,"wage":1}"#] {
+            assert!(app.clone().oneshot(post(uri, body)).await.unwrap().status().is_client_error(), "{uri} {body}");
+        }
+    }
+    for uri in ["/api/staff/information/update", "/api/staff/contract/update"] {
+        let write = app.clone().oneshot(post(uri, r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();
+        assert_eq!(write.status(), StatusCode::NOT_IMPLEMENTED, "{uri}");
+    }
 }

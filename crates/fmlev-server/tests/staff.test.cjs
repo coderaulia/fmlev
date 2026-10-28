@@ -123,6 +123,65 @@ test('editing only records changes; nothing is requested until save', () => {
   assert.equal(calls, 0);
 });
 
+const UNVERIFIED = 'unverified: offset is a candidate from the task brief';
+function extraFetch(calls, overrides = {}) {
+  return async (url, request) => {
+    calls.push({ url, body: JSON.parse(request.body) });
+    const json = overrides[url] || (url === '/api/staff/information'
+      ? { verification: 'Identity is validated.', fields: [
+          { field: 'current_ability', label: 'Current ability', status: 'unavailable', value: null, reason: UNVERIFIED },
+          { field: 'birth_year', label: 'Year of birth', status: 'verified', value: 1971, reason: null }] }
+      : { contract: { status: 'unavailable', reason: 'staff contract link is not mapped', fields: [
+          { field: 'weekly_wage', label: 'Wage', status: 'unavailable', value: null, reason: 'staff contract link is not mapped' }] } });
+    return { ok: true, text: async () => '', json: async () => ({ status: 'ok', ...json }) };
+  };
+}
+
+test('Information tab shows verified identity and unavailable candidates, with no inputs', async () => {
+  const calls = [];
+  const app = ui(extraFetch(calls));
+  loaded(app);
+  app.run('staffState.editing = true');
+  await app.run('setStaffTab("information")');
+  assert.deepEqual(calls[0], { url: '/api/staff/information', body: { staff_id: 79, staff_uid: 1120 } });
+  const out = app.run('els["staff-detail"].innerHTML');
+  assert.match(out, /Identity \(verified\)/);
+  assert.match(out, /Unique ID<\/span><b class="attr-line-val">1120/);
+  assert.match(out, /Current ability<\/span><span class="attr-line-val">Unavailable[^]*unverified: offset is a candidate/);
+  assert.match(out, /Year of birth<\/span><b class="attr-line-val">1971/);
+  assert.doesNotMatch(out, /<input|stepper|Tactical/);
+  await app.run('setStaffTab("information")');
+  assert.equal(calls.length, 1, 'loaded once per selected staff member');
+});
+
+test('Contract tab is read-only and every field is unavailable with the reason', async () => {
+  const calls = [];
+  const app = ui(extraFetch(calls));
+  loaded(app);
+  await app.run('setStaffTab("contract")');
+  assert.equal(calls[0].url, '/api/staff/contract');
+  const out = app.run('els["staff-detail"].innerHTML');
+  assert.match(out, /Wage<\/span><span class="attr-line-val">Unavailable[^]*not mapped/);
+  assert.match(out, /Read-only/);
+  assert.doesNotMatch(out, /<input|<b class="attr-line-val">\d/);
+});
+
+test('Information errors are shown as unavailable and a new selection drops cached tab data', async () => {
+  const app = ui(async () => ({ ok: false, json: async () => ({ message: 'Attach to FM26 with a save loaded first' }), text: async () => '' }));
+  loaded(app);
+  await app.run('setStaffTab("information")');
+  assert.match(app.run('els["staff-detail"].innerHTML'), /Unavailable[^]*Attach to FM26/);
+  const calls = [];
+  const app2 = ui(extraFetch(calls, { '/api/staff/native': {} }));
+  loaded(app2);
+  await app2.run('setStaffTab("contract")');
+  app2.run('staffState.tab = "head_coach"');
+  assert.equal(app2.run('Object.keys(staffState.extra)').length, 1);
+  app2.run('staffState.selected = { staff: { index: 80, uid: 5, name: "Other" }, attributes: [] }; staffState.extra = {}');
+  await app2.run('setStaffTab("contract")');
+  assert.deepEqual(calls[1].body, { staff_id: 80, staff_uid: 5 });
+});
+
 test('staff page registers with the save bar and offers Load', () => {
   const app = ui(async () => ({}));
   assert.equal(app.run('typeof staffChanges'), 'function');

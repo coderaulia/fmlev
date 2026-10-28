@@ -7,6 +7,9 @@
 //! - 22 attributes: most are native 1..=100 bytes shown as `max(1, round(native / 5))`; Working With
 //!   Youngsters (+0x1c), Authority (+0x14) and Adaptability (+0x170) are stored 1..=20.
 //!
+//! Information candidates (`STAFF_INFORMATION`) and the Contract tab (`read_contract`) are read-only and
+//! report `unavailable` until their offsets pass the evidence ladder; see AGENTS.md "Staff contract/info".
+//!
 //! Writes (`write_attributes`) are transactional (pre-check, write, readback, rollback) but are
 //! EXPERIMENTAL: they have not passed the in-game evidence ladder (screen check after a day tick and
 //! save/reload on a throwaway save). Native fields are written as `value * 5`, which displays as `value`.
@@ -307,9 +310,136 @@ impl NativeStaffRecord {
     }
 }
 
+/// Why Information-tab candidates and the Contract tab stay unavailable (kept in one place for routes/UI/tests).
+pub const UNVERIFIED_INFO_REASON: &str =
+    "unverified: offset is a candidate from the task brief; no live range survey or on-screen profile comparison yet";
+pub const CONTRACT_UNMAPPED_REASON: &str = "staff contract link is not mapped: run `fmscan entity PID staff --id N --editor` on a live save and inspect contract_discovery";
+
+/// A staff Information field read from the record. `verified` is flipped to true only after the evidence
+/// ladder (live range survey plus match against the open staff profile for several people).
+pub struct StaffInfoDef {
+    pub field: &'static str,
+    pub label: &'static str,
+    pub offset: usize,
+    pub lo: u16,
+    pub hi: u16,
+    pub verified: bool,
+}
+
+const fn info(field: &'static str, label: &'static str, offset: usize, lo: u16, hi: u16) -> StaffInfoDef {
+    StaffInfoDef { field, label, offset, lo, hi, verified: false }
+}
+
+/// u16 candidates. Reputation meaning is unknown, so the labels stay neutral.
+pub const STAFF_INFORMATION: [StaffInfoDef; 6] = [
+    info("reputation_0xd4", "Reputation (slot 0xd4, meaning unknown)", 0xd4, 0, 10_000),
+    info("reputation_0xd6", "Reputation (slot 0xd6, meaning unknown)", 0xd6, 0, 10_000),
+    info("reputation_0xd8", "Reputation (slot 0xd8, meaning unknown)", 0xd8, 0, 10_000),
+    info("current_ability", "Current ability", 0xda, 0, 200),
+    info("potential_ability", "Potential ability", 0xdc, 0, 200),
+    info("birth_year", "Year of birth", 0x18a, 1900, 2100),
+];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StaffInfoField {
+    pub field: &'static str,
+    pub label: &'static str,
+    /// `verified` fields carry a value; everything else is `unavailable` with a reason (never a default).
+    pub status: &'static str,
+    pub value: Option<u16>,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StaffContractInfo {
+    pub status: &'static str,
+    pub reason: String,
+    pub fields: Vec<StaffInfoField>,
+}
+
+impl NativeStaffRecord {
+    fn read_info_with(&self, driver: &LinuxMemoryDriver, defs: &[StaffInfoDef]) -> Result<Vec<StaffInfoField>> {
+        self.validate(driver)?;
+        Ok(defs
+            .iter()
+            .map(|d| {
+                let unavailable = |reason: String| StaffInfoField { field: d.field, label: d.label, status: "unavailable", value: None, reason: Some(reason) };
+                if !d.verified {
+                    return unavailable(UNVERIFIED_INFO_REASON.to_string());
+                }
+                match driver.read::<u16>(self.record + d.offset) {
+                    Err(_) => unavailable("unreadable".to_string()),
+                    Ok(v) if (d.lo..=d.hi).contains(&v) => StaffInfoField { field: d.field, label: d.label, status: "verified", value: Some(v), reason: None },
+                    Ok(v) => unavailable(format!("out of range {v}")),
+                }
+            })
+            .collect())
+    }
+
+    /// Information-tab fields beyond the 22 attributes. Only fields flagged `verified` return values.
+    pub fn read_information(&self, driver: &LinuxMemoryDriver) -> Result<Vec<StaffInfoField>> {
+        self.read_info_with(driver, &STAFF_INFORMATION)
+    }
+
+    /// Contract-tab read. No staff contract link is verified yet, so every field is unavailable.
+    pub fn read_contract(&self, driver: &LinuxMemoryDriver) -> Result<StaffContractInfo> {
+        self.validate(driver)?;
+        let fields = [("club_job", "Club job"), ("role", "Role"), ("weekly_wage", "Wage"), ("contract_expiry", "Expiry"), ("national_team_job", "National team job")]
+            .into_iter()
+            .map(|(field, label)| StaffInfoField { field, label, status: "unavailable", value: None, reason: Some(CONTRACT_UNMAPPED_REASON.to_string()) })
+            .collect();
+        Ok(StaffContractInfo { status: "unavailable", reason: CONTRACT_UNMAPPED_REASON.to_string(), fields })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn information_candidates_stay_unavailable_until_verified() {
+        let mut f = fake(97, 1197, "Info", "Test");
+        put(&mut f.record, 0xda, 120u16);
+        put(&mut f.record, 0x18a, 1971u16);
+        let staff = read(&f).unwrap();
+        let d = driver();
+        let fields = staff.read_information(&d).unwrap();
+        assert_eq!(fields.len(), 6);
+        assert!(fields.iter().all(|x| x.status == "unavailable" && x.value.is_none()), "{fields:?}");
+        assert!(fields.iter().all(|x| x.reason.as_deref() == Some(UNVERIFIED_INFO_REASON)));
+        let contract = staff.read_contract(&d).unwrap();
+        assert_eq!(contract.status, "unavailable");
+        assert!(contract.fields.iter().all(|x| x.value.is_none() && x.status == "unavailable"));
+        put(&mut f.record, IDENTITY_OFFSET + 4, 1i32);
+        assert!(staff.read_information(&d).is_err());
+        assert!(staff.read_contract(&d).is_err());
+    }
+
+    #[test]
+    fn verified_information_fields_are_range_checked() {
+        let mut f = fake(98, 1198, "Info", "Verified");
+        put(&mut f.record, 0xda, 120u16);
+        put(&mut f.record, 0xdc, 500u16);
+        let staff = read(&f).unwrap();
+        let defs = [
+            StaffInfoDef { verified: true, ..info("current_ability", "CA", 0xda, 0, 200) },
+            StaffInfoDef { verified: true, ..info("potential_ability", "PA", 0xdc, 0, 200) },
+            info("birth_year", "Birth", 0x18a, 1900, 2100),
+        ];
+        let fields = staff.read_info_with(&driver(), &defs).unwrap();
+        assert_eq!((fields[0].status, fields[0].value), ("verified", Some(120)));
+        assert_eq!((fields[1].status, fields[1].value), ("unavailable", None));
+        assert_eq!(fields[1].reason.as_deref(), Some("out of range 500"));
+        assert_eq!(fields[2].status, "unavailable");
+    }
+
+    #[test]
+    fn information_table_is_unique_and_all_unverified() {
+        for (i, a) in STAFF_INFORMATION.iter().enumerate() {
+            assert!(!a.verified, "{} must stay unverified until live cross-evidence exists", a.field);
+            assert!(STAFF_INFORMATION[i + 1..].iter().all(|b| b.field != a.field && b.offset != a.offset));
+        }
+    }
 
     // Read-only statics stand in for the DLL vtables in a test process.
     static VT1: u64 = 0x1111;

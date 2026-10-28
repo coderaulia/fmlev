@@ -6,7 +6,7 @@ use axum::{
 };
 use tracing::info;
 
-use fmlev_core::SquadActions;
+use fmlev_core::native_transfer::{apply_transaction, NativeEdit};
 use fmlev_mem::{
     find_fm_process, find_module_bases, get_yama_diagnostic, parse_process_maps,
     LinuxMemoryDriver,
@@ -17,13 +17,22 @@ use crate::state::{
     MemWriteRequest, ScanMatch, ServerState,
 };
 use crate::DEFAULT_OFFSETS_JSON;
-use super::api_error;
+use super::{api_error, core_status};
 
 pub async fn attach_process(
     State(state): State<ServerState>,
-    payload: Option<Json<AttachRequest>>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let target_pid = payload.and_then(|p| p.pid);
+    // An empty body means "find FM26"; anything else must be a valid `{ "pid": N }` (a malformed body is an
+    // error, never silently ignored).
+    let target_pid = if body.iter().all(u8::is_ascii_whitespace) {
+        None
+    } else {
+        match serde_json::from_slice::<AttachRequest>(&body) {
+            Ok(request) => request.pid,
+            Err(error) => return api_error(StatusCode::BAD_REQUEST, format!("Invalid attach body: {error}")),
+        }
+    };
 
     let proc_result = if let Some(pid) = target_pid {
         Ok(fmlev_mem::GameProcess {
@@ -392,124 +401,84 @@ pub fn valid_memory_value(kind: &str, value: &serde_json::Value) -> bool {
     }
 }
 
+/// Bytes a validated raw-write value encodes to (`valid_memory_value` must already have passed).
+fn raw_write_bytes(kind: &str, value: &serde_json::Value) -> Option<Vec<u8>> {
+    Some(match kind {
+        "u8" => vec![u8::try_from(value.as_u64()?).ok()?],
+        "u16" => u16::try_from(value.as_u64()?).ok()?.to_le_bytes().to_vec(),
+        "u32" => u32::try_from(value.as_u64()?).ok()?.to_le_bytes().to_vec(),
+        "u64" => value.as_u64()?.to_le_bytes().to_vec(),
+        "i32" => i32::try_from(value.as_i64()?).ok()?.to_le_bytes().to_vec(),
+        "i64" => value.as_i64()?.to_le_bytes().to_vec(),
+        "f32" => (value.as_f64()? as f32).to_le_bytes().to_vec(),
+        "bytes" => match value {
+            serde_json::Value::Array(values) => values.iter().map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok())).collect::<Option<Vec<u8>>>()?,
+            serde_json::Value::String(hex) => hex.split_whitespace().map(|part| u8::from_str_radix(part.trim_start_matches("0x"), 16).ok()).collect::<Option<Vec<u8>>>()?,
+            _ => return None,
+        },
+        _ => return None,
+    })
+}
+
+/// Largest raw write the tool accepts in one call.
+const MAX_RAW_WRITE_BYTES: usize = 4096;
+
+/// A write must stay inside one writable mapping of the game process: no read-only data, code or unmapped
+/// addresses. This is a bounds guard only; it does not prove the bytes belong to a game object.
+fn ensure_writable_range(pid: i32, address: usize, len: usize) -> Result<(), String> {
+    let end = address.checked_add(len).ok_or_else(|| "Address range overflows".to_string())?;
+    let maps = parse_process_maps(pid).map_err(|error| error.to_string())?;
+    if maps.iter().any(|m| m.is_writable() && m.start <= address && end <= m.end) {
+        Ok(())
+    } else {
+        Err(format!("{address:#x}..{end:#x} is not inside one writable mapping of the game process"))
+    }
+}
+
+/// Reads the current bytes and applies the new ones as one transaction (pre-check, write, readback, rollback).
+fn guarded_write(driver: &LinuxMemoryDriver, address: usize, next: Vec<u8>, label: &'static str) -> Result<Vec<u8>, (StatusCode, String)> {
+    ensure_writable_range(driver.pid(), address, next.len()).map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    let mut old = vec![0u8; next.len()];
+    match driver.read_bytes(address, &mut old) {
+        Ok(read) if read == old.len() => {}
+        Ok(_) => return Err((StatusCode::BAD_REQUEST, "Target bytes could not be read back first".to_string())),
+        Err(error) => return Err((StatusCode::BAD_REQUEST, format!("Target bytes could not be read first: {error}"))),
+    }
+    let edit = NativeEdit::new(address, old.clone(), next, label);
+    apply_transaction(driver, &[edit]).map_err(|error| (core_status(&error), error.to_string()))?;
+    Ok(old)
+}
+
+/// Raw developer write: validated type and range, inside a writable mapping, with readback and rollback.
+/// Prefer the entity routes; this one cannot know whether the bytes belong to a safe game field.
 pub async fn write_memory(
     State(state): State<ServerState>,
     Json(payload): Json<MemWriteRequest>,
 ) -> impl IntoResponse {
     let r = state.inner.read().await;
-    let pid = match r.pid {
-        Some(p) => p,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "status": "not_attached", "message": "Game not attached" })),
-            )
-        }
+    let Some(pid) = r.pid else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "status": "not_attached", "message": "Game not attached" })));
     };
-
-    let target_addr = match parse_hex_or_dec_address(&payload.address) {
-        Some(a) => a,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "status": "invalid_address", "message": "Could not parse address" })),
-            )
-        }
+    let Some(target_addr) = parse_hex_or_dec_address(&payload.address) else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "status": "invalid_address", "message": "Could not parse address" })));
     };
-
     if !valid_memory_value(&payload.r#type, &payload.value) {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"success": false, "message": "Value is invalid or out of range for the requested type"})));
     }
+    let Some(bytes) = raw_write_bytes(&payload.r#type, &payload.value) else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "message": "Unsupported data type" })));
+    };
+    if bytes.is_empty() || bytes.len() > MAX_RAW_WRITE_BYTES {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "message": format!("A raw write takes 1 to {MAX_RAW_WRITE_BYTES} bytes") })));
+    }
     let driver = LinuxMemoryDriver::new(pid);
-
-    match payload.r#type.as_str() {
-        "u8" => {
-            let val = payload.value.as_u64().unwrap_or(0) as u8;
-            match driver.write::<u8>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 1 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "u16" => {
-            let val = payload.value.as_u64().unwrap_or(0) as u16;
-            match driver.write::<u16>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 2 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "i32" => {
-            let val = payload.value.as_i64().unwrap_or(0) as i32;
-            match driver.write::<i32>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 4 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "u32" => {
-            let val = payload.value.as_u64().unwrap_or(0) as u32;
-            match driver.write::<u32>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 4 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "i64" => {
-            let val = payload.value.as_i64().unwrap_or(0);
-            match driver.write::<i64>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 8 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "u64" => {
-            let val = payload.value.as_u64().unwrap_or(0);
-            match driver.write::<u64>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 8 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "f32" => {
-            let val = payload.value.as_f64().unwrap_or(0.0) as f32;
-            match driver.write::<f32>(target_addr, &val) {
-                Ok(_) => (StatusCode::OK, Json(serde_json::json!({ "success": true, "bytes_written": 4 }))),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "message": e.to_string() }))),
-            }
-        }
-        "bytes" => {
-            let bytes_to_write: Vec<u8> = if let Some(arr) = payload.value.as_array() {
-                arr.iter().map(|v| v.as_u64().unwrap_or(0) as u8).collect()
-            } else if let Some(hex_str) = payload.value.as_str() {
-                hex_str
-                    .split_whitespace()
-                    .filter_map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).ok())
-                    .collect()
-            } else {
-                Vec::new()
-            };
-
-            if bytes_to_write.is_empty() {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(serde_json::json!({ "success": false, "message": "No valid bytes to write" })),
-                );
-            }
-
-            match driver.write_bytes(target_addr, &bytes_to_write) {
-                Ok(written) if written == bytes_to_write.len() => (
-                    StatusCode::OK,
-                    Json(serde_json::json!({ "success": true, "bytes_written": written })),
-                ),
-                Ok(written) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "success": false, "bytes_written": written, "message": "Incomplete memory write" })),
-                ),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "success": false, "message": e.to_string() })),
-                ),
-            }
-        }
-        _ => (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "success": false, "message": "Unsupported data type" })),
+    let written = bytes.len();
+    match guarded_write(&driver, target_addr, bytes, "raw write") {
+        Ok(previous) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "success": true, "bytes_written": written, "previous": previous.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ") })),
         ),
+        Err((status, message)) => (status, Json(serde_json::json!({ "success": false, "message": message }))),
     }
 }
 
@@ -734,82 +703,52 @@ pub async fn scan_memory_next(
     )
 }
 
+/// Raw heal at an explicit player pointer: condition and sharpness u16 pair, inside a writable mapping and
+/// written as one transaction with readback and rollback. The verified player-record heal is the context API's
+/// `heal_player` preset; this route only exists for callers that already hold a verified pointer.
 pub async fn heal_action(
     State(state): State<ServerState>,
     Json(payload): Json<HealRequest>,
 ) -> impl IntoResponse {
     let r = state.inner.read().await;
-    if let Some(pid) = r.pid {
-        let driver = LinuxMemoryDriver::new(pid);
-        if payload.player_ptr == 0 || payload.heal_squad {
-            return api_error(StatusCode::BAD_REQUEST, "An explicit verified player_ptr is required; use the club preset API for squad actions");
-        }
-        let player_ptr = payload.player_ptr;
-
-        match SquadActions::heal_player(&driver, player_ptr, payload.condition_offset) {
-            Ok(_) => (
+    let Some(pid) = r.pid else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "status": "not_attached", "message": "Game process not attached" })));
+    };
+    if payload.player_ptr == 0 || payload.heal_squad {
+        return api_error(StatusCode::BAD_REQUEST, "An explicit verified player_ptr is required; use the club preset API for squad actions");
+    }
+    let Some(condition_at) = payload.player_ptr.checked_add(payload.condition_offset) else {
+        return api_error(StatusCode::BAD_REQUEST, "player_ptr + condition_offset overflows");
+    };
+    let driver = LinuxMemoryDriver::new(pid);
+    let both = [10000u16.to_le_bytes(), 10000u16.to_le_bytes()].concat();
+    match guarded_write(&driver, condition_at, both, "raw heal") {
+        Ok(_) => {
+            info!("Healed player at 0x{:x}", payload.player_ptr);
+            (
                 StatusCode::OK,
                 Json(serde_json::json!({
                     "status": "healed",
-                    "player_ptr": format!("0x{:x}", player_ptr),
+                    "player_ptr": format!("0x{:x}", payload.player_ptr),
                     "condition": 10000,
                     "sharpness": 10000
                 })),
-            ),
-            Err(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
-            ),
+            )
         }
-    } else {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "status": "not_attached", "message": "Game process not attached" })),
-        )
+        Err((status, message)) => (status, Json(serde_json::json!({ "status": "error", "message": message }))),
     }
 }
 
+/// Raw finance writes are refused: the offsets are caller-supplied and the targets are UI-binding caches the
+/// game rewrites (AGENTS.md Phase 3). `POST /api/club/money` writes the verified native finance object.
 pub async fn finances_action(
-    State(state): State<ServerState>,
-    Json(payload): Json<FinanceRequest>,
+    State(_state): State<ServerState>,
+    Json(_payload): Json<FinanceRequest>,
 ) -> impl IntoResponse {
-    let r = state.inner.read().await;
-    if payload.club_ptr == 0 {
-        return api_error(StatusCode::BAD_REQUEST, "An explicit verified club_ptr is required");
-    }
-    if let Some(pid) = r.pid {
-        let driver = LinuxMemoryDriver::new(pid);
-        match SquadActions::update_finances(
-            &driver,
-            payload.club_ptr,
-            payload.balance_offset,
-            payload.transfer_offset,
-            payload.wage_offset,
-            payload.balance,
-            payload.transfer_budget,
-            payload.wage_budget,
-        ) {
-            Ok(_) => (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "finances_updated",
-                    "club_ptr": format!("0x{:x}", payload.club_ptr),
-                    "balance": payload.balance,
-                    "transfer_budget": payload.transfer_budget,
-                    "wage_budget": payload.wage_budget
-                })),
-            ),
-            Err(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
-            ),
-        }
-    } else {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "status": "not_attached", "message": "Game process not attached" })),
-        )
-    }
+    api_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Raw finance writes are disabled: they hit caches the game overwrites. Use POST /api/club/money (verified native finance object).",
+    )
 }
 
 pub async fn godmode_action(

@@ -942,3 +942,44 @@ async fn search_rebuild_requires_a_game() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+fn json_post(uri: &str, body: &str) -> Request<Body> {
+    Request::post(uri).header("content-type", "application/json").body(Body::from(body.to_string())).unwrap()
+}
+
+#[tokio::test]
+async fn attach_rejects_a_malformed_body_and_raw_routes_stay_guarded() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    // A malformed or unknown-field body is an error, never "attach to whatever FM26 is running".
+    for body in [r#"{"pid":"abc"}"#, r#"{"pid":1,"extra":true}"#, "not json"] {
+        let response = app.clone().oneshot(json_post("/api/attach", body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
+    let nonpositive = app.clone().oneshot(json_post("/api/attach", r#"{"pid":-5}"#)).await.unwrap();
+    assert_eq!(nonpositive.status(), StatusCode::BAD_REQUEST);
+    // Raw writes need a game; raw finance writes are disabled outright.
+    let write = app.clone().oneshot(json_post("/api/mem/write", r#"{"address":"0x1000","type":"u8","value":1}"#)).await.unwrap();
+    assert_eq!(write.status(), StatusCode::BAD_REQUEST);
+    let heal = app.clone().oneshot(json_post("/api/actions/heal", r#"{"player_ptr":4096}"#)).await.unwrap();
+    assert_eq!(heal.status(), StatusCode::BAD_REQUEST);
+    let finances = app
+        .oneshot(json_post("/api/actions/finances", r#"{"club_ptr":4096,"balance":1,"transfer_budget":1,"wage_budget":1}"#))
+        .await
+        .unwrap();
+    assert_eq!(finances.status(), StatusCode::NOT_IMPLEMENTED);
+}
+
+#[tokio::test]
+async fn invalid_entity_updates_are_client_errors_not_500() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    let (status, _) = {
+        let response = app.clone().oneshot(json_post("/api/player/update", r#"{"not":"a player"}"#)).await.unwrap();
+        (response.status(), ())
+    };
+    assert!(status.is_client_error(), "{status}");
+    assert!(crate::routes::core_status(&fmlev_core::CoreError::InvalidValue("x".into())) == StatusCode::BAD_REQUEST);
+    assert!(crate::routes::core_status(&fmlev_core::CoreError::PlayerNotFound(1)) == StatusCode::NOT_FOUND);
+    assert!(crate::routes::core_status(&fmlev_core::CoreError::NoScanCandidates) == StatusCode::CONFLICT);
+}

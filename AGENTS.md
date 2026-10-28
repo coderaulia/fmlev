@@ -487,6 +487,17 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Competition prize money**: the user reports the edited prize table works in game; no season-end observation values were recorded.
 - **Loan signing**: stays 501. A loan agreement is a game-allocated object (AGENTS.md Phase 3 notes) and no layout for creating one is proven.
 
+### Audit follow-ups from the Phase 11b "known issues" list (2026-10-28)
+- **Fixed (tests added)**:
+  - `update_*`, preset and quick-action routes now map core errors by kind (`core_status`): invalid input 400, unknown player 404, game not in the expected state 409, memory/runtime failure 500 (they returned 500 for validation errors).
+  - `POST /api/attach` rejects a malformed or unknown-field body with 400; an empty body still means "find FM26" (a bad body used to attach to whatever was running).
+  - `POST /api/mem/write` accepts only 1..4096 bytes inside one writable mapping and writes them as one transaction (pre-read, readback, rollback); it returns the previous bytes. `POST /api/actions/heal` goes through the same guard. `POST /api/actions/finances` returns 501: its caller-supplied offsets hit UI-binding caches the game rewrites; `POST /api/club/money` is the verified route.
+  - Register Anytime: disabling now restores the manager bits (`0x100`/`0x200`) the manager had before the first enable instead of clearing both, and leaves them alone while another competition is still enabled. The saved originals are now `{gate, manager_bits}` per competition.
+  - Free-slot and transfer-queue lookups no longer use run-specific address constants. Live read-only check (PID 5668): all 51,759 `FULL_CONTRACT` objects sit in one writable mapping (0x1373a0000..0x13fb50000) at stride 0xc8 with a zero tail; `find_zero_contract_slot` picked `0x138c85e30` (last contract 0x138c851b0 + 16 slots), all zero, in 1.5 s, equal to an independent Python survey. The contract vtable now comes only from the mapped `game_plugin.dll` (the address fallback constant is gone). The transfer queue is found by entry shape (person pointer, packed date, transfer id) plus an ordered neighbour, and more than one plausible match is an error.
+- **Already fixed earlier (UI)**: player-tab controls without a native path and the unverified cheats are disabled in connected mode (`playerFieldWritable`, `data-unverified` buttons).
+- **Not fixed**: (1) context methods for club, nation, competition, prize-table and player discovery still scan memory while the global state lock is held, so a polling request can wait about a second; moving them out needs a locate-then-apply split per method and live tests. (2) The free contract slot is a heuristic: the game's own allocation counter is not updated, so a later in-game signing could reuse the slot. Free-agent signing stays experimental and is not re-tested live after this change (only the read-only slot lookup was). (3) The new transfer-queue lookup was only tested synthetically: no pending transfer was available to check it against the game.
+- Loan signing stays 501 (the loan agreement is a game-allocated object; no creation layout is proven).
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

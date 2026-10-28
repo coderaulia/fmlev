@@ -138,3 +138,15 @@ mod tests {
         }
     }
 }
+
+/// HTTP status for a core error: bad input is the caller's (400), an unknown player is 404, a missing module
+/// or no scan candidates means the game is not in the expected state (409); memory or runtime failures stay 500.
+pub(crate) fn core_status(error: &fmlev_core::CoreError) -> StatusCode {
+    use fmlev_core::CoreError;
+    match error {
+        CoreError::InvalidValue(_) => StatusCode::BAD_REQUEST,
+        CoreError::PlayerNotFound(_) => StatusCode::NOT_FOUND,
+        CoreError::ModuleNotLoaded(_) | CoreError::NoScanCandidates => StatusCode::CONFLICT,
+        CoreError::Memory(_) | CoreError::Il2Cpp(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}

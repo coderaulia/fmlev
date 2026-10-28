@@ -17,7 +17,7 @@ use crate::state::{
     StatusResponse,
 };
 use crate::embedded_ui_html;
-use super::api_error;
+use super::{api_error, core_status};
 
 pub async fn serve_ui() -> impl IntoResponse {
     Html(embedded_ui_html())
@@ -175,7 +175,7 @@ pub async fn update_player(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }
@@ -308,7 +308,7 @@ pub async fn apply_player_preset(
                     )
                 }
                 Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                    core_status(&e),
                     Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
                 ),
             }
@@ -336,7 +336,7 @@ pub async fn update_club(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }
@@ -436,7 +436,7 @@ pub async fn apply_club_preset(
                     )
                 }
                 Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                    core_status(&e),
                     Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
                 ),
             }
@@ -464,7 +464,7 @@ pub async fn update_nation(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }
@@ -567,7 +567,7 @@ pub async fn apply_nation_preset(
                     )
                 }
                 Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                    core_status(&e),
                     Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
                 ),
             }
@@ -595,7 +595,7 @@ pub async fn update_competition(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }
@@ -697,7 +697,7 @@ pub async fn apply_competition_preset(
                     )
                 }
                 Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
+                    core_status(&e),
                     Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
                 ),
             }
@@ -753,7 +753,7 @@ pub async fn add_club_affiliate(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }
@@ -791,7 +791,7 @@ pub async fn remove_club_affiliate(
             )
         }
         Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            core_status(&e),
             Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
         ),
     }

@@ -9,10 +9,12 @@ impl GameContextManager {
     pub fn set_registration_anytime(&mut self, comp_index: i32, comp_uid: i32, enabled: bool) -> Result<RegistrationState> {
         let session = self.session.as_ref().filter(|s| s.bases.game_assembly_base.is_some())
             .ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
-        let original = self.registration_gates.get(&(comp_index, comp_uid)).copied();
-        let state = set_registration_anytime(&session.driver, comp_index, comp_uid, enabled, original)?;
+        let key = (comp_index, comp_uid);
+        let original = self.registration_gates.get(&key).copied();
+        let others_enabled = self.registration_gates.keys().any(|other| *other != key);
+        let state = set_registration_anytime(&session.driver, comp_index, comp_uid, enabled, original, others_enabled)?;
         if enabled {
-            self.registration_gates.insert((comp_index, comp_uid), state.original_gate);
+            self.registration_gates.insert(key, state.original);
         } else {
             self.registration_gates.remove(&(comp_index, comp_uid));
         }

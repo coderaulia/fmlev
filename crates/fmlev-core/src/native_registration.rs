@@ -128,39 +128,60 @@ pub fn read_registration_gates(driver: &LinuxMemoryDriver, comp_index: i32, comp
     })
 }
 
+/// What the game had before the first enable, so disabling restores it exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RegistrationOriginal {
+    /// The competition's stage gate byte.
+    pub gate: u8,
+    /// The manager's `REGISTRATION_BIT | SQUAD_NUMBER_BIT` bits (the game or the user may already have set them).
+    pub manager_bits: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RegistrationState {
     pub manager_flag: bool,
     pub squad_number_flag: bool,
     pub competition_gate: bool,
-    /// Gate byte before the first change, so disabling restores it exactly.
-    pub original_gate: u8,
+    /// Values before the first change, kept by the caller until the competition is restored.
+    pub original: RegistrationOriginal,
+}
+
+/// Manager flags after an enable or disable. The two bits are shared by every competition, so disabling
+/// one competition leaves them alone while another is still enabled, and otherwise restores the bits the
+/// manager had before the first enable (not blindly cleared).
+fn next_manager_flags(flags: u32, enabled: bool, original: RegistrationOriginal, others_enabled: bool) -> u32 {
+    if enabled {
+        flags | MANAGER_FLAGS_BITS
+    } else if others_enabled {
+        flags
+    } else {
+        (flags & !MANAGER_FLAGS_BITS) | (original.manager_bits & MANAGER_FLAGS_BITS)
+    }
 }
 
 /// Enables or disables registration-anytime and squad-number-anytime for the managed human
 /// and one domestic competition.
-/// `original_gate` must be the value returned when it was first enabled (None on first call).
+/// `original` must be the value returned when it was first enabled (None on first call).
+/// `others_enabled` is true while another competition is still enabled (the manager bits are shared).
 pub fn set_registration_anytime(
     driver: &LinuxMemoryDriver,
     comp_index: i32,
     comp_uid: i32,
     enabled: bool,
-    original_gate: Option<u8>,
+    original: Option<RegistrationOriginal>,
+    others_enabled: bool,
 ) -> Result<RegistrationState> {
     let base = module_base(driver)?;
     let human = human_object(driver, base)?;
     let (gate, _kind) = gate_byte_address(driver, competition_record(driver, comp_index, comp_uid)?)?;
     let current_gate = driver.read::<u8>(gate)?;
-    if !enabled && original_gate.is_none() {
+    let flags = driver.read::<u32>(human + HUMAN_FLAGS)?;
+    if !enabled && original.is_none() {
         return Err(invalid("No saved original rule value for this competition; nothing to restore"));
     }
-    let original = original_gate.unwrap_or(current_gate);
-    let flags = driver.read::<u32>(human + HUMAN_FLAGS)?;
-    let (new_flags, new_gate) = if enabled {
-        (flags | MANAGER_FLAGS_BITS, 1u8)
-    } else {
-        (flags & !MANAGER_FLAGS_BITS, original)
-    };
+    let original = original.unwrap_or(RegistrationOriginal { gate: current_gate, manager_bits: flags & MANAGER_FLAGS_BITS });
+    let new_flags = next_manager_flags(flags, enabled, original, others_enabled);
+    let new_gate = if enabled { 1u8 } else { original.gate };
     driver.write(human + HUMAN_FLAGS, &new_flags)?;
     if let Err(error) = driver.write(gate, &new_gate) {
         let _ = driver.write(human + HUMAN_FLAGS, &flags);
@@ -177,7 +198,7 @@ pub fn set_registration_anytime(
         manager_flag: new_flags & REGISTRATION_BIT != 0,
         squad_number_flag: new_flags & SQUAD_NUMBER_BIT != 0,
         competition_gate: new_gate != 0,
-        original_gate: original,
+        original,
     })
 }
 
@@ -215,16 +236,29 @@ mod tests {
         assert_eq!(REGISTRATION_BIT, 0x100);
         assert_eq!(SQUAD_NUMBER_BIT, 0x200);
         assert_eq!(MANAGER_FLAGS_BITS, 0x300);
+    }
 
-        let state = RegistrationState {
-            manager_flag: true,
-            squad_number_flag: true,
-            competition_gate: true,
-            original_gate: 0,
-        };
-        assert!(state.manager_flag);
-        assert!(state.squad_number_flag);
-        assert!(state.competition_gate);
-        assert_eq!(state.original_gate, 0);
+    fn original(manager_bits: u32) -> RegistrationOriginal {
+        RegistrationOriginal { gate: 0, manager_bits }
+    }
+
+    #[test]
+    fn enabling_sets_both_manager_bits_and_keeps_the_rest() {
+        assert_eq!(next_manager_flags(0x0000_0401, true, original(0), false), 0x0000_0701);
+    }
+
+    #[test]
+    fn disabling_restores_the_original_manager_bits_not_a_blind_clear() {
+        // The manager already had the registration bit before the first enable: it must still be set after.
+        assert_eq!(next_manager_flags(0x0000_0701, false, original(REGISTRATION_BIT), false), 0x0000_0501);
+        // Nothing was set before: both bits are cleared and unrelated bits stay.
+        assert_eq!(next_manager_flags(0x8000_0701, false, original(0), false), 0x8000_0401);
+        // Garbage outside the two bits in the saved value never leaks back in.
+        assert_eq!(next_manager_flags(0x0000_0701, false, original(0xffff_ffff), false), 0x0000_0701);
+    }
+
+    #[test]
+    fn disabling_one_competition_keeps_the_shared_bits_while_another_is_enabled() {
+        assert_eq!(next_manager_flags(0x0000_0701, false, original(0), true), 0x0000_0701);
     }
 }

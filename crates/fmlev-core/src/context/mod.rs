@@ -80,7 +80,7 @@ pub struct GameContextManager {
     pub player_memory_bindings: HashMap<i32, usize>,
     pub club_memory_bindings: HashMap<i32, usize>,
     /// Original registration gate byte per (competition index, uid), for exact restore.
-    pub registration_gates: HashMap<(i32, i32), u8>,
+    pub registration_gates: HashMap<(i32, i32), crate::native_registration::RegistrationOriginal>,
     pub nation_memory_bindings: HashMap<i32, usize>,
     pub competition_memory_bindings: HashMap<i32, usize>,
     pub active_player_addr: Option<usize>,

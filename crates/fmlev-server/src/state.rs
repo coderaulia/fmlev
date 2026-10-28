@@ -103,6 +103,7 @@ pub struct StatusResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AttachRequest {
     pub pid: Option<i32>,
 }

@@ -48,7 +48,6 @@ pub const PERSON_OFFSET: usize = 0x140;
 pub const ACTUAL_PLAYER_OFFSET: usize = 0x148;
 pub const CONTRACT_SIZE: usize = 0xc8;
 pub const FULL_CONTRACT_VTABLE_RVA: usize = 0x4334df8;
-pub const FALLBACK_FULL_CONTRACT_VTABLE: usize = 0x6fffdba64df8;
 
 fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
@@ -548,55 +547,96 @@ pub fn move_player(
     Ok((cur_team, target_team))
 }
 
-/// Finds an aligned, verified all-zero 200-byte block in the entity pool mapping.
-pub fn find_zero_contract_slot(driver: &LinuxMemoryDriver, near_addr: usize) -> Result<usize> {
-    let mut check_buf = [0u8; CONTRACT_SIZE];
+/// Writable private mappings of the process, for read-only scans.
+fn scan_regions(driver: &LinuxMemoryDriver) -> Result<Vec<(usize, usize)>> {
+    let maps = fmlev_mem::parse_process_maps(driver.pid())?;
+    Ok(maps.iter().filter(|m| m.is_rw_private()).map(|m| (m.start, m.end)).collect())
+}
 
-    // 1. First probe known safe zero block runs near the contract pool: 0x138980000..0x138990000
-    for offset in (0..0x10000).step_by(CONTRACT_SIZE) {
-        let candidate = 0x138980000 + offset;
-        if candidate % 16 != 0 {
-            continue;
+/// Addresses (8-aligned) in writable private memory that hold `value`, with the mapping index of each hit.
+fn scan_for_u64(driver: &LinuxMemoryDriver, regions: &[(usize, usize)], value: u64) -> Vec<(usize, usize)> {
+    const CHUNK: usize = 16 << 20;
+    let needle = value.to_le_bytes();
+    let mut hits = Vec::new();
+    for (index, &(start, end)) in regions.iter().enumerate() {
+        let mut at = start;
+        while at < end {
+            let len = (end - at).min(CHUNK);
+            let mut buf = vec![0u8; len];
+            if driver.read_bytes(at, &mut buf).is_ok() {
+                let mut from = 0;
+                while let Some(found) = buf[from..].windows(8).position(|w| w == needle) {
+                    let offset = from + found;
+                    if (at + offset) % 8 == 0 {
+                        hits.push((at + offset, index));
+                    }
+                    from = offset + 1;
+                }
+            }
+            at += len;
         }
-        if driver.read_bytes(candidate, &mut check_buf).is_ok() && check_buf.iter().all(|&b| b == 0) {
+    }
+    hits
+}
+
+/// Mapping that holds the `FULL_CONTRACT` pool (live: one mapping with ~52,000 contracts at stride 0xc8),
+/// the last contract in it and the mapping end. `None` when no mapping holds at least `POOL_MIN_CONTRACTS`.
+fn contract_pool(driver: &LinuxMemoryDriver, vtable: usize) -> Result<Option<(usize, usize)>> {
+    let regions = scan_regions(driver)?;
+    let hits = scan_for_u64(driver, &regions, vtable as u64);
+    let mut per_region: std::collections::HashMap<usize, (usize, usize)> = std::collections::HashMap::new();
+    for (address, region) in hits {
+        let entry = per_region.entry(region).or_insert((0, 0));
+        entry.0 += 1;
+        entry.1 = entry.1.max(address);
+    }
+    Ok(per_region
+        .into_iter()
+        .filter(|(_, (count, _))| *count >= POOL_MIN_CONTRACTS)
+        .max_by_key(|(_, (count, _))| *count)
+        .map(|(region, (_, last))| (last, regions[region].1)))
+}
+
+/// Contracts a mapping must hold before it is treated as the contract pool.
+const POOL_MIN_CONTRACTS: usize = 1000;
+/// Slots skipped after the last live contract, so a slot is not the next one the game's own allocator is
+/// most likely to hand out.
+const POOL_SAFETY_SLOTS: usize = 16;
+/// Consecutive all-zero contract-sized blocks required at the chosen slot.
+const POOL_ZERO_RUN: usize = 4;
+
+/// First zero run after `last` (the last live contract), within `map_end`.
+fn zero_slot_after(driver: &LinuxMemoryDriver, last: usize, map_end: usize) -> Result<usize> {
+    let mut buf = vec![0u8; CONTRACT_SIZE * POOL_ZERO_RUN];
+    for slot in POOL_SAFETY_SLOTS..POOL_SAFETY_SLOTS + 4096 {
+        let candidate = last + slot * CONTRACT_SIZE;
+        if candidate + buf.len() > map_end {
+            break;
+        }
+        if driver.read_bytes(candidate, &mut buf).is_ok() && buf.iter().all(|&b| b == 0) {
             return Ok(candidate);
         }
     }
-
-    // 2. Fallback: query maps to find the rw-p mapping containing near_addr
-    if let Ok(mappings) = fmlev_mem::parse_process_maps(driver.pid()) {
-        for m in mappings {
-            if m.is_readable() && m.is_writable() && m.start <= near_addr && near_addr < m.end {
-                let scan_start = m.start + (m.end - m.start) / 2;
-                for page in (scan_start..m.end).step_by(4096) {
-                    if driver.read_bytes(page, &mut check_buf).is_ok() && check_buf.iter().all(|&b| b == 0) {
-                        return Ok(page);
-                    }
-                }
-            }
-        }
-    }
-
-    Err(invalid("Unable to locate a verified zeroed contract memory slot in target process"))
+    Err(invalid("No zeroed contract slot found after the live contract pool"))
 }
 
-/// Resolves the FULL_CONTRACT MSVC vtable pointer dynamically or via fallback.
-pub fn resolve_contract_vtable(driver: &LinuxMemoryDriver) -> usize {
-    if let Ok(mappings) = fmlev_mem::parse_process_maps(driver.pid()) {
-        for m in mappings {
-            if m.pathname.contains("game_plugin.dll")
-                && m.is_readable()
-                && m.is_executable()
-            {
-                let vt = m.start + FULL_CONTRACT_VTABLE_RVA;
-                let mut check = [0u8; 8];
-                if driver.read_bytes(vt, &mut check).is_ok() {
-                    return vt;
-                }
-            }
-        }
-    }
-    FALLBACK_FULL_CONTRACT_VTABLE
+/// Finds a verified all-zero 200-byte slot in the `FULL_CONTRACT` pool of the running game.
+/// Heuristic, run-independent: the pool is the writable mapping that holds the most `FULL_CONTRACT`
+/// objects (vtable resolved from the mapped `game_plugin.dll`, never an address constant); the slot is the
+/// first run of zero blocks after the last contract plus a safety gap. The game's own allocation counter is
+/// not updated, so a later in-game signing could reuse the slot: treat signing as experimental.
+pub fn find_zero_contract_slot(driver: &LinuxMemoryDriver, _near_addr: usize) -> Result<usize> {
+    let vtable = strict_contract_vtable(driver)?;
+    let (last, map_end) = contract_pool(driver, vtable)?
+        .ok_or_else(|| invalid("Could not identify the FULL_CONTRACT pool in the target process"))?;
+    zero_slot_after(driver, last, map_end)
+}
+
+/// `FULL_CONTRACT` vtable from the mapped `game_plugin.dll`; an error when the module is not mapped.
+fn strict_contract_vtable(driver: &LinuxMemoryDriver) -> Result<usize> {
+    let maps = fmlev_mem::parse_process_maps(driver.pid())?;
+    let base = maps.iter().filter(|m| m.pathname.ends_with("game_plugin.dll")).map(|m| m.start).min();
+    base.map(|base| base + FULL_CONTRACT_VTABLE_RVA).ok_or_else(|| invalid("game_plugin.dll is not mapped; attach to FM26 first"))
 }
 
 /// Constructs a valid 200-byte (0xc8) native FULL_CONTRACT buffer.
@@ -677,7 +717,8 @@ pub fn sign_free_agent(
         return Err(invalid("Contract memory slot was unexpectedly non-zero"));
     }
 
-    let vtable = resolve_contract_vtable(driver);
+    // No address fallback: a vtable that does not come from the mapped module would write a bad object.
+    let vtable = strict_contract_vtable(driver)?;
     let person_addr = player.address + PERSON_OFFSET;
     let wage = wage_gbp.unwrap_or(1000);
     let expiry = expiry_year.unwrap_or(2027);
@@ -733,30 +774,62 @@ pub fn sign_free_agent(
     Ok(target_team)
 }
 
-/// Helper to scan for a transfer queue entry belonging to a person.
-/// Each entry in the queue is 0x30 bytes:
-/// +0x00: u32 tag, u32 id
-/// +0x08: person pointer
-/// +0x10: join date packed (u32)
-/// +0x14: transfer ID (u32)
+const QUEUE_ENTRY_SIZE: usize = 0x30;
+
+/// A packed contract date: year in the high half (1900..=2100), 1-based day of year in the low 9 bits.
+fn queue_date_shape(value: u32) -> bool {
+    (1900..=2100).contains(&(value >> 16)) && (1..=366).contains(&(value & 0x1ff))
+}
+
+/// Date and transfer id of an entry when it has the queue-entry shape: person pointer at +0x08, packed join
+/// date at +0x10, non-zero transfer id at +0x14.
+fn queue_entry_fields(entry: &[u8]) -> Option<(u32, u32)> {
+    let person = u64::from_le_bytes(entry[8..16].try_into().ok()?);
+    let date = u32::from_le_bytes(entry[16..20].try_into().ok()?);
+    let transfer = u32::from_le_bytes(entry[20..24].try_into().ok()?);
+    (person > 0x10000 && queue_date_shape(date) && transfer != 0).then_some((date, transfer))
+}
+
+/// True when `entry` has the queue shape and a neighbouring entry (the queue is a sorted array of 0x30-byte
+/// entries) has it too with a date that keeps the order.
+fn queue_entry_plausible(prev: Option<&[u8]>, entry: &[u8], next: Option<&[u8]>) -> bool {
+    let Some((date, _)) = queue_entry_fields(entry) else { return false };
+    let before = prev.and_then(queue_entry_fields).is_some_and(|(d, _)| d <= date);
+    let after = next.and_then(queue_entry_fields).is_some_and(|(d, _)| d >= date);
+    before || after
+}
+
+/// Scans writable memory for the transfer queue entry belonging to a person (read-only). Each entry is 0x30
+/// bytes: +0x00 tag and id, +0x08 person pointer, +0x10 packed join date (u32), +0x14 transfer id (u32). The
+/// queue is found by shape and neighbours, not by address. `Ok(None)` when no entry matches; more than one
+/// plausible entry is an error, so the caller never edits a guess.
 pub fn find_queue_entry_for_person(
     driver: &LinuxMemoryDriver,
     person_addr: usize,
 ) -> Result<Option<(usize, Vec<u8>)>> {
-    let start = 0x2603f0000;
-    let end = 0x260400000;
-    let mut buf = vec![0u8; end - start];
-    if driver.read_bytes(start, &mut buf).is_ok() {
-        let person_bytes = person_addr.to_le_bytes();
-        if let Some(pos) = buf.windows(8).position(|w| w == person_bytes) {
-            if pos >= 8 && pos + 0x28 <= buf.len() {
-                let entry_addr = start + pos - 8;
-                let entry_bytes = buf[pos - 8..pos - 8 + 0x30].to_vec();
-                return Ok(Some((entry_addr, entry_bytes)));
-            }
+    let regions = scan_regions(driver)?;
+    let mut found: Vec<(usize, Vec<u8>)> = Vec::new();
+    for (address, _) in scan_for_u64(driver, &regions, person_addr as u64) {
+        let Some(entry_addr) = address.checked_sub(8) else { continue };
+        if entry_addr % 8 != 0 {
+            continue;
+        }
+        // One read of the previous, this and the next entry.
+        let Some(window_start) = entry_addr.checked_sub(QUEUE_ENTRY_SIZE) else { continue };
+        let mut window = vec![0u8; QUEUE_ENTRY_SIZE * 3];
+        if driver.read_bytes(window_start, &mut window).is_err() {
+            continue;
+        }
+        let (prev, entry, next) = (&window[..QUEUE_ENTRY_SIZE], &window[QUEUE_ENTRY_SIZE..2 * QUEUE_ENTRY_SIZE], &window[2 * QUEUE_ENTRY_SIZE..]);
+        if queue_entry_plausible(Some(prev), entry, Some(next)) {
+            found.push((entry_addr, entry.to_vec()));
         }
     }
-    Ok(None)
+    match found.len() {
+        0 => Ok(None),
+        1 => Ok(found.pop()),
+        n => Err(invalid(&format!("{n} plausible transfer queue entries match this person; refusing to guess"))),
+    }
 }
 
 /// Completes an arranged future transfer immediately, moving the player to their agreed future club.
@@ -1037,5 +1110,76 @@ mod tests {
         assert_eq!(packed_expiry & 0x1ff, 181);
         // Squad number at +0x5d (which is 92 + 1 = 93)
         assert_eq!(bytes[0x5d], 10);
+    }
+
+    fn queue_entry(date: u32, transfer: u32, person: u64) -> Vec<u8> {
+        let mut e = vec![0u8; QUEUE_ENTRY_SIZE];
+        e[0..4].copy_from_slice(&7u32.to_le_bytes());
+        e[8..16].copy_from_slice(&person.to_le_bytes());
+        e[16..20].copy_from_slice(&date.to_le_bytes());
+        e[20..24].copy_from_slice(&transfer.to_le_bytes());
+        e
+    }
+
+    #[test]
+    fn queue_entries_need_the_shape_and_an_ordered_neighbour() {
+        let packed = |year: u32, day: u32| (year << 16) | day;
+        let a = queue_entry(packed(2026, 100), 1, 0x1_3000_0000);
+        let b = queue_entry(packed(2026, 120), 2, 0x1_3000_1000);
+        let c = queue_entry(packed(2026, 90), 3, 0x1_3000_2000);
+        assert!(queue_entry_plausible(Some(&a), &b, None), "previous is earlier");
+        assert!(queue_entry_plausible(None, &a, Some(&b)), "next is later");
+        assert!(!queue_entry_plausible(Some(&b), &c, None), "previous is later than this one");
+        assert!(!queue_entry_plausible(None, &a, None), "an entry with no valid neighbour is not trusted");
+        let zeros = vec![0u8; QUEUE_ENTRY_SIZE];
+        assert!(!queue_entry_plausible(Some(&zeros), &a, Some(&zeros)));
+        // Impossible dates, a null transfer id and a small person pointer all fail the shape.
+        assert!(queue_entry_fields(&queue_entry(packed(1500, 100), 1, 0x1_3000_0000)).is_none());
+        assert!(queue_entry_fields(&queue_entry(packed(2026, 0), 1, 0x1_3000_0000)).is_none());
+        assert!(queue_entry_fields(&queue_entry(packed(2026, 100), 0, 0x1_3000_0000)).is_none());
+        assert!(queue_entry_fields(&queue_entry(packed(2026, 100), 1, 0x100)).is_none());
+    }
+
+    #[test]
+    fn queue_lookup_finds_a_unique_entry_by_shape_not_address_and_refuses_ambiguity() {
+        let packed = |year: u32, day: u32| (year << 16) | day;
+        let person: u64 = 0x1_5eed_0000_0000 | (std::process::id() as u64) << 8;
+        let mut queue = Vec::new();
+        queue.extend(queue_entry(packed(2026, 50), 1, 0x1_3000_0000));
+        queue.extend(queue_entry(packed(2026, 60), 2, person));
+        queue.extend(queue_entry(packed(2026, 70), 3, 0x1_3000_1000));
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let base = queue.as_ptr() as usize;
+        assert_eq!(base % 8, 0);
+        let (address, bytes) = find_queue_entry_for_person(&driver, person as usize).unwrap().expect("entry found");
+        assert_eq!(address, base + QUEUE_ENTRY_SIZE);
+        assert_eq!(bytes, queue[QUEUE_ENTRY_SIZE..2 * QUEUE_ENTRY_SIZE].to_vec());
+        // The same person in a second, equally plausible queue is ambiguous.
+        let mut second = Vec::new();
+        second.extend(queue_entry(packed(2026, 55), 4, 0x1_3000_2000));
+        second.extend(queue_entry(packed(2026, 65), 5, person));
+        second.extend(queue_entry(packed(2026, 75), 6, 0x1_3000_3000));
+        let error = find_queue_entry_for_person(&driver, person as usize).unwrap_err().to_string();
+        assert!(error.contains("refusing to guess"), "{error}");
+        drop(second);
+        let missing = (person as usize) ^ 0x1234_5000;
+        assert!(find_queue_entry_for_person(&driver, missing).unwrap().is_none());
+    }
+
+    #[test]
+    fn zero_slot_is_after_the_last_contract_with_a_gap_and_a_zero_run() {
+        let mut pool = vec![0u8; CONTRACT_SIZE * (POOL_SAFETY_SLOTS + 40)];
+        pool[0] = 1; // a live contract at slot 0 (non-zero bytes)
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let base = pool.as_ptr() as usize;
+        let end = base + pool.len();
+        assert_eq!(zero_slot_after(&driver, base, end).unwrap(), base + POOL_SAFETY_SLOTS * CONTRACT_SIZE);
+        // A non-zero byte inside the first candidate run pushes the choice to the next slot with a full run.
+        let dirty = (POOL_SAFETY_SLOTS + 1) * CONTRACT_SIZE + 3;
+        pool[dirty] = 9;
+        let slot = zero_slot_after(&driver, base, end).unwrap();
+        assert_eq!(slot, base + (POOL_SAFETY_SLOTS + 2) * CONTRACT_SIZE);
+        // No room left in the mapping is an error, never a slot past the end.
+        assert!(zero_slot_after(&driver, base, base + CONTRACT_SIZE * (POOL_SAFETY_SLOTS + 2)).is_err());
     }
 }

@@ -120,6 +120,7 @@ The table distinguishes native API capabilities from the guarded web editor. Unv
 | **Competition stage rules** | Dynamic registration squad cap (`POST /api/competition/stage-rules`) | Queries and edits active simulation engine `stage_rule_entry` (`+0x98`/`+0xd6`) |
 | **Competition prize money** | Edit the per-position prize table | Match first/last prize on Rules; payout source at season end unconfirmed |
 | **Register anytime** | Allow squad registration outside the window per competition | Toggles manager flag bit `0x100`, manager squad-number bit `0x200`, and domestic stage gate byte `0x9a=1` |
+| **Search index** | Search every loaded player, staff member, club, nation and competition without opening a screen first (`GET /api/search`, `/api/search/status`, `POST /api/search/rebuild`) | Built in the background by RTTI enumeration; accent-insensitive, ranked and paged. **Not yet checked against a live save** |
 | **Reads** | Club, nation and competition overviews, FIFA ranking, reputation text | Screen-independent discovery via native records |
 
 **Remaining frontiers & limits**:

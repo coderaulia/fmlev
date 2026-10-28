@@ -309,6 +309,9 @@ read-only first, writes only after the evidence ladder.
 - Unit tests for folding, tokenizing, ranking, paging and the staleness drop. A Node test for the status chip and paging. A server test that `/api/search` answers while a build is running.
 - Timings logged for build per stage and query p95 on a full save.
 
+### G status (2026-10-28)
+Implemented: G1 (one background pass instead of per-kind stages, because a single memory pass is cheaper; all kinds become searchable together), G2, G3 (no reputation tie-break: the index holds no reputation), G4 and G5. Rebuild triggers: attach, a new PID, and the Rebuild button. A save loaded inside the same PID is not detected automatically; stale hits are dropped when they fail to open. G6 live parity is still to do: see the checklist in section 5.
+
 ### G7. Delivery order
 1. G4 lock fix and moving the existing player discovery to `spawn_blocking` (small, immediate win).
 2. G3 query engine over the current registries.
@@ -333,6 +336,8 @@ The workstream E, C and F branches were built while FM26 was not running. Nothin
 | Staff information (reputations, CA/PA, birth year) | `worktree-agent-ac2e8ed58b95020f6` | `fmscan entity PID staff --name <coach> --editor` → `information` | Values match the staff profile screen |
 | Staff contract | same | Same command with the coach's contract screen open → `contract_discovery` | Wage and expiry match the screen |
 | Registration doctor | main | Player → Registration for a La Liga player | Gates match the game's registration screen |
+| Search index parity | main | `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 mbappe`, then `tools/fmscan/fmscan entity PID player --name <sample>` for some samples | Counts plausible; sampled index/uid/name equal fmscan; build time and query p95 logged |
+| Search in the UI | main | Restart with `./start.sh`, watch the index chip, search an accent-free name, open a player, staff member, club, nation and competition from results | Chip reaches "ready"; every kind opens |
 | Role presets | main | Apply Level 1/2/3 to a test player, day tick, save and reload | Attributes persist; role lists match FM26's role screen |
 
 Record each result (command, values, what is still not proven) in `AGENTS.md`, then flip the matching `verified` flags in Rust.

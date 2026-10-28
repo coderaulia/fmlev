@@ -111,6 +111,14 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 8; ++i) heap[0xf170 + i] = uint8_t(10 + i);
     heap[0xf032] = 89; heap[0xf041] = 1; heap[0xf031] = 16; heap[0xf01c] = 16; heap[0xf014] = 15; heap[0xf01d] = 79;
     for (int o : {0x2b,0x2c,0x2d,0x2e,0x2f,0x30,0x33,0x34,0x35,0x36,0x37,0x3c,0x3f,0x42,0x43}) heap[0xf000 + o] = 50;
+    // Information-tab candidates and a contract-like pointer survey (task-brief offsets, unverified).
+    put(heap + 0xf0d4, uint16_t{5000}); put(heap + 0xf0d6, uint16_t{6000}); put(heap + 0xf0d8, uint16_t{7000});
+    put(heap + 0xf0da, uint16_t{120}); put(heap + 0xf0dc, uint16_t{160}); put(heap + 0xf18a, uint16_t{1971});
+    put(heap + 0x6100, contract); put(heap + 0x6108, root + 0xf100); put(heap + 0x6110, root + 0x3000);
+    put(heap + 0x6120, uint32_t{45000}); put(heap + 0x6148, uint32_t{(2028 << 16) | 100});
+    put(heap + 0xf1e0, root + 0x6100);               // direct FULL_CONTRACT slot
+    put(heap + 0x6200, root + 0x6300); put(heap + 0x6300, contract); put(heap + 0x6308, root + 0x288);
+    put(heap + 0xf1f0, root + 0x6200);               // node whose first qword is a contract owned by someone else
     // A copy of only the first sub-object (no +0x128 owner) must not be discoverable.
     identity(0xf400, staff, 80, 1121); put(heap + 0xf450, root + 0xb200); put(heap + 0xf458, root + 0xb208);
     // A stale copy with conflicting UIDs must not be discoverable.
@@ -125,6 +133,7 @@ int main(int argc, char** argv) {
         if (cmd == "duplicate") memcpy(heap + 0x8000, heap, 0x400);
         if (cmd == "bad-name") heap[0xc004] = 0xff;
         if (cmd == "bad-staff-attribute") heap[0xf032] = 101;
+        if (cmd == "bad-staff-info") put(heap + 0xf0da, uint16_t{500});
         if (cmd == "bad-staff-uid") put(heap + 0xf110, uint32_t{1});
         if (cmd == "bad-attribute") heap[0x148 + 0x1e] = 101;
         if (cmd == "good-attribute") heap[0x148 + 0x1e] = 50;

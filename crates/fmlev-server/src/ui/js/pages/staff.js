@@ -1,5 +1,5 @@
     // ---- Staff: search, profile header, ability tabs. Nothing is written until the save bar's Save. ----
-    const staffState = { results: [], selected: null, editing: false, tab: "head_coach", edits: {} };
+    const staffState = { results: [], selected: null, editing: false, tab: "head_coach", edits: {}, extra: {} };
     // Ability tabs: which attribute groups (and sub-groups) each one shows, in order.
     const STAFF_TABS = [
       { id: "head_coach", label: "Head Coach", groups: [{ group: "coaching", title: "Coaching" }, { group: "mental", title: "Mental" }, { group: "knowledge", title: "Knowledge" }] },
@@ -7,6 +7,9 @@
       { id: "scouting", label: "Scouting", groups: [{ group: "knowledge", title: "Knowledge" }, { group: "mental", title: "Mental" }, { group: "scouting", title: "Analyzing Data" }] },
       { id: "medical", label: "Medical", groups: [{ group: "knowledge", title: "Knowledge" }, { group: "mental", title: "Mental" },
         { group: "medical", title: "Physiotherapy", match: /physio/i }, { group: "medical", title: "Sports Science", match: /^(?!.*physio)/i }] },
+      // Read-only views backed by their own routes, fetched when first opened. Unverified fields stay "Unavailable".
+      { id: "information", label: "Information", kind: "information" },
+      { id: "contract", label: "Contract", kind: "contract" },
     ];
     // FM26 ability labels measured in game (10 seen, 11 inferred).
     function staffAbilityLabel(value) {
@@ -73,6 +76,7 @@
       if (header) header.innerHTML = `<span class="staff-name">${escapeHtml(data.staff.name)}</span><span class="staff-id">#${Number(data.staff.index)}</span>` +
         (staffState.editing ? `<span class="pill pill-warn">Experimental editing</span>` : "");
       const tab = STAFF_TABS.find(t => t.id === staffState.tab) || STAFF_TABS[0];
+      if (tab.kind) { detail.innerHTML = renderStaffExtra(tab.kind, data); return; }
       const cols = tab.groups.map(g => {
         const rows = data.attributes.filter(a => a.group === g.group && (!g.match || g.match.test(a.field)));
         return rows.length ? `<div class="attr-col"><div class="attr-col-head">${g.title}</div>${rows.map(staffAttrLine).join("")}</div>` : "";
@@ -81,11 +85,60 @@
         `<div class="staff-note">${escapeHtml(data.verification || "")}</div>`;
     }
 
+    // Information / Contract: read-only rows. Only fields the server marks "verified" show a value; the rest say why not.
+    function staffExtraRow(f) {
+      const label = escapeHtml(f.label || staffFieldLabel(f.field));
+      if (f.status === "verified" && f.value !== null && f.value !== undefined) {
+        return `<div class="attr-line"><span class="attr-line-name">${label}</span><b class="attr-line-val">${escapeHtml(String(f.value))}</b></div>`;
+      }
+      return `<div class="attr-line unavailable"><span class="attr-line-name">${label}</span>` +
+        `<span class="attr-line-val">Unavailable <span class="unverified-note">${escapeHtml(f.reason || "not verified")}</span></span></div>`;
+    }
+    function renderStaffExtra(kind, data) {
+      const entry = staffState.extra[kind];
+      const title = kind === "contract" ? "Contract" : "Information";
+      if (!entry) return `<div class="staff-note">Loading ${title.toLowerCase()}...</div>`;
+      if (entry.error) return `<div class="attr-line unavailable"><span class="attr-line-val">Unavailable <span class="unverified-note">${escapeHtml(entry.error)}</span></span></div>`;
+      const s = data.staff;
+      let rows;
+      if (kind === "information") {
+        const identity = [
+          { label: "Name", status: "verified", value: s.name },
+          { label: "ID", status: "verified", value: s.index },
+          { label: "Unique ID", status: "verified", value: s.uid },
+        ];
+        rows = `<div class="attr-col"><div class="attr-col-head">Identity (verified)</div>${identity.map(staffExtraRow).join("")}</div>` +
+          `<div class="attr-col"><div class="attr-col-head">Personal details</div>${entry.data.fields.map(staffExtraRow).join("")}</div>`;
+      } else {
+        const c = entry.data.contract;
+        rows = `<div class="attr-col"><div class="attr-col-head">Contract <span class="pill pill-warn">Read-only</span></div>${c.fields.map(staffExtraRow).join("")}</div>`;
+      }
+      const note = kind === "contract" ? entry.data.contract.reason : entry.data.verification;
+      return `<div class="attr-table">${rows}</div><div class="staff-note">${escapeHtml(note || "")} Editing is unavailable for this view.</div>`;
+    }
+    async function loadStaffExtra(kind) {
+      const current = staffState.selected;
+      if (!current || staffState.extra[kind]) return;
+      try {
+        const res = await staffRequest(`/api/staff/${kind}`, { staff_id: current.staff.index, staff_uid: current.staff.uid });
+        const data = await readJson(res);
+        if (!res.ok) throw new Error(data.message || `Staff ${kind} read failed`);
+        if (staffState.selected !== current) return;
+        staffState.extra[kind] = { data };
+      } catch (error) {
+        if (staffState.selected !== current) return;
+        staffState.extra[kind] = { error: error.message };
+      }
+      if (staffState.selected === current) renderStaffDetail(current);
+    }
+
     function setStaffTab(id) {
-      if (!STAFF_TABS.some(t => t.id === id)) return;
+      const tab = STAFF_TABS.find(t => t.id === id);
+      if (!tab) return;
       staffState.tab = id;
       if (typeof Shell !== "undefined") Shell.setActiveSubTab(id, "staff");
       renderStaffDetail(staffState.selected);
+      return tab.kind && staffState.selected ? loadStaffExtra(tab.kind) : undefined;
     }
 
     function toggleStaffEditing(enabled) {
@@ -131,7 +184,10 @@
       if (!res.ok) throw new Error(data.message || "Staff read failed");
       staffState.selected = data;
       staffState.edits = {};
+      staffState.extra = {};
       renderStaffDetail(data);
+      const open = STAFF_TABS.find(t => t.id === staffState.tab);
+      if (open && open.kind) loadStaffExtra(open.kind);
       if (typeof SaveBar !== "undefined") SaveBar.clear("staff");
       return data;
     }

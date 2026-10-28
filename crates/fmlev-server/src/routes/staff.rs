@@ -2,6 +2,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Deserialize;
 
 use fmlev_core::native_staff::NativeStaffRecord;
+use fmlev_mem::LinuxMemoryDriver;
 
 use super::api_error;
 use crate::state::ServerState;
@@ -107,4 +108,58 @@ pub async fn update_staff(State(state): State<ServerState>, Json(req): Json<Staf
         }
         Err(error) => api_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
+}
+
+fn resolve_staff(driver: &LinuxMemoryDriver, req: &StaffNativeRequest) -> Result<NativeStaffRecord, axum::response::Response> {
+    match NativeStaffRecord::discover_by_index(driver, req.staff_id) {
+        Ok(staff) if staff.uid == req.staff_uid => Ok(staff),
+        Ok(staff) => Err(api_error(StatusCode::CONFLICT, format!("Staff {} has uid {}, not {}", staff.index, staff.uid, req.staff_uid)).into_response()),
+        Err(error) => Err(api_error(StatusCode::NOT_FOUND, error).into_response()),
+    }
+}
+
+/// Read-only Information tab: identity plus the extra fields. Unverified offsets return `unavailable`.
+pub async fn read_staff_information(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
+    let r = state.inner.read().await;
+    let Some(session) = r.context_mgr.session.as_ref() else {
+        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    };
+    let staff = match resolve_staff(&session.driver, &req) {
+        Ok(staff) => staff,
+        Err(response) => return response,
+    };
+    match staff.read_information(&session.driver) {
+        Ok(fields) => Json(serde_json::json!({
+            "status": "ok",
+            "staff": staff,
+            "fields": fields,
+            "verification": "Identity (name, id, uid) is validated by RTTI vtables and duplicate uid. Other fields stay unavailable until verified in game.",
+        }))
+        .into_response(),
+        Err(error) => api_error(StatusCode::CONFLICT, error).into_response(),
+    }
+}
+
+/// Read-only Contract tab. The staff contract link is not mapped yet, so every field is `unavailable`.
+pub async fn read_staff_contract(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
+    let r = state.inner.read().await;
+    let Some(session) = r.context_mgr.session.as_ref() else {
+        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    };
+    let staff = match resolve_staff(&session.driver, &req) {
+        Ok(staff) => staff,
+        Err(response) => return response,
+    };
+    match staff.read_contract(&session.driver) {
+        Ok(contract) => Json(serde_json::json!({ "status": "ok", "staff": staff, "contract": contract })).into_response(),
+        Err(error) => api_error(StatusCode::CONFLICT, error).into_response(),
+    }
+}
+
+/// Staff information/contract writes have no verified layout, so they are never attempted.
+pub async fn staff_write_unsupported() -> impl IntoResponse {
+    api_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Staff information and contract writes are not supported: the layout is unverified (read-only discovery only).",
+    )
 }

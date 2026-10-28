@@ -263,3 +263,76 @@ read-only first, writes only after the evidence ladder.
 | Swap Staff | Read-only | F6 |
 | Registration doctor test competition | La Liga | D4 |
 | Nationality rules proof | Both value proof and behavior proof before "verified" | C4 |
+
+---
+
+## G. Search: index the whole loaded database
+
+### Problem today (2026-10-28)
+- `GET /api/search` (`routes/context.rs:77`) searches in-memory registries only. Clubs, nations and competitions come from `context/default_registries.rs` (9 clubs, 6 nations, a few competitions of demo data) plus records seen on the screen the user has open (`live_clubs`, `live_nations`, `live_competitions` from `sync_live_context`).
+- Players are indexed only after one player's Attributes screen has calibrated the layout (`maybe_auto_discover_players`, `mutations.rs:93`). The attempt runs once per session (`auto_discovery_attempted`), so a failed or early attempt is never retried automatically.
+- That discovery is a full AOB scan run inside the async handler while holding the global write lock, so every other request waits for it.
+- Staff search (`POST /api/staff/search`) rescans the process on every query (about 6 s) and is not cached.
+- Matching is a plain lowercase `contains`: no accent folding ("mbappe" does not find "Mbappé"), no ranking, and results are truncated to 100 without paging.
+
+### G1. Background indexer
+- New `SearchIndex` in `fmlev-core` behind its own `Arc<RwLock<_>>`, separate from the global server state, so queries never wait for a scan.
+- Build it in `tokio::task::spawn_blocking` when the session attaches, and again when the save changes (PID change, game date jump backwards, or record count change). Build in stages: nations, then competitions, then clubs, then players, then staff. Each stage becomes searchable when it finishes.
+- `GET /api/search/status` returns `{state: idle|building|ready|error, stage, counts per kind, built_at, duration_ms, error}`. `POST /api/search/rebuild` forces a rebuild.
+
+### G2. Seedless enumeration by RTTI
+- Resolve each record vtable once per scan by RTTI (as `native_staff` already does) for players, staff, clubs, nations and competitions. Port the enumeration from `fmscan entity` (`tools/fmscan/entities.hpp`, `catalog.hpp`) to Rust.
+- The index stores identity and display fields only: kind, index, uid, name, club, nation, position and age where verified. Attribute calibration stays gated: opening a record runs the existing validation (vtable + index + duplicate uid) before any read or write.
+- The player identity path must not need an open Attributes screen. If a field cannot be read without calibration, the index omits it rather than guessing.
+- Static demo registries are used only when no game is attached.
+
+### G3. Query engine
+- Fold case and accents (NFKD, strip marks) for names and query. Split into tokens and require every token to match.
+- Ranking: exact name, then word prefix, then substring; tie-break by reputation where known, then by name.
+- Lookup by numeric id or uid.
+- Filters: kind, club, nation, position, age range.
+- Paging: `limit` (default 25, maximum 200) and `offset`, with `total` per kind.
+- Target: under 50 ms per query on a full database held in memory.
+
+### G4. Staleness and safety
+- Before a result is opened, revalidate the record (vtable, index, uid). A record that fails is dropped from the index and the UI shows "record moved, rebuilding".
+- No index entry is ever used as a write target without that revalidation.
+- No scan runs inside an async handler or while holding the global write lock. This also covers the current `search_entities` path.
+
+### G5. UI
+- An index status chip next to the search box, for example "Indexing players… 41,200" or "Index ready · 2 min ago", with a Rebuild action.
+- Results grouped by kind with counts and "Show more" (paging). Staff come from the same index, not a separate rescan.
+- Keyboard navigation (up, down, Enter) and recent selections.
+
+### G6. Evidence and tests
+- Parity: record counts and 20 random name/uid samples per kind must match `fmscan entity` output on the same PID. Log the counts in `AGENTS.md`.
+- Unit tests for folding, tokenizing, ranking, paging and the staleness drop. A Node test for the status chip and paging. A server test that `/api/search` answers while a build is running.
+- Timings logged for build per stage and query p95 on a full save.
+
+### G7. Delivery order
+1. G4 lock fix and moving the existing player discovery to `spawn_blocking` (small, immediate win).
+2. G3 query engine over the current registries.
+3. G1 and G2 indexer, nations and competitions first, then clubs, players and staff.
+4. G5 UI.
+5. G6 parity run on a live save.
+
+---
+
+## 5. Live verification checklist (owner, evening of 2026-10-28)
+
+The workstream E, C and F branches were built while FM26 was not running. Nothing in them is verified live yet. Before testing: start FM26, load a throwaway save, and check that `kernel.yama.ptrace_scope` is 0.
+
+| Item | Branch | What to check | Pass condition |
+| --- | --- | --- | --- |
+| Preferred moves bit 39 | `worktree-agent-ad6a798a3808e1c98` | `fmscan entity PID player --name Mbappé --editor` → `preferred_moves` | Bit 39 set; on screen "Cuts Inside From Both Wings" |
+| Preferred moves, other bits | same | Compare bitsets of players whose PPM screens differ by one move | Each bit named only when one screen difference isolates it |
+| Nation years to gain nationality (+0x1ed) | `worktree-agent-a5dc3f03aa8c9c910` | `tools/fmscan/nation_rules.py PID`, then the Nation screen for Spain, Italy, England, Japan | Values match the screen |
+| Nation gain type (+0x1eb) | same | Two nations with different types on screen | Code 1 and code 2 labels fixed |
+| Dual nationality (bit 0x02 of +0x1e9) | same | A nation that forbids dual nationality and one that allows it | Polarity proven |
+| Nation behaviour proof | same | Advance time until a player gains nationality | The player gains it as the rules predict |
+| Staff information (reputations, CA/PA, birth year) | `worktree-agent-ac2e8ed58b95020f6` | `fmscan entity PID staff --name <coach> --editor` → `information` | Values match the staff profile screen |
+| Staff contract | same | Same command with the coach's contract screen open → `contract_discovery` | Wage and expiry match the screen |
+| Registration doctor | main | Player → Registration for a La Liga player | Gates match the game's registration screen |
+| Role presets | main | Apply Level 1/2/3 to a test player, day tick, save and reload | Attributes persist; role lists match FM26's role screen |
+
+Record each result (command, values, what is still not proven) in `AGENTS.md`, then flip the matching `verified` flags in Rust.

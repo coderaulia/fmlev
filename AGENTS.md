@@ -481,6 +481,12 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Proven**: a Level 3 role preset write persists through a day tick and a save/reload.
 - **Not proven**: exact values (scout ranges only; use a player at the user's own club); Levels 1 and 2; that the role names and key/secondary lists (DLP key: First Touch, Passing, Technique, Composure, Decisions, Teamwork, Vision; secondary: Tackling, Anticipation, Positioning, Balance) match FM26's role screens, so the "role data unverified" badge stays; the CA rule (the heuristic took CA from about 143 to 189 and PA to 189; it is not the game's formula and the jump is large).
 
+### Owner confirmations (2026-10-28, reported by the user, no new commands run)
+- **Staff attribute writes**: the user reports staff attribute editing worked in game the last time it was tried; no values, player or day-tick/reload detail were recorded, so the earlier "one field (Tactical) proven" entry is the only measured evidence. The experimental opt-in checkbox stays.
+- **Role presets**: the user considers further testing unnecessary (Level 3 proven on one player; Levels 1-2, exact numbers and role lists left unchecked by choice).
+- **Competition prize money**: the user reports the edited prize table works in game; no season-end observation values were recorded.
+- **Loan signing**: stays 501. A loan agreement is a game-allocated object (AGENTS.md Phase 3 notes) and no layout for creating one is proven.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

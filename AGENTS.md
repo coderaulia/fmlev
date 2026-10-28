@@ -464,3 +464,20 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Tests**: synthetic in-process enumeration (`native_catalog::tests`), query engine unit tests, HTTP tests for paging, kind filter, status and answering during a build, and Node tests for the UI chip, paging and recent selections.
 - **Not proven**: counts, names and links against a live save, build time on a full database, and query p95. Run `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 <query>` and compare samples with `fmscan entity`. A save loaded in the same process is detected by a spot check of 12 entries per kind (at most every 10 s, on search calls) and triggers a rebuild; use Rebuild index if it is missed.
 
+
+## Live verification — tonight's runbook (2026-10-28, owner)
+
+Nothing from plan workstreams C, E, F, B, D or G is verified live yet. Run these in order on a throwaway save, then log each result (command, values, what is still not proven) in this file and flip the matching `verified` flag in Rust. Full table: `plan.md` section 5.
+
+1. Start FM26 through Steam, load a throwaway save, and wait for the main screen.
+2. Run `FMLE_FIX_PTRACE=yes ./start.sh` (or answer `y` at the prompt). Check that it prints `ptrace_scope is now 0` and `FMLE running`.
+3. Search index: open the UI, watch the index chip reach "ready", then run `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 mbappe` (PID from `pgrep -f FootballManager` or `./start.sh status`). Compare 3–5 sampled index/uid/name lines per kind with `tools/fmscan/fmscan entity PID <kind> --name "<name>"`. Log counts, build time and query p95.
+4. Search in the UI: search an accent-free name; open one player, staff member, club, nation and competition from the results. Load a different save in the same session and check that the chip rebuilds within about 10 s of the next search.
+5. Preferred moves: `fmscan entity PID player --name "Mbappé" --editor`; bit 39 must be set and the screen must show "Cuts Inside From Both Wings". Then compare bitsets of players whose PPM screens differ by exactly one move, and name a bit only when one difference isolates it.
+6. Nation rules: `python3 tools/fmscan/nation_rules.py PID`, then open the Nation screen for Spain, Italy, England and Japan. Years to gain nationality (+0x1ed) must match. Find two nations with different gain types (+0x1eb) and a nation that forbids dual nationality (bit 0x02 of +0x1e9) to fix the labels and polarity. Behaviour proof: advance time until a player gains a nationality as the rules predict.
+7. Staff information and contract: `fmscan entity PID staff --name "<coach>" --editor` with that coach's profile and contract screens open. Compare reputations, CA/PA and birth year (Information) and wage and expiry (Contract, `contract_discovery`) with the screens.
+8. Registration doctor: Player → Registration for a La Liga player; the gates must match the game's registration screen.
+9. Role presets: apply Level 1, 2 and 3 to a test player, advance one day, save and reload; attributes must persist, and the role lists must match FM26's role screens.
+10. Write the results into this file, README support table and `LIVE_READ_WRITE.md`. Commit locally; push only when you ask.
+
+Undo for step 2 if wanted: `sudo sysctl -w kernel.yama.ptrace_scope=1`, and delete `/etc/sysctl.d/99-fmle-ptrace.conf` if you used `persist`.

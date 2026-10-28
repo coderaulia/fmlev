@@ -61,6 +61,12 @@ crates/
 │       │   ├── mutations.rs           # Live & offline mutation logic (players, clubs, nations, competitions)
 │       │   └── tests.rs               # Context engine test suite
 │       ├── live_write.rs              # Authoritative memory write engine and transaction safety
+│       ├── locator_cache.rs           # Validated cache of native record locations (scan once, reuse after identity check)
+│       ├── native_catalog.rs          # RTTI enumeration for the search index
+│       ├── native_staff.rs            # Staff records: attributes, information, contract
+│       ├── native_transfer.rs         # Squad vectors, contracts, transfers, map-based slot/queue lookups
+│       ├── open_staff.rs              # Staff profile open in FM26 (from UI bindings)
+│       ├── search_index.rs            # In-memory search index (name, club for staff)
 │       ├── models.rs                  # Domain data structures (Player, Attributes, Positions, etc.)
 │       └── native_player.rs           # Native memory layout offsets and verification
 ├── fmlev-il2cpp/        # IL2CPP runtime metadata extraction and RVA calculation
@@ -512,7 +518,7 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Server**: the index lives in `ServerState::search`, outside the global state lock. It builds on a worker thread at attach, for a new PID, or on `POST /api/search/rebuild`; `GET /api/search/status` reports progress. `/api/search` serves the index and falls back to registries. Staff routes use the index (revalidated by identity) and scan on a worker thread otherwise. Loaded-player discovery is split into seed, scan and merge, so no scan holds the global lock.
 - **Safety**: index entries are never write targets. Opening a result revalidates the record; a failure drops the entry.
 - **Tests**: synthetic in-process enumeration (`native_catalog::tests`), query engine unit tests, HTTP tests for paging, kind filter, status and answering during a build, and Node tests for the UI chip, paging and recent selections.
-- **Not proven**: counts, names and links against a live save, build time on a full database, and query p95. Run `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 <query>` and compare samples with `fmscan entity`. A save loaded in the same process is detected by a spot check of 12 entries per kind (at most every 10 s, on search calls) and triggers a rebuild; use Rebuild index if it is missed.
+- **Not proven (superseded by the 2026-10-28 live check below)**: counts, names and links against a live save, build time on a full database, and query p95. Run `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 <query>` and compare samples with `fmscan entity`. A save loaded in the same process is detected by a spot check of 12 entries per kind (at most every 10 s, on search calls) and triggers a rebuild; use Rebuild index if it is missed.
 
 
 ## Live verification — tonight's runbook (2026-10-28, owner)

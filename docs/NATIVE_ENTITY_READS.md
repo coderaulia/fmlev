@@ -135,6 +135,24 @@ Editor-format rule nodes and display prize caches are not proven simulation
 sources. Those distinctions are preserved in the exports rather than filled with
 fixture defaults. Free agent signing, pending transfer acceleration, and contract termination are now supported in the Rust runtime.
 
+## Staff information and contract (2026-10-28, read-only)
+
+Verified against three on-screen staff profiles (Engonga, Pintus, Ortega) with `fmscan entity PID staff --editor` and
+the Rust `staff_data info` example (both agree), PE timestamp 0x6a229e8a:
+
+| Field | Location (staff record `R`) | Evidence |
+| --- | --- | --- |
+| Year of birth | u16 `R+0x18a` | 3 of 3 profiles |
+| Contract link | pointer `R+0x1a8` to `FULL_CONTRACT`, owner back-pointer `+0x8 == R+0x100`; null = no contract | Engonga "N/A", two contracted staff |
+| Weekly wage | u32 `FULL_CONTRACT+0x20` (x52 per year) | £245K and £345K p/a |
+| Contract expiry | u32 `+0x48` = `(year << 16) | day-of-year` | 30/6/2026 and 30/6/2027 |
+| Club | contract `+0x10` team, team `+0x30` club | used by the search index |
+
+Not proven: the reputation slots (`+0xd4/+0xd6/+0xd8`, ordering only), CA/PA (`+0xda/+0xdc`, no on-screen numbers),
+club job, role, national team job. The open staff profile is found from the staff-only UI bindings
+(`AttributesCoaching*`, `AttributesMedical`, `AttributesBlockInitialStaffSelection` with `IsPlayer = 0`; the reference
+id is the staff index).
+
 ## Verification
 
 - 12 entity-process tests cover values/scales, gender separation, field range

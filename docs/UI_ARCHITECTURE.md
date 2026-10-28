@@ -158,7 +158,12 @@ preset group and three action groups, stacked in compact mode. Primary compact c
 36px tall. Search type chips filter all five entity kinds without inventing missing ratings.
 
 Attributes support Up/Down focus, Enter to keep an edit and Escape to restore its value at focus.
-The Staff section has Head Coach, Coaching, Scouting and Medical views. Role lists show native position
+The Staff section has Head Coach, Coaching, Scouting, Medical, Information and Contract views. Search takes a
+name or a club name and shows a Club column; "Open in game" (`POST /api/staff/open`) and Load use the staff
+profile open in FM26, falling back to the selected or last-used member; the last eight opened staff are kept in
+`localStorage` (`fmle.staff.recent`) and listed when no search is active. Information shows only the verified year
+of birth; Contract shows wage and expiry for staff with a contract, "no contract" otherwise, and keeps job and role
+unavailable. Role lists show native position
 familiarity, not a fabricated role-suitability score. Missing contract write capabilities fail closed.
 Unverified transfers and unsupported cheats remain disabled; no direct action button performs a game write.
 

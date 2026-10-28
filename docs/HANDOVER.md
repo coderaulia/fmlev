@@ -1,5 +1,15 @@
 # FMLE Handover
 
+## Update — 2026-10-28 (live runbook, audit follow-ups, lock fix)
+
+- **Live runbook (PID 5668, throwaway saves)**: search index, preferred-move bit 39, staff birth year and contract (wage, expiry), the La Liga registration doctor and a Level 3 role preset were each compared with the game screens. Details, what stayed unproven and the commands are in `AGENTS.md` and `LIVE_READ_WRITE.md` (2026-10-28 sections). Nation rules cannot be checked on screen (the Nation screen shows none) and staff reputation and CA/PA have no on-screen numbers.
+- **Owner-reported (no new measurements)**: staff attribute edits, the competition prize table and role presets worked in game; no further role-preset testing is needed.
+- **Staff tab**: search shows the club and also matches club names, "Open in game" and Load use the staff profile open in FM26 (`POST /api/staff/open`), recents are remembered in the browser.
+- **Safety and robustness**: strict `POST /api/attach`; raw memory writes are bounds-checked and transactional; raw finance writes return 501; core errors map to 400/404/409; Register Anytime restores the original manager bits; the contract slot and transfer queue are found from process maps (no fixed addresses; the vtable address fallback is gone).
+- **Performance**: native record lookups are cached after an identity check and warmed outside the global lock (`locator_cache.rs`); a cold club read is about 1.2 s and a cached one is instant, and status polling no longer waits on scans.
+- **Still open**: loan signing (501), staff reputation/CA/PA/job/role, nation-rule labels, role lists vs FM26's role screens, the registration doctor's non-EU/salary/minimum-squad rules, and the free contract slot heuristic (the game's allocation counter is not updated).
+- **Counts**: Rust 201 passed / 1 ignored, UI 148 passed, C++ synthetic suite 65 passed.
+
 ## Current UI handover — 2026-10-27
 
 U0–U6 of [UI_PLAN.md](UI_PLAN.md) are integrated. Sources live under

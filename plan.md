@@ -323,7 +323,7 @@ Implemented: G1 (one background pass instead of per-kind stages, because a singl
 
 ## 5. Live verification checklist (owner, evening of 2026-10-28)
 
-The workstream E, C and F branches were built while FM26 was not running. Nothing in them is verified live yet. Before testing: start FM26, load a throwaway save, and check that `kernel.yama.ptrace_scope` is 0.
+The workstream E, C and F branches were built while FM26 was not running. This checklist was run on 2026-10-28; results are in the table below it and in `AGENTS.md`. Before testing: start FM26, load a throwaway save, and check that `kernel.yama.ptrace_scope` is 0.
 
 | Item | Branch | What to check | Pass condition |
 | --- | --- | --- | --- |
@@ -339,5 +339,18 @@ The workstream E, C and F branches were built while FM26 was not running. Nothin
 | Search index parity | main | `cargo run --release -p fmlev-core --example search_index_parity -- PID 20 mbappe`, then `tools/fmscan/fmscan entity PID player --name <sample>` for some samples | Counts plausible; sampled index/uid/name equal fmscan; build time and query p95 logged |
 | Search in the UI | main | Restart with `./start.sh`, watch the index chip, search an accent-free name, open a player, staff member, club, nation and competition from results | Chip reaches "ready"; every kind opens |
 | Role presets | main | Apply Level 1/2/3 to a test player, day tick, save and reload | Attributes persist; role lists match FM26's role screen |
+
+### Results (2026-10-28, PID 5668)
+
+| Item | Result |
+| --- | --- |
+| Preferred moves bit 39 | Pass: Mbappé bitset 0x8008800000000 has bit 39 set and the profile shows Cuts Inside From Both Wings. Other bits not named. |
+| Nation rules (years, type, dual) | Not verifiable: FM26's Nation screen shows no nationality rules. Values stay withheld. |
+| Staff information | Year of birth verified (3 of 3). Reputation and CA/PA unproven (labels or nothing on screen). |
+| Staff contract | Wage, expiry and club verified (Pintus, Ortega; Engonga has none). Job and role unmapped. |
+| Registration doctor | Closed gate = "Registration Restricted" and cap 25 match. The game shows no home-grown rule, so the native 8 is unconfirmed; non-EU, salary and minimum-squad rules are not read. |
+| Search index parity | Pass: counts equal fmscan, 1.85 s build, p95 8.6 ms, six samples match. |
+| Search in the UI | Pass: all kinds open; a second save rebuilt in under 10 s (user-confirmed). |
+| Role presets | Level 3 Deep-Lying Playmaker persisted through a day tick and save/reload (scout ranges only). Owner: no further testing needed. Role lists vs FM26 not compared. |
 
 Record each result (command, values, what is still not proven) in `AGENTS.md`, then flip the matching `verified` flags in Rust.

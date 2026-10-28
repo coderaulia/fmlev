@@ -155,6 +155,13 @@ pub(crate) fn indexed_staff(state: &ServerState, driver: &LinuxMemoryDriver, id:
     }
 }
 
+/// The uid the ready index holds for a staff id, if any (the caller still revalidates the record).
+pub(crate) fn indexed_staff_uid(state: &ServerState, driver: &LinuxMemoryDriver, id: i32) -> Option<i32> {
+    let search = state.search_read();
+    let index = search.index.as_ref().filter(|index| index.pid == driver.pid())?;
+    index.get(EntityKind::Staff, id).map(|entry| entry.uid as i32)
+}
+
 /// Staff search over the index (name or club), revalidating each hit. Returns the records and their
 /// validated club names by index. `None` when no ready index exists.
 pub(crate) fn indexed_staff_search(

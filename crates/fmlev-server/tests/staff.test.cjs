@@ -230,9 +230,15 @@ test('server rejection keeps the loaded values and the pending edits', async () 
   assert.deepEqual(app.run('staffState.edits'), { tactical: 12 });
 });
 
+const NO_OPEN_PROFILE = { ok: false, status: 404, text: async () => '', json: async () => ({ message: 'No staff profile is open in FM26' }) };
+
 test('load re-reads the selected member and drops edits', async () => {
   const calls = [];
-  const app = ui(async (url, request) => { calls.push(JSON.parse(request.body)); return { ok: true, text: async () => '', json: async () => ({ staff: { index: 79, uid: 1120, name: 'Pep' }, verification: '', attributes: [{ group: 'coaching', field: 'tactical', value: 18, native: 1, reason: null }] }) }; });
+  const app = ui(async (url, request) => {
+    if (url === '/api/staff/open') return NO_OPEN_PROFILE;
+    calls.push(JSON.parse(request.body));
+    return { ok: true, text: async () => '', json: async () => ({ staff: { index: 79, uid: 1120, name: 'Pep' }, verification: '', attributes: [{ group: 'coaching', field: 'tactical', value: 18, native: 1, reason: null }] }) };
+  });
   loaded(app);
   app.run('staffState.edits = { tactical: 12 }');
   assert.equal(await app.run('loadStaffFromGame()'), true);
@@ -269,6 +275,7 @@ test('search shows the club and remembers opened staff; Load reopens the last on
   const calls = [];
   const fetch = async (url, request) => {
     calls.push({ url, body: JSON.parse(request.body) });
+    if (url === '/api/staff/open') return NO_OPEN_PROFILE;
     if (url === '/api/staff/search') {
       return { ok: true, text: async () => '', json: async () => ({ staff: [{ index: 4460, uid: 4001686, name: 'Antonio Pintus' }], clubs: { 4460: 'R. Madrid' } }) };
     }
@@ -288,11 +295,15 @@ test('search shows the club and remembers opened staff; Load reopens the last on
   app2.run('showStaffRecents()');
   assert.match(app2.run('els["staff-results"].innerHTML'), /Recently opened[^]*Antonio Pintus<\/td><td>R\. Madrid/);
   assert.equal(await app2.run('loadStaffFromGame()'), true);
-  assert.deepEqual(calls2[0], { url: '/api/staff/native', body: { staff_id: 4460, staff_uid: 4001686 } });
+  assert.deepEqual(calls2.map(c => c.url), ['/api/staff/open', '/api/staff/native']);
+  assert.deepEqual(calls2[1], { url: '/api/staff/native', body: { staff_id: 4460, staff_uid: 4001686 } });
 });
 
 test('Load with nothing selected and no recents tells the user to search', async () => {
-  const app = ui(async () => { throw new Error('no request expected'); });
+  const app = ui(async url => {
+    if (url === '/api/staff/open') return NO_OPEN_PROFILE;
+    throw new Error('no other request expected');
+  });
   assert.equal(await app.run('loadStaffFromGame()'), false);
   assert.match(app.run('messages[0].message'), /name or club/);
 });
@@ -302,4 +313,30 @@ test('recents ignore corrupt or unavailable storage', () => {
   assert.deepEqual(app.run('staffRecent()'), []);
   const app2 = ui(async () => ({}), { 'fmle.staff.recent': JSON.stringify([{ index: 1, uid: 2, name: 'Ok' }, { index: 'x' }]) });
   assert.equal(app2.run('staffRecent().length'), 1);
+});
+
+test('Load opens the staff profile that is open in the game, even when another is selected', async () => {
+  const calls = [];
+  const store = {};
+  const app = ui(async (url, request) => {
+    calls.push({ url, body: JSON.parse(request.body) });
+    if (url === '/api/staff/open') return { ok: true, status: 200, text: async () => '', json: async () => ({ status: 'ok', staff: { index: 20414, uid: 67055850, name: 'Iván Ortega' } }) };
+    return { ok: true, text: async () => '', json: async () => ({ staff: { index: 20414, uid: 67055850, name: 'Iván Ortega' }, attributes: [] }) };
+  }, store);
+  loaded(app);
+  assert.equal(app.run('staffState.selected.staff.index'), 79);
+  assert.equal(await app.run('loadStaffFromGame()'), true);
+  assert.deepEqual(calls.map(c => c.url), ['/api/staff/open', '/api/staff/native']);
+  assert.deepEqual(calls[1].body, { staff_id: 20414, staff_uid: 67055850 });
+  assert.equal(app.run('staffState.selected.staff.name'), 'Iván Ortega');
+});
+
+test('Open in game says so when no staff profile is open, and errors are surfaced', async () => {
+  const app = ui(async () => NO_OPEN_PROFILE);
+  assert.equal(await app.run('openStaffFromGame()'), null);
+  assert.match(app.run('messages[0].message'), /No staff profile is open/);
+  assert.match(html.split('<section id="tab-staff"')[1], /onclick="openStaffFromGame\(\)"/);
+  const failing = ui(async () => ({ ok: false, status: 500, text: async () => '', json: async () => ({ message: 'boom' }) }));
+  assert.equal(await failing.run('openStaffFromGame()'), null);
+  assert.equal(failing.run('messages[0].type'), 'error');
 });

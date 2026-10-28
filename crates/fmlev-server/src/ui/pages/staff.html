@@ -4,6 +4,7 @@
         <div class="staff-search-row">
           <input id="staff-query" type="text" class="form-control" placeholder="Search staff by name or club (2+ letters)" onkeydown="if (event.key === 'Enter') searchStaff()">
           <button class="btn btn-primary" onclick="searchStaff()">Search</button>
+          <button class="btn" onclick="openStaffFromGame()" title="Open the staff profile that is on screen in FM26">Open in game</button>
           <label class="staff-experimental-toggle">
             <input id="staff-experimental" type="checkbox" onchange="toggleStaffEditing(this.checked)">
             <span>Enable experimental staff editing (throwaway save only)</span>

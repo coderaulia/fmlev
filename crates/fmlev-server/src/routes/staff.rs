@@ -79,6 +79,41 @@ pub async fn search_staff(State(state): State<ServerState>, Json(req): Json<Staf
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StaffOpenRequest {}
+
+/// Read-only: the staff profile currently open in FM26, found from the game's UI bindings and then
+/// resolved and validated natively (identity by id and uid). 404 when none is open, 409 when several
+/// are bound, so the caller never guesses.
+pub async fn open_staff(State(state): State<ServerState>, Json(_): Json<StaffOpenRequest>) -> impl IntoResponse {
+    let (driver, ids) = {
+        let r = state.inner.read().await;
+        let Some(session) = r.context_mgr.session.as_ref() else {
+            return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+        };
+        (session.driver, fmlev_core::open_staff::read_open_staff_ids(session))
+    };
+    let id = match ids.as_slice() {
+        [] => return api_error(StatusCode::NOT_FOUND, "No staff profile is open in FM26 (open one in the game, then try again)").into_response(),
+        [id] => *id,
+        many => return api_error(StatusCode::CONFLICT, format!("Several staff profiles are bound in FM26 ({many:?}); close the extra ones")).into_response(),
+    };
+    let from_index = search::indexed_staff_uid(&state, &driver, id);
+    let staff = match from_index {
+        Some(uid) => locate_staff(&state, driver, id, uid).await,
+        None => match tokio::task::spawn_blocking(move || NativeStaffRecord::discover_by_index(&driver, id)).await {
+            Ok(Ok(staff)) => Ok(staff),
+            Ok(Err(error)) => Err(api_error(StatusCode::NOT_FOUND, error).into_response()),
+            Err(error) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response()),
+        },
+    };
+    match staff {
+        Ok(staff) => Json(serde_json::json!({ "status": "ok", "staff": staff, "source": "ui_binding" })).into_response(),
+        Err(response) => response,
+    }
+}
+
 /// Read-only staff record and its 22 attributes, selected by id and uid.
 pub async fn read_staff_native(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
     let driver = match session_driver(&state).await {

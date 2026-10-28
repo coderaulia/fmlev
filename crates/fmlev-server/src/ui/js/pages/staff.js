@@ -227,13 +227,26 @@
       } catch (error) { staffState.selected = null; staffState.edits = {}; renderStaffDetail(null); showToast(error.message, "error"); }
     }
 
-    // Save bar "Load": re-read the selected member from the game, dropping edits.
+    // The staff profile open in FM26, found from the game's UI bindings (read-only). Null when none is open.
+    async function openStaffFromGame(quiet) {
+      try {
+        const res = await staffRequest("/api/staff/open", {});
+        const data = await readJson(res);
+        if (res.status === 404) { if (!quiet) showToast(data.message || "No staff profile is open in FM26.", "warning"); return null; }
+        if (!res.ok) throw new Error(data.message || "Open staff lookup failed");
+        await selectStaff(data.staff.index, data.staff.uid);
+        return staffState.selected ? data.staff : null;
+      } catch (error) { showToast(error.message, "error"); return null; }
+    }
+
+    // Save bar "Load": the staff profile open in the game if there is one, else re-read the selected member
+    // (or the last one used), dropping edits.
     async function loadStaffFromGame() {
+      if (await openStaffFromGame(true)) return true;
       const current = staffState.selected;
       if (!current) {
-        // Nothing selected yet: reopen the last staff member used, since FM26 exposes no "open profile" to read.
         const last = staffRecent()[0];
-        if (!last) { showToast("Search for a staff member (name or club) first.", "warning"); return false; }
+        if (!last) { showToast("Open a staff profile in FM26, or search for one (name or club).", "warning"); return false; }
         await selectStaff(last.index, last.uid);
         return !!staffState.selected;
       }

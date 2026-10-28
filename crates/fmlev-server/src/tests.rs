@@ -864,6 +864,10 @@ async fn staff_routes_are_read_only_strict_and_require_a_game() {
         .await
         .unwrap();
     assert_eq!(offline.status(), StatusCode::BAD_REQUEST);
+    // Open-profile lookup: needs a game, takes no fields.
+    let detached = app.clone().oneshot(post("/api/staff/open", "{}")).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+    assert!(app.clone().oneshot(post("/api/staff/open", r#"{"staff_id":1}"#)).await.unwrap().status().is_client_error());
     // Information and contract: reads need a game and strict bodies; writes are always 501.
     for uri in ["/api/staff/information", "/api/staff/contract"] {
         let detached = app.clone().oneshot(post(uri, r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();

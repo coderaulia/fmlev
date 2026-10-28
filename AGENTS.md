@@ -473,6 +473,14 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Not matched / new**: the game lists no home-grown rule on this screen, so native `+0x99 = 8` stays unconfirmed (doctor text now says so). "Max. of 1 players allowed to be registered" means a restricted window still allows one registration, so the doctor's "blocked" is worded as the gate being closed with a limited number of registrations possible (the limit is not mapped). Not read by the doctor: non-EU max 3 and usage, outfield max 23, squad salary cap, minimum squad size 15, the squad number cap (not shown anywhere on the screen).
 - Not done: Serie A / continental competitions, the "1 allowed" counter offset, the other rules above.
 
+### Role presets live check (runbook step 9, 2026-10-28, PID 5668, throwaway save)
+- Player: Patrick Berg 18735/53099570 (Bodø/Glimt, not the user's club, so the game shows scout ranges). Preset: Deep-Lying Playmaker, Level 3 Elite, CA "raise to fit", applied from the Positions tab and saved with the normal player Save.
+- Before (screen ranges): First Touch 12-16, Composure 13-17, Decisions 11-15, Passing 9-15, Technique 12-16, Vision 14-18, Tackling 13-17, Balance 9-13; CA about 143 (user's recollection, not recorded). After (screen ranges): 16-20, 16-20, 16-20, 14-20, 16-20, 18-20, 16-20, 12-16.
+- Memory after the write (`fmscan entity ... --editor`): First Touch, Passing, Technique, Composure, Decisions, Vision 18; Teamwork 20; Tackling 16; Balance 16; Anticipation 17; Positioning 17; CA 189, PA 189. Every game range contains the memory value. The preset preview then reported "No changes needed".
+- After one day tick (28/9 -> 29/9/2025): memory and ranges unchanged. After the user saved and reloaded the game: values persisted (user-confirmed in the FMLE Player tab and the game).
+- **Proven**: a Level 3 role preset write persists through a day tick and a save/reload.
+- **Not proven**: exact values (scout ranges only; use a player at the user's own club); Levels 1 and 2; that the role names and key/secondary lists (DLP key: First Touch, Passing, Technique, Composure, Decisions, Teamwork, Vision; secondary: Tackling, Anticipation, Positioning, Balance) match FM26's role screens, so the "role data unverified" badge stays; the CA rule (the heuristic took CA from about 143 to 189 and PA to 189; it is not the game's formula and the jump is large).
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

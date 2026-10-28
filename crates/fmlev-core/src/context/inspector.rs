@@ -164,6 +164,7 @@ pub(crate) fn build_template_live_player(id: i32, name: String, position: String
         },
         attributes: PlayerAttributes::default(),
         user_modified: false,
+        preferred_moves: None,
     }
 }
 

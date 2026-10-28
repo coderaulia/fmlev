@@ -278,6 +278,9 @@ pub struct Player {
     pub contract: PlayerContract,
     #[serde(default)]
     pub user_modified: bool,
+    /// Read-only PPM bitset (bit table incomplete). `None` when not natively readable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_moves: Option<crate::preferred_moves::PreferredMoves>,
 }
 
 impl Player {
@@ -334,6 +337,7 @@ impl Player {
             is_suspended: false,
             contract: PlayerContract::default(),
             user_modified: false,
+            preferred_moves: None,
         })
     }
 

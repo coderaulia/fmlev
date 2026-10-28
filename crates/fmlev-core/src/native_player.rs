@@ -3,6 +3,7 @@
 use crate::{
     error::{CoreError, Result},
     models::{Player, PlayerAttributes, PlayerPositions},
+    preferred_moves::{PreferredMoves, PPM_BITSET_OFFSET},
 };
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
@@ -716,9 +717,18 @@ impl NativePlayerRecord {
         Ok(())
     }
 
+    /// Read-only preferred-moves bitset (record + 0x200). Only bits with screen evidence are
+    /// named. Never written: the bit-to-move table is incomplete and unverified for writes.
+    pub fn read_preferred_moves(&self, driver: &LinuxMemoryDriver) -> Result<PreferredMoves> {
+        self.validate(driver)?;
+        let raw = driver.read::<u64>(self.address + PPM_BITSET_OFFSET)?;
+        Ok(PreferredMoves::decode(raw))
+    }
+
     pub fn refresh_player_fields(&self, driver: &LinuxMemoryDriver, player: &mut Player) -> Result<()> {
         self.refresh_attributes(driver, &mut player.attributes)?;
         self.refresh_abilities(driver, player)?;
+        player.preferred_moves = self.read_preferred_moves(driver).ok();
         if let Ok(contract) = self.contract(driver) {
             let wage = driver.read::<u32>(contract.address + 0x20)?;
             player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);
@@ -1043,7 +1053,7 @@ impl NativePlayerRecord {
 mod tests {
     use super::*;
     fn fixture() -> (Vec<u64>, NativePlayerRecord) {
-        let mut data = vec![0u64; 64];
+        let mut data = vec![0u64; 80];
         let a = data.as_mut_ptr() as usize;
         let driver = LinuxMemoryDriver::new(std::process::id() as i32);
         let r = NativePlayerRecord {
@@ -1065,6 +1075,22 @@ mod tests {
         driver.write(a + RIGHT_FOOT, &100u8).unwrap();
         (data, r)
     }
+    #[test]
+    fn preferred_moves_read_bitset_and_name_only_verified_bits() {
+        let (data, record) = fixture();
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        driver.write(record.address + PPM_BITSET_OFFSET, &((1u64 << 39) | (1u64 << 11))).unwrap();
+        let before = data.clone();
+        let ppm = record.read_preferred_moves(&driver).unwrap();
+        assert_eq!(ppm.named_moves, vec!["Cuts Inside From Both Wings"]);
+        assert_eq!(ppm.unnamed_set_bits, 1);
+        assert_eq!(ppm.bits.iter().map(|b| b.bit).collect::<Vec<_>>(), vec![11, 39]);
+        assert_eq!(data, before, "preferred-move reads never write");
+        // A record whose identity no longer matches is refused rather than guessed.
+        driver.write(record.address + INDEX, &7i32).unwrap();
+        assert!(record.read_preferred_moves(&driver).is_err());
+    }
+
     #[test]
     fn calendar_year_edits_preserve_month_day_and_packed_flags() {
         // 2028 is leap: June 1 = day 153; 2029 June 1 = day 152.
@@ -1172,6 +1198,7 @@ mod tests {
         r.write_player_edits(&d, &previous, &requested).unwrap();
         let mut actual = previous.clone();
         r.refresh_player_fields(&d, &mut actual).unwrap();
+        assert!(actual.preferred_moves.is_some(), "refresh publishes the read-only PPM bitset");
         assert_eq!(actual, requested);
         r.write_player_edits(&d, &actual, &previous).unwrap();
         assert_eq!(data, original);

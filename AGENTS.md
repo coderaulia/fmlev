@@ -417,3 +417,17 @@ crates/
 - Unverified transfer controls and unsupported cheats stay disabled. Population remains read-only. No native safety guard was weakened.
 - Verification: workspace check; Rust 153 passed / 1 ignored; Node UI 124 passed; C++ synthetic process suite 58 passed. Browser review in normal and compact layouts. README includes two labeled demo screenshots, not new native write proof.
 - Current UI source contract and evidence: docs/UI_ARCHITECTURE.md and docs/UI_PLAN.md. Historical native findings above remain historical.
+
+
+## PPM bit table
+
+Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `worktree-agent-ad6a798a3808e1c98`.
+
+- **Live access this session: none.** FM26 was not running (no game process; `ptrace_scope` = 1, not 0), so no new bitsets were read and no bit was newly proven. All evidence below is the three on-screen profiles recorded in "Plan E/F discovery update from user screenshots" (Mbappé, Yamal, Haaland). Nothing was written to any process.
+- **Field**: 64-bit bitset at player record + 0x200 (ACTUAL_PLAYER + 0x348; "record" = the attribute/person view used by `NativePlayerRecord` and `fmscan`, embedded at ACTUAL_PLAYER + 0x148).
+- **Verified bits (1)**: bit 39 = *Cuts Inside From Both Wings*. Proof by set difference: Mbappé's profile has it and his bits are {35, 39, 51}; Yamal {11, 14, 35, 51, 58} and Haaland {13, 27, 41, 42} do not list the move and have bit 39 clear. 35 and 51 are the only bits shared by Mbappé and Yamal, so they are exactly {Tries Tricks, Runs With Ball Often}.
+- **Narrowed, NOT verified (stay `unknown`)**: {35, 51} = Tries Tricks / Runs With Ball Often (order unknown); {11, 14, 58} = Curls Ball / Uses Outside Of Foot / Cuts Inside From Right Wing (order unknown); {13, 27, 41, 42} = Likes To Try To Beat Offside Trap / Knocks Ball Past Opponent / Gets Crowd Going / Tries First Time Shots (order unknown). Every other bit (0..63) has no evidence.
+- **Dead end**: the language file `example.ltf` marks move titles with `[COMMENT: player preferred move]`, but its string ids (e.g. Runs With Ball Often = 297402) are not a contiguous list and are not bit indexes; they cannot give the ordering.
+- **Next evidence needed (live game)**: read the bitset (`fmscan entity PID player --name X --editor`) for players whose screen PPM lists are known. A profile with exactly one PPM that is also in a narrowed set resolves it; GK profiles (Comes For Crosses, Distribution moves) and Runs With Ball Down Right/Left strikers would each pin bits by intersection. Mark a bit verified only after it is the unique difference between two profiles or confirmed by a single-PPM profile.
+- **Shipped (read only)**: `fmscan entity ... player --editor` prints/returns `preferred_moves` (`bitset`, `set_bits[{bit,name|null,verified}]`, `named_moves`, `unnamed_set_bits`, status `partial_bit_table`); Rust `NativePlayerRecord::read_preferred_moves`, `preferred_moves` module and an optional `preferred_moves` field on the `Player` payload (omitted when unreadable); `player.js` shows named moves plus "N not yet identified". Tests: C++ synthetic process (bit 39 named, bits 3/35 unnamed, empty bitset), Rust decode/read/serde tests, Node display test.
+- **Writes: unsupported.** There is no move-write route, and none is added (it would return 501): the bit table is incomplete, bit validity ranges are unknown, and no in-game readback or save/reload proof exists. C++ vs Rust live parity (evidence-ladder step b) for this field is **not yet done** because the game was not running.

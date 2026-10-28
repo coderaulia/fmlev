@@ -215,8 +215,30 @@
       applyAbilityGates();
       applyContractGates();
       renderPlayerFacts(state.activePlayer);
+      renderPreferredMoves(player);
       updateRecommendedCA();
       refreshPendingActionIndicators();
+    }
+
+    // Read-only PPM display. The bit table is incomplete: only verified bits are named.
+    function renderPreferredMoves(player) {
+      let el = document.getElementById("fact-ppm");
+      if (!el) {
+        const feet = document.getElementById("fact-feet");
+        const row = feet && feet.parentElement;
+        if (!row || !row.parentElement) return;
+        const fact = document.createElement("div");
+        fact.className = "fact";
+        fact.innerHTML = '<dt>Preferred moves</dt><dd id="fact-ppm" class="muted">Unavailable</dd>';
+        row.parentElement.insertBefore(fact, row.nextSibling);
+        el = fact.querySelector("#fact-ppm");
+      }
+      const ppm = player && player.preferred_moves;
+      if (!ppm) { el.innerText = "Unavailable"; el.title = ""; return; }
+      const named = ppm.named_moves || [];
+      const unknown = ppm.unnamed_set_bits || 0;
+      el.innerText = [...named, ...(unknown ? [`${unknown} not yet identified`] : [])].join(", ") || "None set";
+      el.title = "Read-only. Bit-to-move table is incomplete, so unidentified moves are not named. Raw bitset " + ppm.bitset;
     }
 
     function renderPlayerFacts(player) {

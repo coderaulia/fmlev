@@ -131,6 +131,24 @@ check_rust() {
 check_rust
 
 # ── 4. Linux Memory Permissions (Yama LSM / ptrace) ───────────────────────────
+# FMLE_FIX_PTRACE=yes     lower ptrace_scope to 0 for this boot without asking (sudo password prompt)
+# FMLE_FIX_PTRACE=persist same, and keep it across reboots (/etc/sysctl.d/99-fmle-ptrace.conf)
+# FMLE_FIX_PTRACE=no      never ask, only print the hint
+# unset                   ask once on an interactive terminal
+# ptrace_scope 0 lets any process of your user read the memory of your other processes; undo it with
+# `sudo sysctl -w kernel.yama.ptrace_scope=1` and by deleting the sysctl.d file.
+set_ptrace_scope() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo -e "${YELLOW}sudo not found; run as root: sysctl -w kernel.yama.ptrace_scope=0${RESET}"
+    return 1
+  fi
+  sudo sysctl -w kernel.yama.ptrace_scope=0 >/dev/null || return 1
+  if [ "${FMLE_FIX_PTRACE:-}" = "persist" ]; then
+    echo "kernel.yama.ptrace_scope = 0" | sudo tee /etc/sysctl.d/99-fmle-ptrace.conf >/dev/null \
+      && echo -e "${GREEN}✓ Persisted in /etc/sysctl.d/99-fmle-ptrace.conf${RESET}"
+  fi
+}
+
 check_yama_ptrace() {
   if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
     local scope
@@ -138,7 +156,20 @@ check_yama_ptrace() {
     if [ "$scope" -gt 0 ]; then
       echo -e "${YELLOW}ℹ Linux Yama ptrace_scope is set to $scope (Restricted).${RESET}"
       echo -e "${CYAN}To allow FMLE to inspect Football Manager 26 running in Steam Proton / Wine,${RESET}"
-      echo -e "${CYAN}you can run: ${BOLD}sudo sysctl -w kernel.yama.ptrace_scope=0${RESET}"
+      echo -e "${CYAN}it must be 0: ${BOLD}sudo sysctl -w kernel.yama.ptrace_scope=0${RESET}"
+      local choice="${FMLE_FIX_PTRACE:-}"
+      if [ -z "$choice" ] && [ -t 0 ] && [ -t 1 ]; then
+        read -r -p "Set it to 0 now with sudo (this boot only)? [y/N] " reply || reply=""
+        case "$reply" in [yY]*) choice="yes" ;; *) choice="no" ;; esac
+      fi
+      case "$choice" in
+        yes|persist)
+          if set_ptrace_scope && [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = "0" ]; then
+            echo -e "${GREEN}✓ ptrace_scope is now 0. Ready for live FM26 memory access.${RESET}"
+          else
+            echo -e "${RED}✗ Could not set ptrace_scope. Live memory access will fail until it is 0.${RESET}"
+          fi ;;
+      esac
     else
       echo -e "${GREEN}✓ Linux ptrace permissions OK (scope=0). Ready for live FM26 memory access.${RESET}"
     fi

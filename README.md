@@ -191,6 +191,11 @@ to terminate it. An unrelated application on the port is never terminated.
 > ```bash
 > sudo sysctl -w kernel.yama.ptrace_scope=0
 > ```
+>
+> `./start.sh` offers to do this for you on an interactive terminal (sudo asks for your password). To skip the question:
+> `FMLE_FIX_PTRACE=yes ./start.sh` sets it for this boot, `FMLE_FIX_PTRACE=persist ./start.sh` also keeps it after reboot
+> (`/etc/sysctl.d/99-fmle-ptrace.conf`), `FMLE_FIX_PTRACE=no ./start.sh` never asks. Scope 0 lets any process of your user read
+> your other processes' memory; undo with `sudo sysctl -w kernel.yama.ptrace_scope=1` and remove that file.
 
 ---
 

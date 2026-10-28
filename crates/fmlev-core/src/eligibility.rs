@@ -34,7 +34,7 @@ pub fn evaluate(gates: &RegistrationGates) -> Vec<GateReport> {
     let (status, evidence) = match (gates.stage_gate_open, bypass) {
         (true, _) => (GateStatus::Ok, "The competition's registration gate is open.".to_string()),
         (false, true) => (GateStatus::Ok, "The competition gate is closed, but Register Anytime is on for the manager.".to_string()),
-        (false, false) => (GateStatus::Blocked, "The competition's registration gate is closed and Register Anytime is off.".to_string()),
+        (false, false) => (GateStatus::Blocked, "The competition's registration gate is closed and Register Anytime is off. The game labels this 'Registration Restricted' and can still allow a limited number of registrations (the limit is not mapped).".to_string()),
     };
     out.push(gate(
         "registration_window",
@@ -75,7 +75,7 @@ pub fn evaluate(gates: &RegistrationGates) -> Vec<GateReport> {
             "No home-grown requirement for this competition. Player training history is not mapped.".to_string()
         } else {
             format!(
-                "Competition requires {} home-grown players. Nationality alone does not make a player home-grown (training history decides), and that history is not mapped, so this cannot be checked.",
+                "Native data says {} home-grown players are required, but unconfirmed: the game's La Liga registration screen did not list a home-grown rule. Nationality alone does not make a player home-grown (training history decides), and that history is not mapped, so this cannot be checked.",
                 gates.min_homegrown
             )
         },

@@ -466,6 +466,13 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Open staff profile (read-only, 2026-10-28)**: with a staff profile on screen the game binds `AttributesCoaching*`, `AttributesMedical` and `AttributesBlockInitialStaffSelection` on that person's `PersonReference` with `IsPlayer = 0`; the reference id is the native staff index (Iván Ortega: id 20414 = staff index 20414, Physio tab). A bindings dump taken while the FMLE window had focus (no staff profile showing) held none of them. `fmlev-core/src/open_staff.rs` collects ids that carry a staff-only binding and an explicit `IsPlayer = 0`; `POST /api/staff/open {}` resolves the id natively (index lookup, then identity check) and returns 404 when none is open and 409 when several are bound. UI: "Open in game" button, and Load opens the open profile first, else reloads the selection or the last recent. Live: returned Iván Ortega 20414/67055850 with his profile open.
 - **Not proven**: the bindings are a UI cache, so a profile that was closed recently may still be bound (hint only, identity is revalidated natively); only the Medical tab was open when seen, and the Head Coach, Coaching and Scouting tabs bind the same `AttributesCoaching*` names but were not each tested; behaviour with two profiles open (409) is covered by unit tests only.
 
+### Registration doctor live check, La Liga (runbook step 8, 2026-10-28, PID 5668)
+- `POST /api/player/eligibility` for Mbappé (25145) against Spanish First Division 51/67 returned: type 8, gate closed, manager bits off, cap 25, home-grown 8, number cap 255 (none).
+- Game screen (Competition registration, user screenshots): "Registration Restricted", "Max. of 1 players allowed to be registered", maximum squad size 25/25, minimum squad size 15/15, outfield players max 23 (23/23), non-EU players max 3 (1/3), squad salary cap £238,206,000 p/a (£227M used).
+- **Matches**: closed gate = "Registration Restricted"; squad cap 25.
+- **Not matched / new**: the game lists no home-grown rule on this screen, so native `+0x99 = 8` stays unconfirmed (doctor text now says so). "Max. of 1 players allowed to be registered" means a restricted window still allows one registration, so the doctor's "blocked" is worded as the gate being closed with a limited number of registrations possible (the limit is not mapped). Not read by the doctor: non-EU max 3 and usage, outfield max 23, squad salary cap, minimum squad size 15, the squad number cap (not shown anywhere on the screen).
+- Not done: Serie A / continental competitions, the "1 allowed" counter offset, the other rules above.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

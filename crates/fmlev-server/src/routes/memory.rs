@@ -54,6 +54,8 @@ pub async fn attach_process(
             if let Err(error) = parse_process_maps(pid) {
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
+            // A fresh attach (possibly after a save reload) must not trust record addresses from before.
+            fmlev_core::locator_cache::clear_pid(pid);
             let bases = find_module_bases(pid).unwrap_or(fmlev_mem::ModuleBases {
                 game_assembly_base: None,
                 unity_player_base: None,

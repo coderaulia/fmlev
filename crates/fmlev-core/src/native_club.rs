@@ -75,9 +75,14 @@ pub struct NativeClubRecord {
 pub type NativeClubFinance = NativeClubRecord;
 
 impl NativeClubRecord {
+    /// Finds the native club record for `club_id` (cached; the cached record is re-validated).
+    pub fn discover(driver: &LinuxMemoryDriver, club_id: i32) -> Result<Self> {
+        crate::locator_cache::cached("club", driver.pid(), club_id, |r: &Self| r.validate(driver).is_ok(), || Self::scan(driver, club_id))
+    }
+
     /// Finds the native club record for `club_id` whose finance object points back to it.
     /// Zero or several matches are rejected; no address is compiled in.
-    pub fn discover(driver: &LinuxMemoryDriver, club_id: i32) -> Result<Self> {
+    fn scan(driver: &LinuxMemoryDriver, club_id: i32) -> Result<Self> {
         if club_id <= 0 {
             return Err(invalid("A live club id is required"));
         }

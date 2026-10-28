@@ -263,10 +263,16 @@ impl NativePlayerRecord {
         Ok(records.remove(0))
     }
 
+    /// Discover a native player record directly from memory by their database index (id), cached; the
+    /// cached record is re-validated (identity and both vtables) before every reuse.
+    pub fn discover_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
+        crate::locator_cache::cached("player", driver.pid(), index, |r: &Self| r.validate(driver).is_ok(), || Self::scan_by_index(driver, index))
+    }
+
     /// Discover a native player record directly from memory by their database index (id)
     /// without requiring an open screen or UI bindings. Validates identity, duplicate UID,
     /// readonly vtables, 15 positions, and scaled feet.
-    pub fn discover_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
+    fn scan_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
         if index <= 0 {
             return Err(invalid("A live player index is required"));
         }

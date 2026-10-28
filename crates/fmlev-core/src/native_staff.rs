@@ -202,8 +202,13 @@ impl NativeStaffRecord {
         expected_vtables(driver)?.ok_or_else(|| invalid("game_plugin.dll is not mapped; attach to FM26 first"))
     }
 
-    /// Finds exactly one staff record by index; duplicates are refused.
+    /// Finds exactly one staff record by index (cached; the cached record is re-validated).
     pub fn discover_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
+        crate::locator_cache::cached("staff", driver.pid(), index, |r: &Self| r.validate(driver).is_ok(), || Self::scan_by_index(driver, index))
+    }
+
+    /// Finds exactly one staff record by index; duplicates are refused.
+    fn scan_by_index(driver: &LinuxMemoryDriver, index: i32) -> Result<Self> {
         if index < 0 {
             return Err(invalid("A staff id (index) is required"));
         }

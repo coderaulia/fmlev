@@ -55,8 +55,13 @@ pub struct NativeNationRecord {
 }
 
 impl NativeNationRecord {
-    /// Discovers the native nation record for `nation_id`.
+    /// Discovers the native nation record for `nation_id` (cached; the cached record is re-validated).
     pub fn discover(driver: &LinuxMemoryDriver, nation_id: i32) -> Result<Self> {
+        crate::locator_cache::cached("nation", driver.pid(), nation_id, |r: &Self| r.validate(driver).is_ok(), || Self::scan(driver, nation_id))
+    }
+
+    /// Discovers the native nation record for `nation_id`.
+    fn scan(driver: &LinuxMemoryDriver, nation_id: i32) -> Result<Self> {
         if nation_id <= 0 {
             return Err(invalid("A live nation id is required"));
         }

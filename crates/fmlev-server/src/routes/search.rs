@@ -363,3 +363,45 @@ mod tests {
         assert_eq!(status["duration_ms"], 1200);
     }
 }
+
+/// A record to locate before a route takes the global state lock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Warm {
+    Player(i32),
+    Club(i32),
+    Nation(i32),
+    Competition(i32),
+    CompetitionRecord(i32, i32),
+}
+
+/// Locates native records on a worker thread without holding the global lock, so the in-lock call that
+/// follows finds them in the locator cache (a validated identity check) instead of scanning all of game
+/// memory under the lock. Failures are ignored: the locked call reports its own error.
+pub(crate) async fn warm(state: &ServerState, targets: &[Warm]) {
+    use fmlev_core::native_club::NativeClubRecord;
+    use fmlev_core::native_competition::NativeCompetitionRecord;
+    use fmlev_core::native_nation::NativeNationRecord;
+    use fmlev_core::native_player::NativePlayerRecord;
+    if targets.is_empty() {
+        return;
+    }
+    let Some(driver) = ({
+        let r = state.inner.read().await;
+        r.context_mgr.session.as_ref().map(|session| session.driver)
+    }) else {
+        return;
+    };
+    let targets = targets.to_vec();
+    let _ = tokio::task::spawn_blocking(move || {
+        for target in targets {
+            match target {
+                Warm::Player(id) => drop(NativePlayerRecord::discover_by_index(&driver, id)),
+                Warm::Club(id) => drop(NativeClubRecord::discover(&driver, id)),
+                Warm::Nation(id) => drop(NativeNationRecord::discover(&driver, id)),
+                Warm::Competition(id) => drop(NativeCompetitionRecord::discover(&driver, id)),
+                Warm::CompetitionRecord(index, uid) => drop(fmlev_core::native_registration::competition_record(&driver, index, uid)),
+            }
+        }
+    })
+    .await;
+}

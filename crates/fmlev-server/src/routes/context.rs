@@ -98,6 +98,12 @@ pub async fn select_context(
     State(state): State<ServerState>,
     Json(payload): Json<ContextSelectRequest>,
 ) -> impl IntoResponse {
+    let mut warm_targets = Vec::new();
+    if let Some(id) = payload.player_id { warm_targets.push(super::search::Warm::Player(id)); }
+    if let Some(id) = payload.club_id { warm_targets.push(super::search::Warm::Club(id)); }
+    if let Some(id) = payload.nation_id { warm_targets.push(super::search::Warm::Nation(id)); }
+    if let Some(id) = payload.competition_id { warm_targets.push(super::search::Warm::Competition(id)); }
+    super::search::warm(&state, &warm_targets).await;
     let mut w = state.inner.write().await;
     super::search::prepare_selection(&state, &mut w.context_mgr, payload.nation_id, payload.competition_id);
     let targets = [payload.player_id, payload.club_id, payload.nation_id, payload.competition_id]
@@ -159,6 +165,7 @@ pub async fn update_player(
     State(state): State<ServerState>,
     Json(payload): Json<PlayerUpdateRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player.id)]).await;
     let mut w = state.inner.write().await;
     let name = payload.player.name.clone();
     match w.context_mgr.update_player_fields(payload.player, payload.changed_fields.as_deref()) {
@@ -235,6 +242,9 @@ pub async fn apply_player_preset(
     State(state): State<ServerState>,
     Json(payload): Json<PlayerPresetRequest>,
 ) -> impl IntoResponse {
+    if let Some(id) = payload.player_id {
+        super::search::warm(&state, &[super::search::Warm::Player(id)]).await;
+    }
     let mut w = state.inner.write().await;
     if let Some(pid) = payload.player_id {
         if let Err(error) = w.context_mgr.select_player(pid) {
@@ -320,6 +330,7 @@ pub async fn update_club(
     State(state): State<ServerState>,
     Json(payload): Json<ClubFinances>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Club(payload.club_id)]).await;
     let mut w = state.inner.write().await;
     let name = payload.club_name.clone();
     match w.context_mgr.update_club(payload) {
@@ -346,6 +357,9 @@ pub async fn apply_club_preset(
     State(state): State<ServerState>,
     Json(payload): Json<ClubPresetRequest>,
 ) -> impl IntoResponse {
+    if let Some(id) = payload.club_id {
+        super::search::warm(&state, &[super::search::Warm::Club(id)]).await;
+    }
     let mut w = state.inner.write().await;
     if let Some(cid) = payload.club_id {
         if let Err(error) = w.context_mgr.select_club(cid) {
@@ -448,6 +462,7 @@ pub async fn update_nation(
     State(state): State<ServerState>,
     Json(payload): Json<NationDetails>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Nation(payload.id)]).await;
     let mut w = state.inner.write().await;
     let name = payload.name.clone();
     match w.context_mgr.update_nation(payload) {
@@ -474,6 +489,9 @@ pub async fn apply_nation_preset(
     State(state): State<ServerState>,
     Json(payload): Json<NationPresetRequest>,
 ) -> impl IntoResponse {
+    if let Some(id) = payload.nation_id {
+        super::search::warm(&state, &[super::search::Warm::Nation(id)]).await;
+    }
     let mut w = state.inner.write().await;
     if let Some(nid) = payload.nation_id {
         if let Err(error) = w.context_mgr.select_nation(nid) {
@@ -579,6 +597,7 @@ pub async fn update_competition(
     State(state): State<ServerState>,
     Json(payload): Json<CompetitionDetails>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Competition(payload.id)]).await;
     let mut w = state.inner.write().await;
     let name = payload.name.clone();
     match w.context_mgr.update_competition(payload) {
@@ -605,6 +624,9 @@ pub async fn apply_competition_preset(
     State(state): State<ServerState>,
     Json(payload): Json<CompetitionPresetRequest>,
 ) -> impl IntoResponse {
+    if let Some(id) = payload.competition_id {
+        super::search::warm(&state, &[super::search::Warm::Competition(id)]).await;
+    }
     let mut w = state.inner.write().await;
     if let Some(cid) = payload.competition_id {
         if let Err(error) = w.context_mgr.select_competition(cid) {
@@ -709,6 +731,7 @@ pub async fn add_club_affiliate(
     State(state): State<ServerState>,
     Json(payload): Json<AffiliateActionRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Club(payload.club_id)]).await;
     let mut w = state.inner.write().await;
     let affiliate = match payload.affiliate {
         Some(mut aff) => {
@@ -763,6 +786,7 @@ pub async fn remove_club_affiliate(
     State(state): State<ServerState>,
     Json(payload): Json<AffiliateActionRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Club(payload.club_id)]).await;
     let mut w = state.inner.write().await;
     let aff_id = match payload.affiliate_id.or_else(|| payload.affiliate.as_ref().map(|a| a.affiliate_club_id)) {
         Some(id) if id != 0 => id,
@@ -803,14 +827,29 @@ pub async fn competition_prizes(
     Json(payload): Json<crate::state::PrizeRequest>,
 ) -> impl IntoResponse {
     let writing = payload.prizes.is_some();
-    let mut w = state.inner.write().await;
-    match w.context_mgr.competition_prizes(
-        payload.teams,
-        payload.first_prize,
-        payload.last_prize,
-        payload.tolerance,
-        payload.prizes
-    ) {
+    // Only the driver is needed: copy it out and run the memory scan on a worker thread with no lock held.
+    let Some(driver) = ({
+        let r = state.inner.read().await;
+        r.context_mgr.session.as_ref().filter(|s| s.bases.game_assembly_base.is_some()).map(|session| session.driver)
+    }) else {
+        return api_error(StatusCode::BAD_REQUEST, "Attach to FM26 first");
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        fmlev_core::context::prizes::competition_prizes_with(
+            &driver,
+            payload.teams,
+            payload.first_prize,
+            payload.last_prize,
+            payload.tolerance,
+            payload.prizes,
+        )
+    })
+    .await;
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    };
+    match result {
         Ok(prizes) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -829,6 +868,7 @@ pub async fn update_squad_number(
     Json(payload): Json<crate::state::SquadNumberRequest>,
 ) -> impl IntoResponse {
     let number = payload.number.filter(|n| *n != 0);
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.update_squad_number(payload.player_id, number) {
         Ok(swapped) => (
@@ -853,6 +893,7 @@ pub async fn extend_contract(
     Json(payload): Json<crate::state::ContractExtendRequest>,
 ) -> impl IntoResponse {
     let years = payload.years.unwrap_or(1);
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.extend_contract(payload.player_id, years) {
         Ok((old, new)) => (
@@ -874,6 +915,7 @@ pub async fn terminate_contract(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::ContractTerminateRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_contract(payload.player_id) {
         Ok(cleared_teams) => (
@@ -893,6 +935,7 @@ pub async fn terminate_loan(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::LoanTerminateRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_loan(payload.player_id) {
         Ok((loan_team, parent_team)) => (
@@ -913,6 +956,7 @@ pub async fn move_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerMoveRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address) {
         Ok((from_team, to_team)) => (
@@ -933,6 +977,7 @@ pub async fn sign_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerSignRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.sign_free_agent(
         payload.player_id,
@@ -958,6 +1003,7 @@ pub async fn accelerate_transfer(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::TransferAccelerateRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     if payload.instant {
         match w.context_mgr.complete_pending_transfer(payload.player_id) {
@@ -1001,6 +1047,7 @@ pub async fn update_club_money(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::ClubMoneyRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Club(payload.club_id)]).await;
     let mut w = state.inner.write().await;
     if let Err(error) = w.context_mgr.sync_live_context() {
         return api_error(StatusCode::BAD_REQUEST, error);
@@ -1023,6 +1070,7 @@ pub async fn read_club_native(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::ClubNativeRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Club(payload.club_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.read_club_native(payload.club_id) {
         Ok(club) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "club": club }))),
@@ -1034,6 +1082,7 @@ pub async fn read_nation_native(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::NationNativeRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Nation(payload.nation_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.read_nation_native_with_rules(payload.nation_id) {
         Ok((nation, rules)) => (
@@ -1048,6 +1097,7 @@ pub async fn read_competition_native(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::CompetitionNativeRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Competition(payload.competition_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.read_competition_native(payload.competition_id) {
         Ok(comp) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "competition": comp }))),
@@ -1060,6 +1110,7 @@ pub async fn maximise_familiarity(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::FamiliarityRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.maximise_familiarity(payload.player_id, payload.squad) {
         Ok((players, changed)) => (
@@ -1080,6 +1131,7 @@ pub async fn registration_anytime(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::RegistrationRequest>,
 ) -> impl IntoResponse {
+    super::search::warm(&state, &[super::search::Warm::CompetitionRecord(payload.comp_index, payload.comp_uid)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.set_registration_anytime(payload.comp_index, payload.comp_uid, payload.enabled) {
         Ok(result) => (

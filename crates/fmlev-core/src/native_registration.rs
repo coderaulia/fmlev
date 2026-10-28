@@ -48,7 +48,7 @@ fn human_object(driver: &LinuxMemoryDriver, base: usize) -> Result<usize> {
 }
 
 /// Competition record by index and unique id (vtable, i32 index at +8, uid twice).
-fn competition_record(driver: &LinuxMemoryDriver, index: i32, uid: i32) -> Result<usize> {
+fn scan_competition_record(driver: &LinuxMemoryDriver, index: i32, uid: i32) -> Result<usize> {
     let maps = parse_process_maps(driver.pid())?;
     let readonly = |p: usize| maps.iter().any(|m| m.is_readable() && !m.is_writable() && p >= m.start && p < m.end);
     let mut found = Vec::new();
@@ -74,6 +74,18 @@ fn competition_record(driver: &LinuxMemoryDriver, index: i32, uid: i32) -> Resul
         [record] => Ok(*record),
         other => Err(invalid(&format!("Expected one competition record for {index}/{uid}, found {}", other.len()))),
     }
+}
+
+/// Native competition record for `index`/`uid`, cached; a cached address is reused only while its identity
+/// (index, uid twice) and read-only vtable still check out.
+pub fn competition_record(driver: &LinuxMemoryDriver, index: i32, uid: i32) -> Result<usize> {
+    let still_valid = |address: &usize| {
+        let readonly = |p: usize| parse_process_maps(driver.pid()).is_ok_and(|maps| maps.iter().any(|m| m.is_readable() && !m.is_writable() && p >= m.start && p < m.end));
+        driver.read::<[i32; 3]>(*address + 8).is_ok_and(|ids| ids == [index, uid, uid]) && driver.read_ptr(*address).is_ok_and(readonly)
+    };
+    crate::locator_cache::cached("competition_record", driver.pid(), index.wrapping_mul(31).wrapping_add(uid), still_valid, || {
+        scan_competition_record(driver, index, uid)
+    })
 }
 
 /// Address of the current stage's rule entry gate byte for a competition.

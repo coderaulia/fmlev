@@ -145,8 +145,13 @@ pub struct NativeCompetitionRecord {
 }
 
 impl NativeCompetitionRecord {
-    /// Finds the native competition record for `comp_id`.
+    /// Discovers the native competition record for `comp_id` (cached; the cached record is re-validated).
     pub fn discover(driver: &LinuxMemoryDriver, comp_id: i32) -> Result<Self> {
+        crate::locator_cache::cached("competition", driver.pid(), comp_id, |r: &Self| r.validate(driver).is_ok(), || Self::scan(driver, comp_id))
+    }
+
+    /// Finds the native competition record for `comp_id`.
+    fn scan(driver: &LinuxMemoryDriver, comp_id: i32) -> Result<Self> {
         if comp_id <= 0 {
             return Err(invalid("A live competition id is required"));
         }

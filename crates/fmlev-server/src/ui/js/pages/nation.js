@@ -9,6 +9,24 @@
     let nationBaseline = null;
     let nationRead = null;
     let nationReadEpoch = 0;
+    let nationRules = null;
+    // Read-only card: only fields the server marks verified show a value; the rest say why they are unavailable.
+    const NATION_RULE_FIELDS = [
+      ["nation-rule-years", "years_to_gain_nationality", value => `${value} years`],
+      ["nation-rule-type", "gain_nationality_type_code", value => `Native code ${value} (labels unverified)`],
+      ["nation-rule-dual", "dual_nationality_allowed", value => (value ? "Yes" : "No")],
+    ];
+    function renderNationRules() {
+      const rules = nationRules?.id === state.activeNation?.id ? nationRules.rules : null;
+      for (const [id, key, format] of NATION_RULE_FIELDS) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const field = rules?.[key];
+        const known = field?.status === "verified" && field.value !== null && field.value !== undefined;
+        el.innerText = known ? format(field.value) : `Unavailable: ${field?.reason || "load from game"}`;
+      }
+    }
+    function setNationRules(id, rules) { nationRules = rules && typeof rules === "object" ? { id, rules } : null; renderNationRules(); }
 
     function renderNationValues() {
       const nation = state.activeNation;
@@ -34,6 +52,7 @@
       setNationStatUI("nation-economic", "disp-nation-econ", base?.economic_factor);
       const population = document.getElementById("nation-population");
       if (population) { population.value = nation?.population > 0 ? nation.population : ""; population.disabled = true; }
+      renderNationRules();
     }
 
     function displayNation(nation) {
@@ -65,6 +84,7 @@
           if (data.nation?.id !== id) throw new Error("Native nation identity did not match");
           nationBaseline = { ...data.nation };
           nativeNationSyncedId = id;
+          setNationRules(id, data.nationality_rules);
           for (const [, field] of NATION_FIELDS) state.activeNation[field] = data.nation[field];
           renderNationValues();
           return true;
@@ -151,6 +171,7 @@
       if (!res.ok) throw new Error(data.message || "Nation load failed");
       if (state.activeNation?.id !== id || nation?.id !== id || epoch !== nationReadEpoch) throw new Error("Nation changed while loading; retry for the selected nation");
       nationBaseline = { ...nation }; nativeNationSyncedId = id;
+      setNationRules(id, state.connected ? data.nationality_rules : null);
       state.nationDirty = false;
       pendingActions.delete(`nation:${id}`);
       displayNation(nation);

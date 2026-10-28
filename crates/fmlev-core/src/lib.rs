@@ -6,6 +6,7 @@ pub mod live_write;
 pub mod native_club;
 pub mod native_competition;
 pub mod native_nation;
+pub mod native_nation_rules;
 pub mod native_registration;
 pub mod native_staff;
 pub mod native_transfer;

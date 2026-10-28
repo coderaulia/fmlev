@@ -5,6 +5,7 @@ use crate::error::{CoreError, Result};
 use crate::models::{CompetitionDetails, NationDetails};
 use crate::native_competition::NativeCompetitionRecord;
 use crate::native_nation::NativeNationRecord;
+use crate::native_nation_rules::NationalityRules;
 use super::GameContextManager;
 
 fn nation_overlay(
@@ -31,15 +32,21 @@ fn nation_overlay(
 impl GameContextManager {
     /// Reads verified native nation values into the registry copy (read-only on the game).
     pub fn read_nation_native(&mut self, nation_id: i32) -> Result<NationDetails> {
+        self.read_nation_native_with_rules(nation_id).map(|(nation, _)| nation)
+    }
+
+    /// Same read, plus the nationality-rules payload (verified fields only, never written).
+    pub fn read_nation_native_with_rules(&mut self, nation_id: i32) -> Result<(NationDetails, NationalityRules)> {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
         let loaded = self.nation_registry.get(&nation_id).cloned()
             .or_else(|| (self.context.nation.id == nation_id).then(|| self.context.nation.clone()))
             .ok_or_else(|| CoreError::InvalidValue(format!("Nation {nation_id} is not loaded; open one of its pages in FM26")))?;
         let record = NativeNationRecord::discover(&session.driver, nation_id)?;
         let nation = nation_overlay(&session.driver, &record, loaded);
+        let rules = record.read_nationality_rules(&session.driver);
         self.nation_registry.insert(nation_id, nation.clone());
         if self.context.nation.id == nation_id { self.context.nation = nation.clone(); }
-        Ok(nation)
+        Ok((nation, rules))
     }
 
     /// Reads the verified native competition reputation into the registry copy.

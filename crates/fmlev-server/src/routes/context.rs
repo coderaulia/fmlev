@@ -1051,8 +1051,11 @@ pub async fn read_nation_native(
     Json(payload): Json<crate::state::NationNativeRequest>,
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
-    match w.context_mgr.read_nation_native(payload.nation_id) {
-        Ok(nation) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "nation": nation }))),
+    match w.context_mgr.read_nation_native_with_rules(payload.nation_id) {
+        Ok((nation, rules)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "success", "nation": nation, "nationality_rules": rules })),
+        ),
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }

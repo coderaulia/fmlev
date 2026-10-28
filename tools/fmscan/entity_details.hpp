@@ -19,7 +19,7 @@ struct NativeScalar {
 };
 struct Details {
   Json fields;
-  std::vector<std::string> evidence, unavailable;
+  std::vector<std::string> evidence, unavailable, confidence_rows;
   std::vector<std::pair<std::string, std::string>> text;
   std::map<std::string, NativeScalar> scalars;
   void missing(const std::string &key, const std::string &why) {
@@ -29,6 +29,17 @@ struct Details {
     j.str("reason", why);
     unavailable.push_back(j.done());
     text.push_back({key, "Unavailable: " + why});
+  }
+  // Confidence ladder: verified (screen + distribution + known nations agree),
+  // probable (serializer trace + plausible live distribution, no screen
+  // comparison), unverified (candidate offset only). Never implies write proof.
+  void confidence(const std::string &key, const std::string &label,
+                  const std::string &note) {
+    Json j;
+    j.str("field", key);
+    j.str("confidence", label);
+    j.str("note", note);
+    confidence_rows.push_back(j.done());
   }
   void source(const std::string &key, U address, const std::string &proof) {
     Json j;
@@ -75,6 +86,8 @@ struct Details {
     Json j = fields;
     j.raw("field_evidence", array(evidence));
     j.raw("unavailable", array(unavailable));
+    if (!confidence_rows.empty())
+      j.raw("field_confidence", array(confidence_rows));
     j.str("verification",
           "guarded native reads; no game-screen or save/reload comparison");
     j.str("write_support", "none");
@@ -231,6 +244,48 @@ inline Details national_container_details(const Memory &m, U nation,
     d.missing(key, "gender-specific native field not yet mapped");
   return d;
 }
+// Nationality rules (plan C). Offsets come from the NATION serializer
+// disassembly; live values were seen on one earlier session only. Read-only:
+// nothing here authorizes a write. Confidence labels are deliberately low until
+// a screen comparison and a distribution check agree in the same session.
+inline void nationality_rule_details(const Memory &m, U nation, bool build,
+                                     Details &d) {
+  d.confidence("economic_factor", "unverified",
+               "tag Necf traced; value not compared with the Nation screen");
+  d.confidence("state_of_development_native_code", "unverified",
+               "tag Nsod traced; enum labels and screen mapping unknown");
+  d.number<uint8_t>(m, "nationality_years", nation + 0x1ed, 0, 255,
+                    "native NATION serializer tag Nygn -> BYTE +0x1ed at RVA "
+                    "0xf7cfde; 0, 99 and 255 are unexplained values",
+                    build);
+  d.confidence("nationality_years", "probable",
+               "earlier live read agreed with known rules (Spain 10, Italy 10, "
+               "England 5, Andorra 20, San Marino 30); not screen-compared");
+  d.number<uint8_t>(m, "gain_nationality_type_native_code", nation + 0x1eb, 1,
+                    2,
+                    "native NATION serializer tag Ngct -> BYTE +0x1eb at RVA "
+                    "0xf7cbf5; only 1 and 2 were seen",
+                    build);
+  d.confidence("gain_nationality_type_native_code", "unverified",
+               "which code is Accumulative or Continuous is unknown");
+  d.missing("gain_nationality_type",
+            "enum labels (Accumulative/Continuous) not verified");
+  uint8_t flags = 0;
+  if (build && m.read(nation + 0x1e9, flags)) {
+    bool no_dual = (flags & 0x02) != 0;
+    d.fields.raw("dual_nationality_allowed", no_dual ? "false" : "true");
+    d.text.push_back({"dual_nationality_allowed", no_dual ? "false" : "true"});
+    d.source("dual_nationality_allowed", nation + 0x1e9,
+             "native NATION serializer tag Nndn -> bit 0x02 of BYTE +0x1e9 "
+             "(word +0x1e8 bit 0x200) at RVA 0xf7d483; set means NOT allowed");
+    d.confidence("dual_nationality_allowed", "unverified",
+                 "bit polarity inferred from 12 flagged nations (Japan, China "
+                 "PR, India...); not screen-compared");
+  } else {
+    d.missing("dual_nationality_allowed",
+              "native layout/build/ownership not verified or unreadable");
+  }
+}
 inline void nation_details(const Memory &m, const NativeCatalog &catalog,
                            const NativeEntity &e, Details &d) {
   U nation = e.address;
@@ -260,6 +315,7 @@ inline void nation_details(const Memory &m, const NativeCatalog &catalog,
   d.number<uint32_t>(m, "population", nation + 0x1e4, 1, 2000000000,
                      "native nation population DWORD at +0x1e4",
                      build);
+  nationality_rule_details(m, nation, build, d);
   for (auto key :
        {"reputation", "youth_rating", "game_importance", "fa_financial_power"})
     d.missing(key, "use gender-specific men/women fields; nation has no single "

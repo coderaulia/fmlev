@@ -35,6 +35,8 @@ pub struct SearchState {
     pub error: Option<String>,
     /// PID of the last build attempt; automatic builds run once per process, rebuilds on request.
     pub attempted_pid: Option<i32>,
+    /// Last time the index was spot-checked against the live process.
+    pub last_checked: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

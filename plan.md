@@ -310,7 +310,7 @@ read-only first, writes only after the evidence ladder.
 - Timings logged for build per stage and query p95 on a full save.
 
 ### G status (2026-10-28)
-Implemented: G1 (one background pass instead of per-kind stages, because a single memory pass is cheaper; all kinds become searchable together), G2, G3 (no reputation tie-break: the index holds no reputation), G4 and G5. Rebuild triggers: attach, a new PID, and the Rebuild button. A save loaded inside the same PID is not detected automatically; stale hits are dropped when they fail to open. G6 live parity is still to do: see the checklist in section 5.
+Implemented: G1 (one background pass instead of per-kind stages, because a single memory pass is cheaper; all kinds become searchable together), G2, G3 (no reputation tie-break: the index holds no reputation), G4 and G5. Rebuild triggers: attach, a new PID, and the Rebuild button. A save loaded inside the same PID is detected by a spot check (12 entries per kind, at most every 10 s) and triggers a rebuild. G6 live parity is still to do: see the checklist in section 5.
 
 ### G7. Delivery order
 1. G4 lock fix and moving the existing player discovery to `spawn_blocking` (small, immediate win).

@@ -363,6 +363,17 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
     Enumeration { entries, duplicates_dropped, candidates: candidates.len() }
 }
 
+/// True while the record at `entry.address` still carries the identity the index stored. A reload
+/// frees or reuses the old objects, so a changed or unreadable identity marks the index stale.
+pub fn entry_still_valid(driver: &LinuxMemoryDriver, entry: &IndexEntry) -> bool {
+    let ids_at = match entry.kind {
+        EntityKind::Player => entry.address + 0x148, // address is the record R = P + 0x148
+        EntityKind::Staff => entry.address + STAFF_SUBOBJECT as usize + 8,
+        _ => entry.address + 8,
+    };
+    driver.read::<[u32; 3]>(ids_at).is_ok_and(|ids| ids[0] as i32 == entry.id && ids[1] == entry.uid && ids[2] == entry.uid)
+}
+
 /// Resolves the catalog and enumerates the attached process. Blocking: call from a worker thread.
 pub fn enumerate_process(driver: &LinuxMemoryDriver) -> Result<Enumeration> {
     let maps = parse_process_maps(driver.pid())?;
@@ -541,6 +552,25 @@ mod tests {
         let found = enumerate(&driver, &catalog(), &maps);
         assert!(!found.entries.iter().any(|e| e.kind == EntityKind::Player && e.id == 4242));
         assert!(found.duplicates_dropped >= 2);
+    }
+
+    #[test]
+    fn stale_entries_are_detected_after_the_records_change() {
+        let mut a = Arena::new();
+        player(&mut a, 0x1000, 31, 9031, [0x2000, 0x2100, 0x2200]);
+        a.ptr(0x3100, STAFF_VT);
+        a.ptr(0x3128, STAFF_SECOND_VT);
+        a.ids(0x3108, 5, 505);
+        a.pooled(0x3150, 0x3400, 0x3500, "Igor");
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let p = IndexEntry::new(EntityKind::Player, 31, 9031, "x".into(), None, a.at(0x1000 + PLAYER_RECORD));
+        let s = IndexEntry::new(EntityKind::Staff, 5, 505, "x".into(), None, a.at(0x3000));
+        assert!(entry_still_valid(&driver, &p) && entry_still_valid(&driver, &s));
+        a.ids(0x1000 + PLAYER_RECORD + 0x148, 32, 9032);
+        a.ids(0x3108, 6, 606);
+        assert!(!entry_still_valid(&driver, &p) && !entry_still_valid(&driver, &s));
+        let gone = IndexEntry::new(EntityKind::Club, 1, 1, "x".into(), None, 0x10);
+        assert!(!entry_still_valid(&driver, &gone));
     }
 
     #[test]

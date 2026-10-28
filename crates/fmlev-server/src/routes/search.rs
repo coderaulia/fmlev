@@ -91,6 +91,7 @@ pub(crate) fn start_index_build(state: &ServerState, driver: LinuxMemoryDriver) 
 /// Automatic build: once per attached process; an index of another process is dropped.
 pub(crate) fn ensure_index(state: &ServerState, driver: Option<LinuxMemoryDriver>) {
     let Some(driver) = driver else { return };
+    check_stale(state, &driver);
     {
         let mut search = state.search_write();
         if search.index.as_ref().is_some_and(|index| index.pid != driver.pid()) {
@@ -101,6 +102,34 @@ pub(crate) fn ensure_index(state: &ServerState, driver: Option<LinuxMemoryDriver
         }
     }
     start_index_build(state, driver);
+}
+
+const STALE_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+const STALE_SAMPLE: usize = 12;
+
+/// Spot-checks a few entries per kind against the live process (at most every 10 s). A save loaded in
+/// the same process leaves the old records behind, so any identity change schedules a rebuild.
+pub(crate) fn check_stale(state: &ServerState, driver: &LinuxMemoryDriver) {
+    let sample: Vec<IndexEntry> = {
+        let mut search = state.search_write();
+        if search.building || search.last_checked.is_some_and(|at| at.elapsed() < STALE_CHECK_EVERY) {
+            return;
+        }
+        search.last_checked = Some(Instant::now());
+        let Some(index) = search.index.as_ref().filter(|index| index.pid == driver.pid()) else { return };
+        EntityKind::ALL
+            .iter()
+            .flat_map(|&kind| {
+                let entries = index.entries(kind);
+                let step = (entries.len() / STALE_SAMPLE).max(1);
+                entries.iter().step_by(step).take(STALE_SAMPLE).cloned().collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    if sample.iter().any(|entry| !fmlev_core::native_catalog::entry_still_valid(driver, entry)) {
+        tracing::info!("Search index is stale (record identity changed); rebuilding");
+        start_index_build(state, *driver);
+    }
 }
 
 /// Drops an index entry whose record failed to open (moved or gone after a reload).

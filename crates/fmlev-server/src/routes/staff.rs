@@ -1,10 +1,10 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
 use serde::Deserialize;
 
-use fmlev_core::native_staff::NativeStaffRecord;
+use fmlev_core::native_staff::{NativeStaffRecord, MAX_SEARCH_RESULTS};
 use fmlev_mem::LinuxMemoryDriver;
 
-use super::api_error;
+use super::{api_error, search};
 use crate::state::ServerState;
 
 #[derive(Debug, Deserialize)]
@@ -35,32 +35,61 @@ pub struct StaffUpdateRequest {
 
 const NOT_ATTACHED: &str = "Attach to FM26 with a save loaded first";
 
-/// Read-only name search over native staff records (no screen needed).
-pub async fn search_staff(State(state): State<ServerState>, Json(req): Json<StaffSearchRequest>) -> impl IntoResponse {
+/// Copies the session driver out of the global state, so no lock is held during a scan.
+async fn session_driver(state: &ServerState) -> Result<LinuxMemoryDriver, Response> {
     let r = state.inner.read().await;
-    let Some(session) = r.context_mgr.session.as_ref() else {
-        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    r.context_mgr
+        .session
+        .as_ref()
+        .map(|session| session.driver)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response())
+}
+
+/// Index hit revalidated by identity, else a full scan on a worker thread (no lock held).
+async fn locate_staff(state: &ServerState, driver: LinuxMemoryDriver, id: i32, uid: i32) -> Result<NativeStaffRecord, Response> {
+    if let Some(staff) = search::indexed_staff(state, &driver, id, uid) {
+        return Ok(staff);
+    }
+    match tokio::task::spawn_blocking(move || NativeStaffRecord::discover_by_index(&driver, id)).await {
+        Ok(Ok(staff)) if staff.uid == uid => Ok(staff),
+        Ok(Ok(staff)) => Err(api_error(StatusCode::CONFLICT, format!("Staff {} has uid {}, not {}", staff.index, staff.uid, uid)).into_response()),
+        Ok(Err(error)) => Err(api_error(StatusCode::NOT_FOUND, error).into_response()),
+        Err(error) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response()),
+    }
+}
+
+/// Read-only name search over native staff records (no screen needed). Uses the search index when it
+/// is ready; otherwise scans on a worker thread.
+pub async fn search_staff(State(state): State<ServerState>, Json(req): Json<StaffSearchRequest>) -> impl IntoResponse {
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
     };
-    match NativeStaffRecord::search(&session.driver, &req.query, req.max.unwrap_or(20)) {
-        Ok(staff) => Json(serde_json::json!({ "status": "ok", "staff": staff })).into_response(),
-        Err(error) => api_error(StatusCode::BAD_REQUEST, error).into_response(),
+    let max = req.max.unwrap_or(20).clamp(1, MAX_SEARCH_RESULTS);
+    if req.query.trim().chars().count() >= 2 {
+        if let Some(staff) = search::indexed_staff_search(&state, &driver, req.query.trim(), max) {
+            return Json(serde_json::json!({ "status": "ok", "staff": staff, "source": "index" })).into_response();
+        }
+    }
+    let query = req.query.clone();
+    match tokio::task::spawn_blocking(move || NativeStaffRecord::search(&driver, &query, max)).await {
+        Ok(Ok(staff)) => Json(serde_json::json!({ "status": "ok", "staff": staff, "source": "scan" })).into_response(),
+        Ok(Err(error)) => api_error(StatusCode::BAD_REQUEST, error).into_response(),
+        Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
     }
 }
 
 /// Read-only staff record and its 22 attributes, selected by id and uid.
 pub async fn read_staff_native(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
-    let r = state.inner.read().await;
-    let Some(session) = r.context_mgr.session.as_ref() else {
-        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
     };
-    let staff = match NativeStaffRecord::discover_by_index(&session.driver, req.staff_id) {
-        Ok(staff) if staff.uid == req.staff_uid => staff,
-        Ok(staff) => {
-            return api_error(StatusCode::CONFLICT, format!("Staff {} has uid {}, not {}", staff.index, staff.uid, req.staff_uid)).into_response()
-        }
-        Err(error) => return api_error(StatusCode::NOT_FOUND, error).into_response(),
+    let staff = match locate_staff(&state, driver, req.staff_id, req.staff_uid).await {
+        Ok(staff) => staff,
+        Err(response) => return response,
     };
-    match staff.read_attributes(&session.driver) {
+    match staff.read_attributes(&driver) {
         Ok(attributes) => Json(serde_json::json!({
             "status": "ok",
             "staff": staff,
@@ -82,21 +111,20 @@ pub async fn update_staff(State(state): State<ServerState>, Json(req): Json<Staf
         )
         .into_response();
     }
-    let w = state.inner.write().await;
-    let Some(session) = w.context_mgr.session.as_ref() else {
-        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
     };
-    let staff = match NativeStaffRecord::discover_by_index(&session.driver, req.staff_id) {
-        Ok(staff) if staff.uid == req.staff_uid => staff,
-        Ok(staff) => {
-            return api_error(StatusCode::CONFLICT, format!("Staff {} has uid {}, not {}", staff.index, staff.uid, req.staff_uid)).into_response()
-        }
-        Err(error) => return api_error(StatusCode::NOT_FOUND, error).into_response(),
+    let staff = match locate_staff(&state, driver, req.staff_id, req.staff_uid).await {
+        Ok(staff) => staff,
+        Err(response) => return response,
     };
+    // The write lock serializes writes; the transaction re-checks identity before writing.
+    let _writes = state.inner.write().await;
     let changes: Vec<(String, u8)> = req.attributes.into_iter().collect();
-    match staff.write_attributes(&session.driver, &changes) {
+    match staff.write_attributes(&driver, &changes) {
         Ok(changed) => {
-            let attributes = staff.read_attributes(&session.driver).ok();
+            let attributes = staff.read_attributes(&driver).ok();
             Json(serde_json::json!({
                 "status": "ok",
                 "message": format!("{} staff attribute(s) written and read back. Reopen the staff profile in FM26 to see them.", changed.len()),
@@ -110,25 +138,17 @@ pub async fn update_staff(State(state): State<ServerState>, Json(req): Json<Staf
     }
 }
 
-fn resolve_staff(driver: &LinuxMemoryDriver, req: &StaffNativeRequest) -> Result<NativeStaffRecord, axum::response::Response> {
-    match NativeStaffRecord::discover_by_index(driver, req.staff_id) {
-        Ok(staff) if staff.uid == req.staff_uid => Ok(staff),
-        Ok(staff) => Err(api_error(StatusCode::CONFLICT, format!("Staff {} has uid {}, not {}", staff.index, staff.uid, req.staff_uid)).into_response()),
-        Err(error) => Err(api_error(StatusCode::NOT_FOUND, error).into_response()),
-    }
-}
-
 /// Read-only Information tab: identity plus the extra fields. Unverified offsets return `unavailable`.
 pub async fn read_staff_information(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
-    let r = state.inner.read().await;
-    let Some(session) = r.context_mgr.session.as_ref() else {
-        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
     };
-    let staff = match resolve_staff(&session.driver, &req) {
+    let staff = match locate_staff(&state, driver, req.staff_id, req.staff_uid).await {
         Ok(staff) => staff,
         Err(response) => return response,
     };
-    match staff.read_information(&session.driver) {
+    match staff.read_information(&driver) {
         Ok(fields) => Json(serde_json::json!({
             "status": "ok",
             "staff": staff,
@@ -142,15 +162,15 @@ pub async fn read_staff_information(State(state): State<ServerState>, Json(req):
 
 /// Read-only Contract tab. The staff contract link is not mapped yet, so every field is `unavailable`.
 pub async fn read_staff_contract(State(state): State<ServerState>, Json(req): Json<StaffNativeRequest>) -> impl IntoResponse {
-    let r = state.inner.read().await;
-    let Some(session) = r.context_mgr.session.as_ref() else {
-        return api_error(StatusCode::BAD_REQUEST, NOT_ATTACHED).into_response();
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
     };
-    let staff = match resolve_staff(&session.driver, &req) {
+    let staff = match locate_staff(&state, driver, req.staff_id, req.staff_uid).await {
         Ok(staff) => staff,
         Err(response) => return response,
     };
-    match staff.read_contract(&session.driver) {
+    match staff.read_contract(&driver) {
         Ok(contract) => Json(serde_json::json!({ "status": "ok", "staff": staff, "contract": contract })).into_response(),
         Err(error) => api_error(StatusCode::CONFLICT, error).into_response(),
     }

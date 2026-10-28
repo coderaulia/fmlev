@@ -3,6 +3,7 @@ pub mod context;
 pub mod eligibility;
 pub mod error;
 pub mod live_write;
+pub mod native_catalog;
 pub mod native_club;
 pub mod native_competition;
 pub mod native_nation;
@@ -18,6 +19,7 @@ pub mod models;
 pub mod native_player;
 pub mod preferred_moves;
 pub mod role_presets;
+pub mod search_index;
 pub mod session;
 pub mod settings;
 

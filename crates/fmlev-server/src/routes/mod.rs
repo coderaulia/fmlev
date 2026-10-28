@@ -2,6 +2,7 @@ pub mod context;
 pub mod eligibility;
 pub mod memory;
 pub mod roles;
+pub mod search;
 pub mod settings;
 pub mod staff;
 
@@ -9,6 +10,7 @@ pub use context::*;
 pub use eligibility::*;
 pub use memory::*;
 pub use roles::*;
+pub use search::{search_entities, search_rebuild, search_status};
 pub use settings::*;
 pub use staff::*;
 
@@ -40,6 +42,8 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/settings", get(get_settings).post(update_settings))
         .route("/api/context", get(get_context))
         .route("/api/search", get(search_entities))
+        .route("/api/search/status", get(search_status))
+        .route("/api/search/rebuild", post(search_rebuild))
         .route("/api/players/discover", post(discover_players))
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))

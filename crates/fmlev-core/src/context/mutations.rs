@@ -71,21 +71,84 @@ impl GameContextManager {
     }
 
     pub fn discover_loaded_players(&mut self) -> Result<usize> {
+        let (seed, driver) = self.player_discovery_seed()?;
+        let found = Self::collect_loaded_players(&seed, &driver)?;
+        Ok(self.apply_loaded_players(found))
+    }
+
+    /// Phase 1 of loaded-player discovery (needs `&mut self`, quick): the calibrated seed record and a
+    /// copy of the driver, so the scan can run without holding the server state lock.
+    pub fn player_discovery_seed(&mut self) -> Result<(crate::native_player::NativePlayerRecord, fmlev_mem::LinuxMemoryDriver)> {
         let seed = self.verified_native_player(self.context.player.id)?;
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live game session".into()))?;
-        let records = seed.discover_loaded(&session.driver)?;
-        for record in records {
+        Ok((seed, session.driver))
+    }
+
+    /// Phase 2 (blocking full scan, no `self`): every loaded peer of `seed` with its name, positions,
+    /// attributes and CA/PA read into a template player.
+    pub fn collect_loaded_players(
+        seed: &crate::native_player::NativePlayerRecord,
+        driver: &fmlev_mem::LinuxMemoryDriver,
+    ) -> Result<Vec<(crate::native_player::NativePlayerRecord, Player)>> {
+        let mut found = Vec::new();
+        for record in seed.discover_loaded(driver)? {
             let id = record.index();
-            let name = record.name(&session.driver)?;
-            let player = self.player_registry.entry(id).or_insert_with(|| build_template_live_player(id, name, String::new()));
-            player.positions = record.read_positions(&session.driver)?;
+            let mut player = build_template_live_player(id, record.name(driver)?, String::new());
+            player.positions = record.read_positions(driver)?;
             player.position = player.positions.to_position_string();
-            record.refresh_attributes(&session.driver, &mut player.attributes)?;
-            record.refresh_abilities(&session.driver, player)?;
+            record.refresh_attributes(driver, &mut player.attributes)?;
+            record.refresh_abilities(driver, &mut player)?;
+            found.push((record, player));
+        }
+        Ok(found)
+    }
+
+    /// Phase 3 (needs `&mut self`, quick): merge the scan into the registries. Existing players keep
+    /// their other fields; native fields are refreshed. Returns the number of native records.
+    pub fn apply_loaded_players(&mut self, found: Vec<(crate::native_player::NativePlayerRecord, Player)>) -> usize {
+        for (record, scanned) in found {
+            let id = record.index();
+            let player = self.player_registry.entry(id).or_insert_with(|| scanned.clone());
+            player.positions = scanned.positions;
+            player.position = scanned.position;
+            player.attributes = scanned.attributes;
+            player.current_ability = scanned.current_ability;
+            player.potential_ability = scanned.potential_ability;
             self.native_player_records.insert(id, record);
             self.failed_native_fingerprints.remove(&id);
         }
-        Ok(self.native_player_records.len())
+        self.native_player_records.len()
+    }
+
+    /// Adds a minimal registry entry for a nation found by the search index, so it can be selected.
+    /// Live sessions only; an existing entry is kept.
+    pub fn ensure_live_nation(&mut self, id: i32, name: &str) {
+        if self.is_live_session() {
+            self.nation_registry.entry(id).or_insert_with(|| {
+                let mut nation = super::inspector::unknown_nationdetails();
+                nation.id = id;
+                nation.name = name.to_owned();
+                nation
+            });
+        }
+    }
+
+    /// Competition counterpart of `ensure_live_nation`.
+    pub fn ensure_live_competition(&mut self, id: i32, name: &str, nation_name: Option<&str>) {
+        if self.is_live_session() {
+            self.competition_registry.entry(id).or_insert_with(|| {
+                let mut comp = super::inspector::unknown_competitiondetails();
+                comp.id = id;
+                comp.name = name.to_owned();
+                comp.nation_name = nation_name.unwrap_or_default().to_owned();
+                comp
+            });
+        }
+    }
+
+    /// True when attached to a real game process (not the in-process test session).
+    pub fn is_live_session(&self) -> bool {
+        self.session.as_ref().is_some_and(|session| session.driver.pid() != std::process::id() as i32)
     }
 
     /// Populate global search once a real player's attributes have calibrated

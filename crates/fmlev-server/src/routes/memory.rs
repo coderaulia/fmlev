@@ -66,6 +66,11 @@ pub async fn attach_process(
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             w.is_attached = true;
+            // A (re)attach may follow a save load: rebuild the search index in the background.
+            if let Some(driver) = super::search::live_driver(&w.context_mgr) {
+                state.search_write().index = None;
+                super::search::start_index_build(&state, driver);
+            }
 
             info!("Attached to Football Manager 26 PID: {}", pid);
 

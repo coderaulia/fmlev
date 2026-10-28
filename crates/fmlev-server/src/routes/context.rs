@@ -1,18 +1,19 @@
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
     Json,
 };
 
+use fmlev_core::search_index::EntityKind;
 use fmlev_core::{
-    ClubAffiliate, ClubFinances, CompetitionDetails, NationDetails, PlayerAttributes,
+    ClubAffiliate, GameContextManager, ClubFinances, CompetitionDetails, NationDetails, PlayerAttributes,
 };
 use fmlev_mem::get_yama_diagnostic;
 
 use crate::state::{
     AffiliateActionRequest, ClubPresetRequest, CompetitionPresetRequest, ContextSelectRequest,
-    NationPresetRequest, PlayerPresetRequest, PlayerUpdateRequest, SearchQuery, ServerState,
+    NationPresetRequest, PlayerPresetRequest, PlayerUpdateRequest, ServerState,
     StatusResponse,
 };
 use crate::embedded_ui_html;
@@ -74,45 +75,23 @@ pub async fn get_context(State(state): State<ServerState>) -> impl IntoResponse 
     }))
 }
 
-pub async fn search_entities(
-    State(state): State<ServerState>,
-    Query(query): Query<SearchQuery>,
-) -> impl IntoResponse {
-    let mut r = state.inner.write().await;
-    let discovery_error = if query.q.trim().chars().count() >= 2 {
-        r.context_mgr.maybe_auto_discover_players().and_then(|result| result.err().map(|error| error.to_string()))
-    } else { None };
-    let mut results = r.context_mgr.search(&query.q);
-    let total_players = results.players.len();
-    // Native discovery can add an entire loaded database. Keep dropdown responses bounded.
-    results.players.truncate(100);
-    let nation = results.nations.first().cloned();
-    let competition = results.competitions.first().cloned();
-    Json(serde_json::json!({
-        "query": query.q,
-        "players": results.players,
-        "total_players": total_players,
-        "discovery_error": discovery_error,
-        "clubs": results.clubs,
-        "nations": results.nations,
-        "competitions": results.competitions,
-        "nation": nation,
-        "competition": competition
-    }))
-}
-
 pub async fn discover_players(State(state): State<ServerState>) -> impl IntoResponse {
-    // A full process scan is blocking; leave it off the async request executor.
-    match tokio::task::spawn_blocking(move || {
-        state.inner.blocking_write().context_mgr.discover_loaded_players()
-    }).await {
-        Ok(Ok(count)) => (StatusCode::OK, Json(serde_json::json!({
-            "status": "success", "count": count,
-            "message": format!("Indexed {count} loaded native players. Search by name to edit their verified attributes, positions and feet.")
-        }))),
-        Ok(Err(error)) => api_error(StatusCode::BAD_REQUEST, error),
-        Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
-    }
+    // Seed under the lock (quick), full scan on a worker thread without the lock, merge under the lock.
+    let seed = state.inner.write().await.context_mgr.player_discovery_seed();
+    let (seed, driver) = match seed {
+        Ok(seed) => seed,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    let found = match tokio::task::spawn_blocking(move || GameContextManager::collect_loaded_players(&seed, &driver)).await {
+        Ok(Ok(found)) => found,
+        Ok(Err(error)) => return api_error(StatusCode::BAD_REQUEST, error),
+        Err(error) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
+    };
+    let count = state.inner.write().await.context_mgr.apply_loaded_players(found);
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "success", "count": count,
+        "message": format!("Indexed {count} loaded native players. Search by name to edit their verified attributes, positions and feet.")
+    })))
 }
 
 pub async fn select_context(
@@ -120,6 +99,7 @@ pub async fn select_context(
     Json(payload): Json<ContextSelectRequest>,
 ) -> impl IntoResponse {
     let mut w = state.inner.write().await;
+    super::search::prepare_selection(&state, &mut w.context_mgr, payload.nation_id, payload.competition_id);
     let targets = [payload.player_id, payload.club_id, payload.nation_id, payload.competition_id]
         .iter().filter(|target| target.is_some()).count();
     if (payload.unpin == Some(true) && targets != 0) || (payload.unpin != Some(true) && targets != 1) {
@@ -130,24 +110,28 @@ pub async fn select_context(
     } else {
         if let Some(pid) = payload.player_id {
             if let Err(error) = w.context_mgr.select_player(pid) {
+                super::search::drop_stale(&state, EntityKind::Player, pid);
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(cid) = payload.club_id {
             if let Err(error) = w.context_mgr.select_club(cid) {
+                super::search::drop_stale(&state, EntityKind::Club, cid);
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(nid) = payload.nation_id {
             if let Err(error) = w.context_mgr.select_nation(nid) {
+                super::search::drop_stale(&state, EntityKind::Nation, nid);
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             w.context_mgr.set_sync_mode("pinned");
         }
         if let Some(comp_id) = payload.competition_id {
             if let Err(error) = w.context_mgr.select_competition(comp_id) {
+                super::search::drop_stale(&state, EntityKind::Competition, comp_id);
                 return api_error(StatusCode::BAD_REQUEST, error);
             }
             w.context_mgr.set_sync_mode("pinned");

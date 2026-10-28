@@ -18,9 +18,7 @@ pub use routes::*;
 pub use state::*;
 
 pub async fn start_server(port: u16) -> anyhow::Result<()> {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(AppState::default())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(AppState::default())));
 
     // Try auto-attaching on startup in background
     let initial_state = state.clone();
@@ -43,6 +41,9 @@ pub async fn start_server(port: u16) -> anyhow::Result<()> {
             w.fm_exe_base = bases.fm_exe_base;
             w.is_attached = true;
             let _ = w.context_mgr.try_attach();
+            let driver = routes::search::live_driver(&w.context_mgr);
+            drop(w);
+            routes::search::ensure_index(&initial_state, driver);
             info!("Auto-attached to FM26 process (PID: {}) on server start", pid);
         }
     });

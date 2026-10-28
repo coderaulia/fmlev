@@ -8,6 +8,33 @@ use fmlev_core::{ClubAffiliate, GameContextManager, Player};
 #[derive(Clone)]
 pub struct ServerState {
     pub inner: Arc<RwLock<AppState>>,
+    /// Search index state. Separate from `inner` so queries never wait for a scan or a sync.
+    pub search: Arc<std::sync::RwLock<SearchState>>,
+}
+
+impl ServerState {
+    pub fn from_inner(inner: Arc<RwLock<AppState>>) -> Self {
+        Self { inner, search: Arc::default() }
+    }
+
+    pub fn search_read(&self) -> std::sync::RwLockReadGuard<'_, SearchState> {
+        self.search.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn search_write(&self) -> std::sync::RwLockWriteGuard<'_, SearchState> {
+        self.search.write().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Background search index (plan G1). `index` stays served while a rebuild runs.
+#[derive(Debug, Default)]
+pub struct SearchState {
+    pub index: Option<fmlev_core::search_index::SearchIndex>,
+    pub building: bool,
+    pub stage: Option<&'static str>,
+    pub error: Option<String>,
+    /// PID of the last build attempt; automatic builds run once per process, rebuilds on request.
+    pub attempted_pid: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,10 +192,14 @@ fn default_scan_type() -> String {
     "i32".to_string()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct SearchQuery {
     #[serde(default)]
     pub q: String,
+    /// all | players | staff | clubs | nations | competitions
+    pub kind: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
 }
 
 /// Competition identified by index and unique id (from the live competition overview).

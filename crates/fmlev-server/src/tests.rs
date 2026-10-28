@@ -34,9 +34,7 @@ fn offline_app_state() -> AppState {
 
 #[tokio::test]
 async fn partial_attribute_http_update_preserves_other_player_data() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let original = state.inner.read().await.context_mgr.get_context().player;
     let app = create_router(state);
     let response = app
@@ -127,9 +125,7 @@ fn test_context_search_players_and_clubs() {
 
 #[tokio::test]
 async fn test_get_context_endpoint() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let response = get_context(State(state)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
 
@@ -150,11 +146,10 @@ async fn test_get_context_endpoint() {
 
 #[tokio::test]
 async fn test_search_entities_endpoint() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let query = SearchQuery {
         q: "Brazil".to_string(),
+        ..Default::default()
     };
     let response = search_entities(State(state), Query(query)).await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
@@ -170,9 +165,7 @@ async fn test_search_entities_endpoint() {
 
 #[tokio::test]
 async fn test_update_nation_and_presets() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
 
     // 1. Update nation
     let mut nation = NationDetails::default();
@@ -228,9 +221,7 @@ async fn test_update_nation_and_presets() {
 
 #[tokio::test]
 async fn test_update_competition_and_presets() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
 
     // 1. Update competition
     let mut comp = CompetitionDetails::default();
@@ -301,9 +292,7 @@ async fn test_update_competition_and_presets() {
 
 #[tokio::test]
 async fn test_club_affiliates_add_and_remove() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
 
     let affiliate = ClubAffiliate {
         affiliate_club_id: 8888,
@@ -346,9 +335,7 @@ async fn test_club_affiliates_add_and_remove() {
 
 #[tokio::test]
 async fn test_router_integration_new_routes() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
 
     // 1. GET /api/context
@@ -425,9 +412,7 @@ async fn test_router_integration_new_routes() {
 
 #[tokio::test]
 async fn test_player_update_persists_across_context_polls() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state.clone());
 
     // 1. Select player 73 (Zulkifli Lukmansyah)
@@ -507,9 +492,7 @@ async fn test_player_update_persists_across_context_polls() {
 
 #[tokio::test]
 async fn failed_selection_and_presets_never_report_success() {
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(offline_app_state())),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let original = state.inner.read().await.context_mgr.context.player.clone();
     let app = create_router(state.clone());
     for (route, body) in [
@@ -573,9 +556,7 @@ async fn live_preset_errors_are_propagated_without_registry_changes() {
     );
     app.context_mgr.session = Some(session);
     let original = app.context_mgr.context.nation.youth_rating;
-    let state = ServerState {
-        inner: Arc::new(RwLock::new(app)),
-    };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(app)));
     let response = apply_nation_preset(
         State(state.clone()),
         Json(NationPresetRequest {
@@ -612,9 +593,7 @@ fn memory_write_values_reject_truncation_and_malformed_bytes() {
 async fn memory_routes_round_trip_values_and_reject_invalid_writes() {
     let mut app_state = offline_app_state();
     app_state.pid = Some(std::process::id() as i32);
-    let app = create_router(ServerState {
-        inner: Arc::new(RwLock::new(app_state)),
-    });
+    let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(app_state))));
     let mut buffer = [0u8; 32];
     let address = format!("0x{:x}", buffer.as_mut_ptr() as usize);
     for (kind, value) in [
@@ -672,9 +651,7 @@ async fn memory_routes_round_trip_values_and_reject_invalid_writes() {
 #[tokio::test]
 async fn test_contract_and_transfer_routes() {
     let app_state = offline_app_state();
-    let app = create_router(ServerState {
-        inner: Arc::new(RwLock::new(app_state)),
-    });
+    let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(app_state))));
 
     // 1. Sign free agent with offline state should fail gracefully (no live session)
     let body = serde_json::json!({ "player_id": 1, "target_club_id": 1 });
@@ -734,7 +711,7 @@ async fn test_contract_and_transfer_routes() {
 
 #[tokio::test]
 async fn settings_route_updates_validates_and_rejects_unknown_fields() {
-    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state.clone());
     let post = |body: &str| {
         Request::builder()
@@ -779,7 +756,7 @@ fn post_role(body: String) -> Request<Body> {
 
 #[tokio::test]
 async fn role_preset_route_returns_a_proposal_without_changing_the_player() {
-    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state.clone());
     let id = state.inner.read().await.context_mgr.get_context().player.id;
 
@@ -832,7 +809,7 @@ async fn role_preset_route_returns_a_proposal_without_changing_the_player() {
 
 #[tokio::test]
 async fn eligibility_route_is_read_only_and_requires_a_live_game() {
-    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
     let post = |body: String| {
         Request::builder()
@@ -852,7 +829,7 @@ async fn eligibility_route_is_read_only_and_requires_a_live_game() {
 
 #[tokio::test]
 async fn staff_routes_are_read_only_strict_and_require_a_game() {
-    let state = ServerState { inner: Arc::new(RwLock::new(offline_app_state())) };
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
     let post = |uri: &str, body: &str| {
         Request::builder()
@@ -899,4 +876,65 @@ async fn staff_routes_are_read_only_strict_and_require_a_game() {
         let write = app.clone().oneshot(post(uri, r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();
         assert_eq!(write.status(), StatusCode::NOT_IMPLEMENTED, "{uri}");
     }
+}
+
+async fn get_json(app: &axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
+    let response = app.clone().oneshot(Request::get(uri).body(Body::empty()).unwrap()).await.unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+}
+
+#[tokio::test]
+async fn search_falls_back_to_registries_with_totals_and_paging() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    let (status, all) = get_json(&app, "/api/search?q=a").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all["source"], "registry");
+    assert_eq!(all["index"]["state"], "idle", "offline sessions never build an index");
+    let total = all["totals"]["players"].as_u64().unwrap();
+    assert!(total >= 2, "demo registry needs players matching 'a'");
+    assert_eq!(all["total_players"], all["totals"]["players"]);
+
+    let (_, first) = get_json(&app, "/api/search?q=a&kind=players&limit=1").await;
+    let (_, second) = get_json(&app, "/api/search?q=a&kind=players&limit=1&offset=1").await;
+    assert_eq!(first["players"].as_array().unwrap().len(), 1);
+    assert_ne!(first["players"][0]["id"], second["players"][0]["id"]);
+    assert_eq!(first["totals"]["players"].as_u64(), Some(total));
+    assert_eq!(first["totals"]["clubs"], 0, "a kind filter empties the other sections");
+    assert!(first["clubs"].as_array().unwrap().is_empty());
+
+    let (status, error) = get_json(&app, "/api/search?q=a&kind=teams").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error["message"].as_str().unwrap().contains("Unknown kind"));
+}
+
+#[tokio::test]
+async fn search_answers_while_an_index_build_runs() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    {
+        let mut search = state.search_write();
+        search.building = true;
+        search.stage = Some("scanning");
+    }
+    let app = create_router(state.clone());
+    let (status, body) = get_json(&app, "/api/search?q=haaland").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["index"]["state"], "building");
+    assert_eq!(body["source"], "registry");
+    let (status, status_body) = get_json(&app, "/api/search/status").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status_body["stage"], "scanning");
+}
+
+#[tokio::test]
+async fn search_rebuild_requires_a_game() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    let response = app
+        .oneshot(Request::post("/api/search/rebuild").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

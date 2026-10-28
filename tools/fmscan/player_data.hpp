@@ -1,5 +1,6 @@
 #pragma once
 #include "entities.hpp"
+#include "ppm.hpp"
 
 struct AttributeSpec {
   const char *name;
@@ -294,6 +295,7 @@ inline Json editor_player_data(const Memory &m, const NativeCatalog &catalog,
     }
   j.str("position", best);
   j.str("position_status", "derived_from_aptitudes_at_least_18");
+  j.raw("preferred_moves", ppm_json(read_ppm(m, e.record)).done());
   j.raw("related", links.json().done());
   j.str("unavailable_reason", "null fields lack a verified screen-independent "
                               "native layout; no UI defaults substituted");
@@ -333,7 +335,8 @@ inline void print_player_editor(const Memory &m, const NativeCatalog &catalog,
               << p.positions[i] << "\n";
   std::cout
       << "Left foot: " << p.positions[15] << "  Right foot: " << p.positions[16]
-      << "\n\nContract (parent club)\n"
+      << "\n\nPreferred moves (bit table incomplete): "
+      << ppm_text(read_ppm(m, e.record)) << "\n\nContract (parent club)\n"
       << "Weekly wage GBP: "
       << (p.wage ? std::to_string(*p.wage) : "Unavailable") << "\nExpiry year: "
       << (p.expiry ? std::to_string(*p.expiry >> 16) : "Unavailable")

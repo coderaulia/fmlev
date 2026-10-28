@@ -249,6 +249,7 @@ impl OverlayState {
                 ..Default::default()
             },
             user_modified: false,
+            preferred_moves: None,
         }
     }
 

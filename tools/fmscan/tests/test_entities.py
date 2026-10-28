@@ -151,6 +151,28 @@ class EntityTests(unittest.TestCase):
             self.assertIsNone(p[k])
         self.assertIsNone(p["contract"]["release_clause"])
 
+    def test_preferred_moves_name_only_verified_bits(self):
+        ppm = self.scan("player", "--name", "Lamine", "--editor")["matches"][0]["editor_data"]["preferred_moves"]
+        self.assertEqual(ppm["status"], "partial_bit_table")
+        self.assertEqual(ppm["offset_from_record"], "0x200")
+        self.assertEqual(ppm["bitset"], hex((1 << 39) | (1 << 35) | (1 << 3)))
+        self.assertEqual(ppm["popcount"], 3)
+        self.assertEqual([b["bit"] for b in ppm["set_bits"]], [3, 35, 39])
+        self.assertEqual([b["name"] for b in ppm["set_bits"]], [None, None, "Cuts Inside From Both Wings"])
+        self.assertEqual([b["verified"] for b in ppm["set_bits"]], [False, False, True])
+        self.assertEqual(ppm["named_moves"], ["Cuts Inside From Both Wings"])
+        self.assertEqual(ppm["unnamed_set_bits"], 2)
+        self.action("clear-ppm")
+        ppm = self.scan("player", "--name", "Lamine", "--editor")["matches"][0]["editor_data"]["preferred_moves"]
+        self.assertEqual((ppm["bitset"], ppm["popcount"], ppm["set_bits"]), ("0x0", 0, []))
+
+    def test_preferred_moves_text_marks_unverified_bits(self):
+        proc = subprocess.run([str(self.binary), "entity", self.pid, "player", "--name", "Lamine", "--editor",
+                               "--near", f"{self.root + 0x8000:x}:8000"], capture_output=True, text=True, timeout=10)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("bit 39: Cuts Inside From Both Wings", proc.stdout)
+        self.assertIn("bit 35: unknown (unverified)", proc.stdout)
+
     def player_data(self, language, located, ok=True):
         argv = [str(self.binary), "player-data"] if language == "cpp" else [str(self.rust)]
         argv += [self.pid, "40629", "2000256231", "--iterations", "3", "--json"]

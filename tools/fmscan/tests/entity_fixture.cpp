@@ -66,6 +66,8 @@ int main(int argc, char** argv) {
     put(heap + 0x6000, contract); put(heap + 0x6008, root + 0x288); put(heap + 0x6010, root + 0x3000);
     put(heap + 0x6020, uint32_t{280867}); put(heap + 0x6048, uint32_t{(2031 << 16) | 181}); heap[0x605d] = 10;
     put(heap + 0x148 + 0x1a8, root + 0x4000);
+    // Preferred-moves bitset at record + 0x200: bits 39 (verified), 35 and 3 (unverified).
+    put(heap + 0x148 + 0x200, uint64_t{(1ull << 39) | (1ull << 35) | (1ull << 3)});
     // Guarded nonplayer editor layouts.
     put(heap + 0x2100, root + 0xe000); put(heap + 0x2150, root + 0xd000);
     put(heap + 0x2166, uint16_t{7557}); put(heap + 0x30a8, uint16_t{9098});
@@ -121,6 +123,7 @@ int main(int argc, char** argv) {
         if (cmd == "bad-staff-uid") put(heap + 0xf110, uint32_t{1});
         if (cmd == "bad-attribute") heap[0x148 + 0x1e] = 101;
         if (cmd == "good-attribute") heap[0x148 + 0x1e] = 50;
+        if (cmd == "clear-ppm") put(heap + 0x148 + 0x200, uint64_t{0});
         if (cmd == "bad-date") put(heap + 0x6048, uint32_t{0});
         if (cmd == "bad-facility") heap[0xe118]=21;
         if (cmd == "bad-finance-owner") put(heap + 0xd008, root + 0x5000);

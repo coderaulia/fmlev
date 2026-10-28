@@ -117,3 +117,14 @@ test('profile facts show read values while unavailable facts and contract writes
   assert.equal(app.els['contract-wage'].disabled, false);
   assert.equal(app.els['contract-release'].disabled, true);
 });
+
+test('preferred moves are shown read-only, naming only verified bits', () => {
+  const app = createUi({ ids: ['fact-ppm'] });
+  app.run('renderPreferredMoves({preferred_moves:{bitset:"0x8800000008",named_moves:["Cuts Inside From Both Wings"],unnamed_set_bits:2}})');
+  assert.equal(app.els['fact-ppm'].innerText, 'Cuts Inside From Both Wings, 2 not yet identified');
+  assert.match(app.els['fact-ppm'].title, /incomplete/);
+  app.run('renderPreferredMoves({preferred_moves:{bitset:"0x0",named_moves:[],unnamed_set_bits:0}})');
+  assert.equal(app.els['fact-ppm'].innerText, 'None set');
+  app.run('renderPreferredMoves({})');
+  assert.equal(app.els['fact-ppm'].innerText, 'Unavailable');
+});

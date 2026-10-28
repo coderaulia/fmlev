@@ -141,7 +141,9 @@ does not claim to evaluate manager overrides. Unmapped active rules remain null.
 The editor export contains the name and IDs, all 60 editor attributes, 15 position
 aptitudes (including SW), feet, CA/PA, nationality, parent-contract club, domestic
 competition, weekly wage in GBP, contract expiry year/packed date and squad number.
-Age, condition, sharpness, morale, injury/suspension state, release clause, squad
+`preferred_moves` is the raw 64-bit PPM bitset at record + 0x200 with only
+screen-proven bits named (currently bit 39); the rest are `name: null`. See
+"PPM bit table" in AGENTS.md. Age, condition, sharpness, morale, injury/suspension state, release clause, squad
 status and happiness are explicitly null/unavailable. The editor's fallback values
 are not substituted for unmapped native fields. Position text is derived from
 aptitudes of at least 18, not copied from a binding. CA stars and recommended-CA UI

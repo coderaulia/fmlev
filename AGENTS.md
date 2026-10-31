@@ -593,6 +593,11 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Not proven**: which object owns the table and how it is reached from the player, where the live current-season stats and the 8-apps counters live, whether the transfer record (fee + date + both teams + person, four copies) or Alaba's new vector at ACTUAL_PLAYER+0xd0 creates the new Galatasaray row, assists/PoM/rating positions, and any write. Nothing was written.
 - **Bug cause (unchanged)**: FMLE Move leaves the season row on the old club and creates no new row or fee record. A safe fix would have to create game-allocated records (Rule 7); not attempted.
 
+### Career history table is a paged pool (2026-11-02, read-only, PID 4496)
+- The 44-byte history rows are not owned through a direct pointer: a scan of all writable memory for qwords into the rows' pages (0x3a3d70000..0x3a3d90000, 108 hits) found only page-table entries (a table of page pointers with a 0x600 stride, e.g. entries at 0x260121880.., plus index words 0xe8c, 0xe8d.. at 0x305d934c0) and no per-player begin/end pointer. Rows are therefore addressed by index through a page table, so the player's row list is probably a list of ids (candidate: the one-entry vector at ACTUAL_PLAYER+0xd0 created at Alaba's transfer; its 8-byte entry 0x279520e24 is not a pointer to a row).
+- Current-season rows (8 apps for R. Madrid, 0 apps for Galatasaray) are not in the pool rows; their live counters were not located.
+- **Not proven**: the id scheme, the page size/row count per page, the owner of the player's list and the live season counters. No write is justified.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

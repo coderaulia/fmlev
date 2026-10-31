@@ -654,7 +654,7 @@ async fn test_contract_and_transfer_routes() {
     let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(app_state))));
 
     // 1. Sign free agent with offline state should fail gracefully (no live session)
-    let body = serde_json::json!({ "player_id": 1, "target_club_id": 1 });
+    let body = serde_json::json!({ "player_id": 1, "target_club_id": 1, "experimental": true });
     let response = app
         .clone()
         .oneshot(
@@ -668,7 +668,7 @@ async fn test_contract_and_transfer_routes() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // 1b. Accelerate transfer with offline state should fail gracefully
-    let accelerate_body = serde_json::json!({ "player_id": 1, "instant": true });
+    let accelerate_body = serde_json::json!({ "player_id": 1, "instant": true, "experimental": true });
     let response = app
         .clone()
         .oneshot(
@@ -682,7 +682,7 @@ async fn test_contract_and_transfer_routes() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // 2. Terminate contract with offline state should fail gracefully (no live session)
-    let body = serde_json::json!({ "player_id": 1 });
+    let body = serde_json::json!({ "player_id": 1, "experimental": true });
     let response = app
         .clone()
         .oneshot(
@@ -696,7 +696,7 @@ async fn test_contract_and_transfer_routes() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // 3. Move player with offline state should fail gracefully (no live session)
-    let body = serde_json::json!({ "player_id": 1, "target_club_id": 100 });
+    let body = serde_json::json!({ "player_id": 1, "target_club_id": 100, "experimental": true });
     let response = app
         .oneshot(
             Request::post("/api/transfer/move")
@@ -982,4 +982,35 @@ async fn invalid_entity_updates_are_client_errors_not_500() {
     assert!(crate::routes::core_status(&fmlev_core::CoreError::InvalidValue("x".into())) == StatusCode::BAD_REQUEST);
     assert!(crate::routes::core_status(&fmlev_core::CoreError::PlayerNotFound(1)) == StatusCode::NOT_FOUND);
     assert!(crate::routes::core_status(&fmlev_core::CoreError::NoScanCandidates) == StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn transfer_routes_need_the_experimental_flag_and_a_game() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    let bodies = [
+        ("/api/player/contract/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
+        ("/api/player/loan/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
+        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9}"#, r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
+        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#, r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027,"experimental":true}"#),
+        ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true}"#, r#"{"player_id":5,"instant":true,"experimental":true}"#),
+    ];
+    for (uri, plain, opted_in) in bodies {
+        let refused = app.clone().oneshot(json_post(uri, plain)).await.unwrap();
+        assert_eq!(refused.status(), StatusCode::NOT_IMPLEMENTED, "{uri} without the flag");
+        let detached = app.clone().oneshot(json_post(uri, opted_in)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri} with the flag but no game");
+        let unknown = app.clone().oneshot(json_post(uri, r#"{"player_id":5,"experimental":true,"surprise":1}"#)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{uri} rejects unknown fields");
+    }
+}
+
+#[tokio::test]
+async fn club_squad_space_is_read_only_strict_and_needs_a_game() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    let detached = app.clone().oneshot(json_post("/api/club/squad-space", r#"{"club_id":1094}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+    let unknown = app.oneshot(json_post("/api/club/squad-space", r#"{"club_id":1094,"extra":1}"#)).await.unwrap();
+    assert!(unknown.status().is_client_error());
 }

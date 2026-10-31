@@ -50,6 +50,15 @@
         }
         state.activeClub[field] = value;
       }
+      const repInput = document.getElementById("club-reputation");
+      if (repInput && !repInput.disabled) {
+        const rep = Number(repInput.value);
+        if (String(repInput.value).trim() === "" || !Number.isInteger(rep) || rep < 1 || rep > 10000) {
+          showToast("Club reputation must be a whole number from 1 to 10000", "error");
+          return false;
+        }
+        state.activeClub.reputation = rep;
+      }
       if (document.getElementById("club-sugar-daddy")) state.activeClub.sugar_daddy_type = document.getElementById("club-sugar-daddy").value || "None";
 
       const submittedEntity = JSON.stringify(state.activeClub);

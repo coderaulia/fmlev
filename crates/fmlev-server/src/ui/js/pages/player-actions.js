@@ -1,9 +1,16 @@
-    // Transfer/contract actions need a live attached game and an open player profile.
+    // Transfer/contract actions need a live attached game, an open player and the explicit experimental opt-in.
+    // Loan recall has no in-game test yet, so it stays disabled.
+    function transferExperimentalOn() { return !!document.getElementById("transfer-experimental")?.checked; }
     function updateTransferButtons() {
-      for (const id of ["btn-terminate-contract", "btn-terminate-loan", "btn-move-player", "btn-sign-free-agent"]) {
+      const ready = !!state.connected && !!state.activePlayer && transferExperimentalOn();
+      const why = !state.connected ? "Attach to a game first" : !state.activePlayer ? "Open a player first"
+        : "Tick the experimental checkbox first";
+      for (const id of ["btn-terminate-contract", "btn-move-player", "btn-sign-free-agent"]) {
         const el = document.getElementById(id);
-        if (el) { el.disabled = true; el.title = "Unavailable: day-tick and save/reload evidence is incomplete"; }
+        if (el) { el.disabled = !ready; el.title = ready ? "Experimental: throwaway save only" : `Unavailable: ${why}`; }
       }
+      const loan = document.getElementById("btn-terminate-loan");
+      if (loan) { loan.disabled = true; loan.title = "Unavailable: loan recall has no in-game test yet"; }
     }
     function adjustClubField(id, delta) {
       const el = document.getElementById(id);

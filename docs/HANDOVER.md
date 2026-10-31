@@ -1,5 +1,10 @@
 # FMLE Handover
 
+## Update — 2026-11-01 (transfer actions in the UI, club reputation)
+
+- Contract tab: Terminate contract, Move player and Sign free agent work from the UI behind an experimental checkbox, a confirm dialog and `experimental: true` (the routes return 501 without it). Loan recall stays disabled (no in-game test). The target-club field shows the club's spare squad slots (`POST /api/club/squad-space`, read-only). Terminate, sign and move had a screen check and day tick on a throwaway save earlier; a save/reload was not confirmed.
+- Club header has a reputation box (native main-team reputation, 1-10,000) saved through the existing club update path; the invented 8000 placeholder is gone. Not yet checked against the game screen.
+
 ## Update — 2026-10-31 (cheats from verified writes, native stadium name)
 
 - Four cheats that were disabled now stage values for writes that were already verified (Clear Negative Balance, Big Money, Prize Table x10, Wonderkid Forge); nothing is written until Save. Not clicked in game yet.

@@ -269,6 +269,14 @@ impl NativeClubRecord {
         String::from_utf8(buf).ok()
     }
 
+    /// First-team squad occupancy `(players, capacity, spare slots)` from the team's squad vector, read-only.
+    /// A transfer into this club's first team needs at least one spare slot.
+    pub fn first_team_squad_space(&self, driver: &LinuxMemoryDriver) -> Result<(usize, usize, usize)> {
+        let team = self.first_team.ok_or_else(|| invalid("Club has no valid first team"))?;
+        let squad = crate::native_transfer::SquadVector::read(driver, team)?;
+        Ok((squad.count(), squad.capacity_count(), squad.spare_slots()))
+    }
+
     /// Stadium name of the main team's stadium (`stadium + 0x40`): a length-prefixed string, or two pooled
     /// name references (as for players), matching `fmscan entity ... club --editor` (Camp Nou, Santiago
     /// Bernabeu and Coliseum on a live save). `None` when the stadium is not mapped or the text does not

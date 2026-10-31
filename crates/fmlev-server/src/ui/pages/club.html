@@ -13,6 +13,7 @@
             <span style="font-size: 11px; color: var(--text-muted);">Reputation:</span>
             <span id="club-rep-num" style="font-weight: 800; color: var(--accent-gold);">Unavailable</span>
             <span id="club-rep-stars" class="star-rating">—</span>
+            <input id="club-reputation" type="number" min="1" max="10000" step="1" disabled class="form-control" style="width: 96px; padding: 3px 8px; font-size: 11px;" aria-label="Club reputation, 1 to 10000" title="Native main-team reputation (1-10000). Pending until Save." oninput="clubReputationInput(this.value)">
             <div style="display: flex; align-items: center; gap: 6px; margin-left: 10px;">
               <span style="font-size: 11px; color: var(--text-dim);">Switch Club:</span>
               <select id="club-switcher" class="form-control" style="width: auto; min-width: 170px; padding: 3px 8px; font-size: 11px;" onchange="if (this.value) selectSearchedClub(this.value)">

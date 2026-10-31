@@ -74,25 +74,36 @@
       <div id="transfer-actions-card" class="panel">
         <div class="panel-head">
           <span>Native transfer and contract actions</span>
-          <span class="pill pill-warn">Unavailable</span>
+          <span class="pill pill-warn">Experimental</span>
         </div>
         <div class="panel-body">
           <p class="hint">
-            These actions are disabled until their day-tick and save/reload checks are complete.
-            Release players as free agents, recall loans, move contracted players or sign free agents (the first-team squad must have a spare slot).
-            Memory readback alone does not prove safe simulation persistence.
+            Release a player as a free agent, move a contracted player to another club, or sign a free agent
+            (the destination first-team squad needs a spare slot). These redirect objects the game also references
+            elsewhere: terminate, sign and move passed a screen check and a day tick on a throwaway save, but a save/reload
+            was not confirmed. Use a throwaway save and Save As afterwards. Loan recall has no in-game test yet and stays disabled.
           </p>
+          <label class="staff-experimental-toggle">
+            <input id="transfer-experimental" type="checkbox" onchange="updateTransferButtons()">
+            <span>Enable experimental transfer actions (throwaway save only)</span>
+          </label>
           <div class="transfer-row">
             <div class="transfer-group">
-              <button id="btn-terminate-contract" disabled data-unverified="true" class="btn btn-danger" onclick="terminateContract()">Terminate contract (free agent)</button>
+              <button id="btn-terminate-contract" disabled class="btn btn-danger" onclick="terminateContract()">Terminate contract (free agent)</button>
               <button id="btn-terminate-loan" disabled data-unverified="true" class="btn" onclick="terminateLoan()">Recall from loan</button>
             </div>
             <div class="transfer-group">
-              <input id="transfer-target-club-id" type="number" class="form-control" placeholder="Target club ID" style="width: 150px;" aria-label="Target club ID">
-              <button id="btn-move-player" disabled data-unverified="true" class="btn" onclick="movePlayer()">Move player</button>
-              <button id="btn-sign-free-agent" disabled data-unverified="true" class="btn" onclick="signFreeAgent()">Sign free agent</button>
+              <input id="transfer-target-club-id" type="number" min="1" class="form-control" placeholder="Target club ID" style="width: 150px;" aria-label="Target club ID" onchange="loadTransferSpace()">
+              <span id="transfer-space-note" class="unverified-note"></span>
+              <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
+            </div>
+            <div class="transfer-group">
+              <input id="transfer-sign-wage" type="number" min="1" class="form-control" placeholder="Weekly wage (raw GBP)" style="width: 180px;" aria-label="Weekly wage in raw GBP">
+              <input id="transfer-sign-year" type="number" min="2000" max="2100" class="form-control" placeholder="Expiry year" style="width: 120px;" aria-label="Contract expiry year">
+              <button id="btn-sign-free-agent" disabled class="btn" onclick="signFreeAgent()">Sign free agent</button>
             </div>
           </div>
+          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage and expiry year are required to sign.</p>
         </div>
       </div>
     </section>

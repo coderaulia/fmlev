@@ -68,6 +68,9 @@
         if (input && !input.disabled && Number(input.value) !== club[field])
           changes.push({ label, from: club[field], to: input.value });
       }
+      const repInput = document.getElementById("club-reputation");
+      if (repInput && !repInput.disabled && Number(repInput.value) !== club.reputation)
+        changes.push({ label: "Club reputation", from: club.reputation, to: repInput.value });
       if (state.clubDirty && !changes.length) changes.push({ label: "Club details" });
       for (const action of pendingActions.get(`club:${club.club_id}`) || []) changes.push({ label: action.label });
       return changes;

@@ -138,3 +138,52 @@ test('club info shows the native stadium name and capacities, and Unavailable fo
   ui.run("renderClubOverview({ club_id: 1991, club_name: 'Espana Barcelona', stadium_name: '', stadium_capacity: 0, stadium_expansion_cap: 0 })");
   for (const id of ['club-info-stadium', 'club-info-capacity', 'club-info-expansion']) assert.equal(ui.els[id].innerText, 'Unavailable', id);
 });
+
+function repApp(fetch = async () => ok({})) {
+  const ui = createUi({ fetch, ids: ['club-reputation', 'club-rep-num', 'club-rep-stars', 'savebar', 'savebar-status', 'savebar-error'], tabs: ['tab-club'] });
+  ui.run("state.connected = true; state.activeClub = { club_id: 7, club_name: 'Club' }; Shell.init(); switchTab('tab-club')");
+  return ui;
+}
+
+test('club reputation shows only the native value and never the old 8000 placeholder', () => {
+  const ui = repApp();
+  ui.run("renderClubReputation(state.activeClub)");
+  assert.equal(ui.els['club-rep-num'].innerText, 'Unavailable');
+  assert.equal(ui.els['club-rep-stars'].innerText, '—');
+  assert.equal(ui.els['club-reputation'].disabled, true);
+  assert.equal(ui.els['club-reputation'].value, '');
+  ui.run("clubNativeRecord = { club_id: 7, reputation: 9095 }; renderClubReputation(state.activeClub)");
+  assert.equal(ui.els['club-rep-num'].innerText, (9095).toLocaleString() + ' / 10,000');
+  assert.equal(ui.els['club-reputation'].disabled, false);
+  assert.equal(String(ui.els['club-reputation'].value), '9095');
+  assert.equal(ui.run('state.activeClub.reputation'), 9095, 'the loaded native value is the baseline');
+  ui.run("clubNativeRecord = { club_id: 99, reputation: 5000 }; renderClubReputation(state.activeClub)");
+  assert.equal(ui.els['club-reputation'].disabled, true, 'a record read for another club does not count');
+});
+
+test('editing the reputation is pending, reviewed and sent through the club update route on Save', async () => {
+  const ui = repApp(async () => ok({}));
+  ui.run("clubNativeRecord = { club_id: 7, reputation: 9095 }; renderClubReputation(state.activeClub)");
+  ui.els['club-reputation'].value = '9800';
+  ui.run("clubReputationInput('9800')");
+  assert.equal(ui.run("SaveBar.isDirty('club')"), true);
+  assert.equal(ui.requests.length, 0, 'typing must not write');
+  assert.deepEqual(ui.run('clubPageChanges()').filter(c => c.label === 'Club reputation'), [{ label: 'Club reputation', from: 9095, to: '9800' }]);
+  assert.equal(await ui.run('writeClubChanges()'), true);
+  const update = ui.requests.find(r => r.url === '/api/club/update');
+  assert.equal(update.body.reputation, 9800);
+  assert.equal(update.body.club_id, 7);
+});
+
+test('an invalid reputation is refused before any request', async () => {
+  const ui = repApp();
+  ui.run("clubNativeRecord = { club_id: 7, reputation: 9095 }; renderClubReputation(state.activeClub)");
+  for (const bad of ['0', '10001', '12.5', '']) {
+    ui.els['club-reputation'].value = bad;
+    assert.equal(await ui.run('writeClubChanges()'), false, bad);
+  }
+  assert.equal(ui.requests.length, 0);
+  assert.match(ui.run('messages.at(-1).message'), /Club reputation must be a whole number from 1 to 10000/);
+  ui.run("clubReputationInput('0')");
+  assert.equal(ui.els['club-rep-num'].innerText, 'Invalid');
+});

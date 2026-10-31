@@ -240,6 +240,12 @@ pub struct ClubNativeRequest {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ClubSquadSpaceRequest {
+    pub club_id: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NationNativeRequest {
     pub nation_id: i32,
 }
@@ -266,14 +272,21 @@ pub struct ContractExtendRequest {
     pub years: Option<i32>,
 }
 
+/// Transfer actions create, detach or redirect game-referenced objects; callers must opt in explicitly.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContractTerminateRequest {
     pub player_id: i32,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LoanTerminateRequest {
     pub player_id: i32,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 #[derive(Deserialize)]
@@ -282,6 +295,8 @@ pub struct PlayerMoveRequest {
     pub player_id: i32,
     pub target_club_id: Option<i32>,
     pub target_team_address: Option<usize>,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 #[derive(Deserialize)]
@@ -292,6 +307,8 @@ pub struct PlayerSignRequest {
     pub target_team_address: Option<usize>,
     pub wage_gbp: Option<u32>,
     pub expiry_year: Option<u32>,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 #[derive(Deserialize)]
@@ -301,6 +318,8 @@ pub struct TransferAccelerateRequest {
     pub new_join_date: Option<u32>,
     #[serde(default)]
     pub instant: bool,
+    #[serde(default)]
+    pub experimental: bool,
 }
 
 /// `first_prize`/`last_prize`/`teams` identify the table by what the Rules page shows.

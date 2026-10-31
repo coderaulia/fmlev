@@ -71,6 +71,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/club/update", post(update_club))
         .route("/api/club/money", post(update_club_money))
         .route("/api/club/native", post(read_club_native))
+        .route("/api/club/squad-space", post(club_squad_space))
         .route("/api/nation/native", post(read_nation_native))
         .route("/api/competition/native", post(read_competition_native))
         .route("/api/club/preset", post(apply_club_preset))

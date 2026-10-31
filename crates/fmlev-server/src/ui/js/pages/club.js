@@ -14,10 +14,7 @@
       if (titleEl) titleEl.innerText = club.club_name || "Club";
       const lEl = document.getElementById("club-league-badge");
       if (lEl) lEl.innerText = club.league_name || "League";
-      const repEl = document.getElementById("club-rep-num");
-      if (repEl) repEl.innerText = `${(club.reputation || 8000).toLocaleString()} / 10,000`;
-      const starsEl = document.getElementById("club-rep-stars");
-      if (starsEl) starsEl.innerText = getReputationStars(club.reputation || 8000);
+      renderClubReputation(club);
 
       // Finances & Stadium
       const bal = document.getElementById("club-balance");
@@ -142,6 +139,36 @@
       }
     }
 
+    // Club reputation (native main-team reputation, 1-10000). Connected mode shows only the value read from the
+    // game; nothing is invented when it is unreadable.
+    function renderClubReputation(club) {
+      const native = state.connected ? (clubNativeRecord?.club_id === club.club_id ? clubNativeRecord : null) : club;
+      const value = native?.reputation;
+      const valid = Number.isInteger(value) && value >= 1 && value <= 10000;
+      const num = document.getElementById("club-rep-num");
+      if (num) num.innerText = valid ? `${value.toLocaleString()} / 10,000` : "Unavailable";
+      const stars = document.getElementById("club-rep-stars");
+      if (stars) stars.innerText = valid ? getReputationStars(value) : "—";
+      const input = document.getElementById("club-reputation");
+      if (input) {
+        input.disabled = !valid;
+        input.value = valid ? value : "";
+        input.title = valid ? "Native main-team reputation (1-10000). Pending until Save." : "Native value unavailable. Use Load from game to retry.";
+      }
+      if (native && valid && state.connected && state.activeClub) state.activeClub.reputation = value;
+    }
+
+    // Typing updates the display only; the value is written by Save through the club update route.
+    function clubReputationInput(raw) {
+      const value = Number(raw);
+      const valid = String(raw).trim() !== "" && Number.isInteger(value) && value >= 1 && value <= 10000;
+      const num = document.getElementById("club-rep-num");
+      if (num) num.innerText = valid ? `${value.toLocaleString()} / 10,000` : "Invalid";
+      const stars = document.getElementById("club-rep-stars");
+      if (stars) stars.innerText = valid ? getReputationStars(value) : "—";
+      markClubUnsaved();
+    }
+
     function renderClubFacilities(club) {
       const native = clubNativeRecord?.club_id === club.club_id ? clubNativeRecord : null;
       for (const [id, field] of CLUB_FACILITIES) {
@@ -158,6 +185,7 @@
         if (native && state.activeClub) state.activeClub[field] = value;
         updateClubFacilityDisplay(id, value);
       }
+      renderClubReputation(club);
     }
 
     function renderClubOverview(club) {

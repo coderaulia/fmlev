@@ -280,3 +280,7 @@ Never edit a player's injury vector (player + 0x248): a null or emptied vector f
 ## Update — 31 October 2026 (cheats, stadium name)
 - **Cheats**: Clear Negative Balance, Big Money, Prize Table x10 and Wonderkid Forge stage values in the normal editors; Save uses the earlier verified native writes. Not clicked in game; 1,000,000,000 balance was not tried in game.
 - **Stadium name (read-only)**: `stadium + 0x40` (length-prefixed or two pooled references) read in Rust equals `fmscan` for six live clubs on PID 4496 (e.g. Camp Nou 62500/105000, Santiago Bernabeu 83186/95000, Coliseum 16500/18500); a club without a stadium record reports none and the UI shows Unavailable.
+
+## Update — 1 November 2026 (transfer UI, club reputation)
+- **Transfers**: terminate contract, move and sign free agent are available in the Contract tab behind an experimental checkbox and `experimental: true`; loan recall stays disabled. Earlier evidence: screen check and day tick on a throwaway save; save/reload not confirmed. No transfer was run in this session. `POST /api/club/squad-space` (read-only) shows the target club's spare first-team slots.
+- **Club reputation**: editable native main-team reputation (1-10,000) in the Club header. Not checked against the game screen or after a day tick.

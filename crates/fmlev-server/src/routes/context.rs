@@ -911,10 +911,15 @@ pub async fn extend_contract(
 
 /// Terminates a player's contract in native memory, detaching contract, team, and agreement links,
 /// and removing the player from team squad vectors. Releases the player as a free agent.
+const TRANSFER_EXPERIMENTAL: &str = "Transfer actions are experimental: they redirect pointers the game also references elsewhere. Send \"experimental\": true and use a throwaway save.";
+
 pub async fn terminate_contract(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::ContractTerminateRequest>,
 ) -> impl IntoResponse {
+    if !payload.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_contract(payload.player_id) {
@@ -935,6 +940,9 @@ pub async fn terminate_loan(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::LoanTerminateRequest>,
 ) -> impl IntoResponse {
+    if !payload.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_loan(payload.player_id) {
@@ -956,6 +964,9 @@ pub async fn move_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerMoveRequest>,
 ) -> impl IntoResponse {
+    if !payload.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address) {
@@ -977,6 +988,9 @@ pub async fn sign_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerSignRequest>,
 ) -> impl IntoResponse {
+    if !payload.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.sign_free_agent(
@@ -1003,6 +1017,9 @@ pub async fn accelerate_transfer(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::TransferAccelerateRequest>,
 ) -> impl IntoResponse {
+    if !payload.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     if payload.instant {
@@ -1075,6 +1092,33 @@ pub async fn read_club_native(
     match w.context_mgr.read_club_native(payload.club_id) {
         Ok(club) => (StatusCode::OK, Json(serde_json::json!({ "status": "success", "club": club }))),
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
+    }
+}
+
+/// Read-only first-team squad occupancy of a club, so a transfer target with a spare slot can be chosen.
+pub async fn club_squad_space(
+    State(state): State<ServerState>,
+    Json(payload): Json<crate::state::ClubSquadSpaceRequest>,
+) -> impl IntoResponse {
+    let Some(driver) = ({
+        let r = state.inner.read().await;
+        r.context_mgr.session.as_ref().map(|session| session.driver)
+    }) else {
+        return api_error(StatusCode::BAD_REQUEST, "Attach to FM26 first");
+    };
+    let club_id = payload.club_id;
+    let result = tokio::task::spawn_blocking(move || {
+        let club = fmlev_core::native_club::NativeClubRecord::discover(&driver, club_id)?;
+        club.first_team_squad_space(&driver)
+    })
+    .await;
+    match result {
+        Ok(Ok((players, capacity, spare))) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "success", "club_id": club_id, "players": players, "capacity": capacity, "spare_slots": spare })),
+        ),
+        Ok(Err(error)) => api_error(core_status(&error), error),
+        Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
     }
 }
 

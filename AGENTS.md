@@ -538,6 +538,9 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Evidence**: the balance field and finance object are the verified native club money path (`POST /api/club/money`). Live read-only check (PID 4496): the selling club (Girona, Blind's current team) and a buying club (Dewa United Banten FC) resolved from team pointers, with finance back-pointers valid. Tests: `native_club::balance_edit` unit test, a UI test for the optional fee field. **Not run**: no transfer with a fee was executed; whether the game shows the fee in its transfer history, or reverts balances at month end, is unknown.
 - **Not covered**: a core test of `move_player` with fees on fake squads (the fake setup is large); transfer budget changes; installment or sell-on terms.
 
+### Sign form wage is yearly (2026-11-01)
+- The Sign free agent form on the Contract tab now takes a **yearly** wage in raw GBP and sends `wage_gbp` = round(yearly / 52) (the game stores a weekly wage; for example 245,000 per year is 4,712 per week). Yearly below 26 is refused. The API (`wage_gbp`) is still weekly. UI tests cover the conversion and the rejects.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

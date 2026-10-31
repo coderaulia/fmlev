@@ -100,12 +100,12 @@
               <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
             </div>
             <div class="transfer-group">
-              <input id="transfer-sign-wage" type="number" min="1" class="form-control" placeholder="Weekly wage (raw GBP)" style="width: 180px;" aria-label="Weekly wage in raw GBP">
+              <input id="transfer-sign-wage" type="number" min="26" class="form-control" placeholder="Yearly wage (raw GBP)" style="width: 180px;" aria-label="Yearly wage in raw GBP">
               <input id="transfer-sign-year" type="number" min="2000" max="2100" class="form-control" placeholder="Expiry year" style="width: 120px;" aria-label="Contract expiry year">
               <button id="btn-sign-free-agent" disabled class="btn" onclick="signFreeAgent()">Sign free agent</button>
             </div>
           </div>
-          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage and expiry year are required to sign. A move fee is optional: it is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
+          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage (per year, raw GBP; stored per week as the yearly amount divided by 52) and expiry year are required to sign. A move fee is optional: it is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
         </div>
       </div>
     </section>

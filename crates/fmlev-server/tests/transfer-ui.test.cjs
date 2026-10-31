@@ -69,7 +69,7 @@ test('sign requires an explicit wage and expiry year (no invented defaults)', as
   ui.run('displayPlayer = () => {}');
   ui.els['transfer-target-club-id'].value = '1094';
   assert.equal(await ui.run('signFreeAgent()'), false, 'no wage or year');
-  ui.els['transfer-sign-wage'].value = '5000';
+  ui.els['transfer-sign-wage'].value = '260000';
   assert.equal(await ui.run('signFreeAgent()'), false, 'no year');
   ui.els['transfer-sign-year'].value = '1999';
   assert.equal(await ui.run('signFreeAgent()'), false, 'year out of range');
@@ -124,4 +124,24 @@ test('move sends an optional transfer fee only when one is entered, and rejects 
   ui.els['transfer-fee'].value = '';
   assert.equal(await ui.run('movePlayer()'), true);
   assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, experimental: true }, 'no fee field without a fee');
+});
+
+test('sign takes a yearly wage and sends the stored weekly amount (yearly / 52, rounded)', async () => {
+  const ui = app();
+  opt(ui);
+  ui.run('displayPlayer = () => {}');
+  ui.els['transfer-target-club-id'].value = '1094';
+  ui.els['transfer-sign-year'].value = '2028';
+  for (const bad of ['', '0', '20', '1.5', 'abc']) {
+    ui.els['transfer-sign-wage'].value = bad;
+    assert.equal(await ui.run('signFreeAgent()'), false, `yearly ${bad}`);
+  }
+  assert.equal(ui.requests.length, 0);
+  ui.els['transfer-sign-wage'].value = '4160000'; // 80,000 per week
+  assert.equal(await ui.run('signFreeAgent()'), true);
+  assert.equal(ui.requests.find(r => r.url === '/api/transfer/sign').body.wage_gbp, 80000);
+  ui.requests.length = 0;
+  ui.els['transfer-sign-wage'].value = '245000'; // 4711.5 per week rounds to 4712
+  await ui.run('signFreeAgent()');
+  assert.equal(ui.requests.find(r => r.url === '/api/transfer/sign').body.wage_gbp, 4712);
 });

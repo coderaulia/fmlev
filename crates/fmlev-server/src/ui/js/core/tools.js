@@ -111,11 +111,13 @@
     async function signFreeAgent() {
       const club = transferTargetClubId();
       if (club === null) { showToast("Enter the target club ID (a positive whole number)", "warning"); return false; }
-      const wage = Number(document.getElementById("transfer-sign-wage")?.value);
+      const yearly = Number(document.getElementById("transfer-sign-wage")?.value);
       const year = Number(document.getElementById("transfer-sign-year")?.value);
-      if (!Number.isInteger(wage) || wage < 1 || wage > 2147483647) { showToast("Enter the weekly wage as a whole number of raw GBP", "warning"); return false; }
+      // The game stores a weekly wage: the yearly amount divided by 52, rounded to whole GBP.
+      const wage = Math.round(yearly / 52);
+      if (!Number.isInteger(yearly) || yearly < 26 || wage < 1 || wage > 2147483647) { showToast("Enter the yearly wage as a whole number of raw GBP (at least 26)", "warning"); return false; }
       if (!Number.isInteger(year) || year < 2000 || year > 2100) { showToast("Enter the contract expiry year (2000 to 2100)", "warning"); return false; }
       const name = state.activePlayer?.name || "this player";
       return runTransferAction("/api/transfer/sign", { target_club_id: club, wage_gbp: wage, expiry_year: year },
-        `Sign ${name} to club ${club} at ${wage.toLocaleString()} per week until ${year}? The player must be a free agent and the squad needs a spare slot. Use a throwaway save.`);
+        `Sign ${name} to club ${club} at ${yearly.toLocaleString()} per year (${wage.toLocaleString()} per week) until ${year}? The player must be a free agent and the squad needs a spare slot. Use a throwaway save.`);
     }

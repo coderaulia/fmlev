@@ -153,7 +153,7 @@
       if (input) {
         input.disabled = !valid;
         input.value = valid ? value : "";
-        input.title = valid ? "Native main-team reputation (1-10000). Pending until Save." : "Native value unavailable. Use Load from game to retry.";
+        input.title = valid ? "Native main-team reputation (1-10000). The game shows a band, not the number: 6500 shows Continental and 9500 shows Worldwide, so small changes may not change the label. Pending until Save." : "Native value unavailable. Use Load from game to retry.";
       }
       if (native && valid && state.connected && state.activeClub) state.activeClub.reputation = value;
     }

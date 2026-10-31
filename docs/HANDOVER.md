@@ -3,7 +3,7 @@
 ## Update — 2026-11-01 (latest state)
 
 - **Transfers (user-confirmed working)**: terminate contract, sign and move work from the Contract tab (experimental checkbox, confirm dialog, `experimental: true`). Move takes an optional fee (raw GBP) taken from the buying club's balance and added to the selling club's in the same transaction; the fee path itself has not been run in game. Loan recall stays disabled. A save/reload after a transfer is still unconfirmed in the docs.
-- **Club reputation (NOT working in game)**: the Club header box writes `team + 0xa8` and the write is confirmed in memory (Getafe 6948 to 6949 and back via the API), but the game's club screen does not follow it, or the game recomputes it. Next step: open a club page in the game, dump the UI bindings for it, find the property and match it to a memory field. The separate `world_reputation` (`club + 0x166`) is read but not editable.
+- **Club reputation (verified in game)**: the Club header box writes `team + 0xa8`. Persib showed Continental at 6500 and Worldwide at 9500 on the game's club page. The game shows a band (`ReputationScope`), so one-point edits do not change the label. The separate `world_reputation` (`club + 0x166`) is read but not editable.
 - **Contract**: squad status and release clause are native (see below); happiness is not editable (derived by the game). The tab no longer shows invented values.
 
 ## Update — 2026-11-01 (contract squad status and release clause)

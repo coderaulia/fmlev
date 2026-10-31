@@ -991,7 +991,7 @@ async fn transfer_routes_need_the_experimental_flag_and_a_game() {
     let bodies = [
         ("/api/player/contract/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
         ("/api/player/loan/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
-        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9}"#, r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
+        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028}"#, r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028,"experimental":true}"#),
         ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#, r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027,"experimental":true}"#),
         ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true}"#, r#"{"player_id":5,"instant":true,"experimental":true}"#),
     ];
@@ -1013,4 +1013,22 @@ async fn club_squad_space_is_read_only_strict_and_needs_a_game() {
     assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
     let unknown = app.oneshot(json_post("/api/club/squad-space", r#"{"club_id":1094,"extra":1}"#)).await.unwrap();
     assert!(unknown.status().is_client_error());
+}
+
+#[tokio::test]
+async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    for (uri, body) in [
+        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
+        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"experimental":true}"#),
+        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
+        ("/api/transfer/sign", r#"{"player_id":5,"wage_gbp":5000,"expiry_year":2028,"experimental":true}"#),
+    ] {
+        let response = app.clone().oneshot(json_post(uri, body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri} {body}");
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(text.contains("wage") || text.contains("target club"), "{text}");
+    }
 }

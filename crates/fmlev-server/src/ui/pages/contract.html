@@ -88,24 +88,32 @@
             <input id="transfer-experimental" type="checkbox" onchange="updateTransferButtons()">
             <span>Enable experimental transfer actions (throwaway save only)</span>
           </label>
+          <div class="transfer-required" role="note">
+            <b>Required for Move and Sign:</b> target club ID *, yearly wage *, expiry year *. Fill all three, or the
+            action stays disabled (a contract with missing terms is never created). <b>Optional:</b> fee (Move only).
+            Terminate needs no fields.
+          </div>
           <div class="transfer-row">
             <div class="transfer-group">
               <button id="btn-terminate-contract" disabled class="btn btn-danger" onclick="terminateContract()">Terminate contract (free agent)</button>
               <button id="btn-terminate-loan" disabled data-unverified="true" class="btn" onclick="terminateLoan()">Recall from loan</button>
             </div>
             <div class="transfer-group">
-              <input id="transfer-target-club-id" type="number" min="1" class="form-control" placeholder="Target club ID" style="width: 150px;" aria-label="Target club ID" onchange="loadTransferSpace()">
+              <input id="transfer-target-club-id" type="number" min="1" required aria-required="true" class="form-control" placeholder="Target club ID *" style="width: 150px;" aria-label="Target club ID (required)" onchange="loadTransferSpace()" oninput="updateTransferButtons()">
               <span id="transfer-space-note" class="unverified-note"></span>
-              <input id="transfer-fee" type="number" min="1" max="2147483647" class="form-control" placeholder="Fee (raw GBP, optional)" style="width: 170px;" aria-label="Transfer fee in raw GBP">
-              <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
             </div>
             <div class="transfer-group">
-              <input id="transfer-sign-wage" type="number" min="26" class="form-control" placeholder="Yearly wage (raw GBP)" style="width: 180px;" aria-label="Yearly wage in raw GBP">
-              <input id="transfer-sign-year" type="number" min="2000" max="2100" class="form-control" placeholder="Expiry year" style="width: 120px;" aria-label="Contract expiry year">
+              <input id="transfer-sign-wage" type="number" min="26" required aria-required="true" class="form-control" placeholder="Yearly wage (raw GBP) *" style="width: 190px;" aria-label="Yearly wage in raw GBP (required)" oninput="updateTransferButtons()">
+              <input id="transfer-sign-year" type="number" min="2000" max="2100" required aria-required="true" class="form-control" placeholder="Expiry year *" style="width: 130px;" aria-label="Contract expiry year (required)" oninput="updateTransferButtons()">
+              <input id="transfer-fee" type="number" min="1" max="2147483647" class="form-control" placeholder="Fee (raw GBP, optional)" style="width: 190px;" aria-label="Transfer fee in raw GBP (optional, Move only)" oninput="updateTransferButtons()">
+            </div>
+            <div class="transfer-group">
+              <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
               <button id="btn-sign-free-agent" disabled class="btn" onclick="signFreeAgent()">Sign free agent</button>
             </div>
           </div>
-          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage (per year, raw GBP; stored per week as the yearly amount divided by 52) and expiry year are required to sign. A move fee is optional: it is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
+          <p id="transfer-missing-note" class="unverified-note"></p>
+          <p class="unverified-note">Move and Sign use the target club's first team. The wage is per year in raw GBP (stored per week as the yearly amount divided by 52); Move also replaces the player's current wage and expiry with these. A move fee is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
         </div>
       </div>
     </section>

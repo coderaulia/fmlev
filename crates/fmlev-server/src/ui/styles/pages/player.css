@@ -587,3 +587,5 @@ body.mode-compact-overlay .attr-two-col { grid-template-columns: minmax(0, 1fr);
 body.mode-compact-overlay .attr-step { opacity: 1; min-height: 28px; }
 
 .football-pitch { margin-left: auto; margin-right: auto; }
+.transfer-required { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--warning); border-radius: 6px; line-height: 1.5; }
+.form-control.field-missing { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }

@@ -556,6 +556,13 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Live (PID 4496)**: the date is read (265555509) and recorded, the followed player was already indexed (no rebuild). **Not yet seen live**: an actual rebuild after a day tick or after a newly generated player appears; no youth intake was available to test, so that is covered only by the unit tests and the earlier Reno finding.
 - **Limit**: new players that appear without a day tick or without being opened in the game are found at the next date change; a player created and left unopened is searchable after the next day passes.
 
+### Move and Sign require the full contract terms (2026-11-02)
+- **User requirement**: for a free transfer (Sign) and for a move from another team, the target club, yearly wage and expiry year must all be filled, or the contract ends up wrong; the form must say so.
+- **UI**: the Contract tab marks Target club ID *, Yearly wage * and Expiry year * as required (placeholders, `required`, a note box, red border on missing fields and a "Required before Move or Sign: ..." line). Move and Sign stay disabled until all three are valid; Terminate needs no fields; the fee is optional (Move only) and an invalid fee disables Move. The confirm dialog states the wage (yearly and weekly) and expiry. Move now sends `wage_gbp` (yearly / 52) and `expiry_year` too.
+- **Backend**: `POST /api/transfer/move` and `/api/transfer/sign` return 400 with a clear message when `wage_gbp`, `expiry_year` or the target club is missing (no defaults such as the old 1000/2027). Move writes the new weekly wage (`contract + 0x20`) and the expiry year (`contract + 0x48`, keeping the day and flags via `expiry_with_year`) in the same transaction as the squad vector, team pointer and optional fee edits; `NewContractTerms::validate` refuses wage 0 or above i32::MAX and years outside 2000..=2200.
+- **Tests**: UI (`transfer-ui.test.cjs`: gating, refusals listing the missing fields, payloads, confirm text), server (`move_and_sign_refuse_missing_contract_terms_with_a_clear_message`), core (`new_contract_terms_need_a_real_wage_and_a_sane_expiry_year`).
+- **Not run in game**: no move with new terms was executed here; whether the game accepts the rewritten wage and expiry on the moved contract (and shows them on the Contract screen) is unconfirmed.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

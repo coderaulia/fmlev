@@ -307,6 +307,11 @@ pub struct PlayerMoveRequest {
     /// Optional transfer fee in raw GBP, moved from the buying club's balance to the selling club's.
     #[serde(default)]
     pub fee_gbp: Option<u32>,
+    /// Required with the move: the weekly wage (raw GBP) and expiry year of the contract at the new club.
+    #[serde(default)]
+    pub wage_gbp: Option<u32>,
+    #[serde(default)]
+    pub expiry_year: Option<u32>,
     #[serde(default)]
     pub experimental: bool,
 }

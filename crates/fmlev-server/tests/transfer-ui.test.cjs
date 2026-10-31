@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createUi } = require('./helpers/fake-dom.cjs');
 const ok = data => ({ ok: true, json: async () => data });
 
-const IDS = ['transfer-fee', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent', 'transfer-experimental',
+const IDS = ['transfer-fee', 'transfer-missing-note', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent', 'transfer-experimental',
   'transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year', 'savebar', 'savebar-status', 'savebar-error'];
 
 function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true } = {}) {
@@ -11,21 +11,10 @@ function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true
   ui.run("state.connected = true; state.activePlayer = { id: 42, name: 'Test Player' }; Shell.init();");
   return ui;
 }
+const fill = (ui, { club = '1094', wage = '260000', year = '2028' } = {}) => {
+  ui.els['transfer-target-club-id'].value = club; ui.els['transfer-sign-wage'].value = wage; ui.els['transfer-sign-year'].value = year;
+};
 const opt = (ui, on = true) => { ui.els['transfer-experimental'].checked = on; ui.run('updateTransferButtons()'); };
-
-test('transfer buttons are disabled until attached, a player is open and the opt-in is ticked; loan recall never', () => {
-  const ui = app();
-  ui.run('updateTransferButtons()');
-  for (const id of ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent']) assert.equal(ui.els[id].disabled, true, id);
-  opt(ui);
-  for (const id of ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent']) assert.equal(ui.els[id].disabled, false, id);
-  assert.equal(ui.els['btn-terminate-loan'].disabled, true);
-  ui.run('state.connected = false; updateTransferButtons()');
-  assert.equal(ui.els['btn-terminate-contract'].disabled, true);
-  assert.match(ui.els['btn-terminate-contract'].title, /Attach to a game/);
-  ui.run('state.connected = true; state.activePlayer = null; updateTransferButtons()');
-  assert.match(ui.els['btn-move-player'].title, /Open a player/);
-});
 
 test('terminate asks for confirmation, sends the experimental opt-in and reloads the player', async () => {
   const ui = app(async (url) => (url === '/api/context/select' ? ok({ player: { id: 42, name: 'Test Player', club_id: 0 } }) : ok({ message: 'Player contract terminated.' })));
@@ -47,37 +36,6 @@ test('declining the confirmation or leaving the opt-in off sends nothing', async
   assert.equal(await off.run('terminateContract()'), false);
   assert.equal(off.requests.length, 0);
   assert.match(off.run('messages.at(-1).message'), /experimental checkbox/);
-});
-
-test('move needs a valid target club id and sends it with the opt-in', async () => {
-  const ui = app();
-  opt(ui);
-  ui.run('displayPlayer = () => {}');
-  for (const bad of ['', '0', '-3', '1.5']) {
-    ui.els['transfer-target-club-id'].value = bad;
-    assert.equal(await ui.run('movePlayer()'), false, bad);
-  }
-  assert.equal(ui.requests.length, 0);
-  ui.els['transfer-target-club-id'].value = '1094';
-  assert.equal(await ui.run('movePlayer()'), true);
-  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, experimental: true });
-});
-
-test('sign requires an explicit wage and expiry year (no invented defaults)', async () => {
-  const ui = app();
-  opt(ui);
-  ui.run('displayPlayer = () => {}');
-  ui.els['transfer-target-club-id'].value = '1094';
-  assert.equal(await ui.run('signFreeAgent()'), false, 'no wage or year');
-  ui.els['transfer-sign-wage'].value = '260000';
-  assert.equal(await ui.run('signFreeAgent()'), false, 'no year');
-  ui.els['transfer-sign-year'].value = '1999';
-  assert.equal(await ui.run('signFreeAgent()'), false, 'year out of range');
-  assert.equal(ui.requests.length, 0);
-  ui.els['transfer-sign-year'].value = '2028';
-  assert.equal(await ui.run('signFreeAgent()'), true);
-  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/sign').body,
-    { player_id: 42, target_club_id: 1094, wage_gbp: 5000, expiry_year: 2028, experimental: true });
 });
 
 test('a server refusal is shown and the player is not reloaded; loan recall stays unavailable', async () => {
@@ -107,41 +65,102 @@ test('target club squad space is read-only and shown next to the club id', async
   assert.equal(ui.requests.length, 1, 'an invalid id makes no request');
 });
 
-test('move sends an optional transfer fee only when one is entered, and rejects invalid fees', async () => {
+const FIELDS = ['transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year'];
+const ENABLED = ui => ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent'].map(id => !ui.els[id].disabled);
+
+test('Move and Sign stay disabled until the target club, yearly wage and expiry year are all filled; loan recall never', () => {
   const ui = app();
+  opt(ui, false);
+  assert.deepEqual(ENABLED(ui), [false, false, false], 'nothing without the opt-in');
   opt(ui);
-  ui.run('displayPlayer = () => {}');
-  ui.els['transfer-target-club-id'].value = '1094';
-  for (const bad of ['0', '-5', '1.5', '2147483648', 'abc']) {
-    ui.els['transfer-fee'].value = bad;
-    assert.equal(await ui.run('movePlayer()'), false, bad);
+  assert.deepEqual(ENABLED(ui), [true, false, false], 'terminate needs no fields; Move and Sign need the form');
+  assert.match(ui.els['btn-move-player'].title, /Fill the required fields: target club ID, yearly wage, expiry year/);
+  assert.match(ui.els['transfer-missing-note'].innerText, /Required before Move or Sign: target club ID, yearly wage, expiry year/);
+  for (const [id, value] of [['transfer-target-club-id', '1094'], ['transfer-sign-wage', '260000']]) {
+    ui.els[id].value = value; ui.run('updateTransferButtons()');
+    assert.deepEqual(ENABLED(ui), [true, false, false], `still incomplete after ${id}`);
   }
-  assert.equal(ui.requests.length, 0);
-  ui.els['transfer-fee'].value = '15000000';
-  assert.equal(await ui.run('movePlayer()'), true);
-  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, fee_gbp: 15000000, experimental: true });
-  ui.requests.length = 0;
-  ui.els['transfer-fee'].value = '';
-  assert.equal(await ui.run('movePlayer()'), true);
-  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, experimental: true }, 'no fee field without a fee');
+  assert.match(ui.els['transfer-missing-note'].innerText, /expiry year/);
+  ui.els['transfer-sign-year'].value = '2028'; ui.run('updateTransferButtons()');
+  assert.deepEqual(ENABLED(ui), [true, true, true]);
+  assert.equal(ui.els['transfer-missing-note'].innerText, '');
+  assert.equal(ui.els['btn-terminate-loan'].disabled, true);
+  ui.run('state.connected = false; updateTransferButtons()');
+  assert.match(ui.els['btn-move-player'].title, /Attach to a game/);
+  ui.run('state.connected = true; state.activePlayer = null; updateTransferButtons()');
+  assert.match(ui.els['btn-sign-free-agent'].title, /Open a player/);
 });
 
-test('sign takes a yearly wage and sends the stored weekly amount (yearly / 52, rounded)', async () => {
+test('an invalid fee also disables Move but not Sign', () => {
+  const ui = app();
+  opt(ui);
+  fill(ui);
+  ui.els['transfer-fee'].value = '0';
+  ui.run('updateTransferButtons()');
+  assert.equal(ui.els['btn-move-player'].disabled, true);
+  assert.match(ui.els['btn-move-player'].title, /fee must be a whole number/);
+  assert.equal(ui.els['btn-sign-free-agent'].disabled, false);
+  ui.els['transfer-fee'].value = '';
+  ui.run('updateTransferButtons()');
+  assert.equal(ui.els['btn-move-player'].disabled, false);
+});
+
+test('Move and Sign refuse an incomplete form and list what is missing', async () => {
   const ui = app();
   opt(ui);
   ui.run('displayPlayer = () => {}');
-  ui.els['transfer-target-club-id'].value = '1094';
-  ui.els['transfer-sign-year'].value = '2028';
-  for (const bad of ['', '0', '20', '1.5', 'abc']) {
-    ui.els['transfer-sign-wage'].value = bad;
-    assert.equal(await ui.run('signFreeAgent()'), false, `yearly ${bad}`);
+  for (const action of ['movePlayer', 'signFreeAgent']) {
+    assert.equal(await ui.run(`${action}()`), false, action);
+    assert.match(ui.run('messages.at(-1).message'), /Required: target club ID, yearly wage, expiry year/);
+  }
+  fill(ui, { year: '' });
+  assert.equal(await ui.run('movePlayer()'), false);
+  assert.match(ui.run('messages.at(-1).message'), /Required: expiry year\./);
+  for (const [field, bad] of [['transfer-target-club-id', '0'], ['transfer-target-club-id', '1.5'], ['transfer-sign-wage', '20'], ['transfer-sign-wage', 'abc'], ['transfer-sign-year', '1999'], ['transfer-sign-year', '2101']]) {
+    fill(ui); ui.els[field].value = bad;
+    assert.equal(await ui.run('signFreeAgent()'), false, `${field}=${bad}`);
+  }
+  assert.equal(ui.requests.length, 0, 'an incomplete form never reaches the server');
+});
+
+test('Move sends the new wage (yearly / 52) and expiry with the club, plus the fee only when entered', async () => {
+  const ui = app();
+  opt(ui);
+  ui.run('displayPlayer = () => {}');
+  fill(ui, { wage: '4160000' }); // 80,000 per week
+  assert.equal(await ui.run('movePlayer()'), true);
+  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body,
+    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028, experimental: true });
+  ui.requests.length = 0;
+  ui.els['transfer-fee'].value = '15000000';
+  assert.equal(await ui.run('movePlayer()'), true);
+  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body,
+    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028, fee_gbp: 15000000, experimental: true });
+  ui.requests.length = 0;
+  for (const bad of ['0', '-5', '1.5', '2147483648', 'abc']) {
+    ui.els['transfer-fee'].value = bad;
+    assert.equal(await ui.run('movePlayer()'), false, `fee ${bad}`);
   }
   assert.equal(ui.requests.length, 0);
-  ui.els['transfer-sign-wage'].value = '4160000'; // 80,000 per week
+});
+
+test('Sign sends the stored weekly wage (yearly / 52, rounded), the expiry year and the club', async () => {
+  const ui = app();
+  opt(ui);
+  ui.run('displayPlayer = () => {}');
+  fill(ui, { wage: '245000' }); // 4711.5 per week rounds to 4712
   assert.equal(await ui.run('signFreeAgent()'), true);
-  assert.equal(ui.requests.find(r => r.url === '/api/transfer/sign').body.wage_gbp, 80000);
-  ui.requests.length = 0;
-  ui.els['transfer-sign-wage'].value = '245000'; // 4711.5 per week rounds to 4712
-  await ui.run('signFreeAgent()');
-  assert.equal(ui.requests.find(r => r.url === '/api/transfer/sign').body.wage_gbp, 4712);
+  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/sign').body,
+    { player_id: 42, target_club_id: 1094, wage_gbp: 4712, expiry_year: 2028, experimental: true });
+});
+
+test('the confirm text names the contract terms that will be written', async () => {
+  let asked = '';
+  const ui = createUi({ fetch: async () => ok({ message: 'done' }), ids: IDS, tabs: ['tab-contract'], extra: { confirm: text => { asked = text; return true; } } });
+  ui.run("state.connected = true; state.activePlayer = { id: 42, name: 'Test Player' }; Shell.init(); displayPlayer = () => {}");
+  opt(ui);
+  fill(ui, { wage: '260000' });
+  await ui.run('movePlayer()');
+  assert.match(asked, /260,000 per year \(5,000 per week\) until 2028/);
+  assert.match(asked, /current wage and expiry are replaced/);
 });

@@ -5,10 +5,26 @@
       const ready = !!state.connected && !!state.activePlayer && transferExperimentalOn();
       const why = !state.connected ? "Attach to a game first" : !state.activePlayer ? "Open a player first"
         : "Tick the experimental checkbox first";
-      for (const id of ["btn-terminate-contract", "btn-move-player", "btn-sign-free-agent"]) {
+      const form = transferFormState();
+      const terminate = document.getElementById("btn-terminate-contract");
+      if (terminate) { terminate.disabled = !ready; terminate.title = ready ? "Experimental: throwaway save only" : `Unavailable: ${why}`; }
+      for (const [id, needsFee] of [["btn-move-player", true], ["btn-sign-free-agent", false]]) {
         const el = document.getElementById(id);
-        if (el) { el.disabled = !ready; el.title = ready ? "Experimental: throwaway save only" : `Unavailable: ${why}`; }
+        if (!el) continue;
+        const blocked = !ready ? why : form.missing.length ? `Fill the required fields: ${form.missing.join(", ")}` : (needsFee && !form.feeValid ? "The fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty)" : "");
+        el.disabled = !!blocked;
+        el.title = blocked ? `Unavailable: ${blocked}` : "Experimental: throwaway save only";
       }
+      // Mark empty or invalid required fields and say which are missing.
+      const fields = [["transfer-target-club-id", "target club ID"], ["transfer-sign-wage", "yearly wage"], ["transfer-sign-year", "expiry year"]];
+      for (const [id, label] of fields) {
+        const input = document.getElementById(id);
+        if (input && input.classList) input.classList.toggle("field-missing", form.missing.includes(label));
+      }
+      const fee = document.getElementById("transfer-fee");
+      if (fee && fee.classList) fee.classList.toggle("field-missing", !form.feeValid);
+      const note = document.getElementById("transfer-missing-note");
+      if (note) note.innerText = ready && form.missing.length ? `Required before Move or Sign: ${form.missing.join(", ")}.` : "";
       const loan = document.getElementById("btn-terminate-loan");
       if (loan) { loan.disabled = true; loan.title = "Unavailable: loan recall has no in-game test yet"; }
     }

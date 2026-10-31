@@ -979,7 +979,10 @@ pub async fn move_player(
     }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
-    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp) {
+    let Some(terms) = payload.wage_gbp.zip(payload.expiry_year).map(|(wage_gbp, expiry_year)| fmlev_core::native_transfer::NewContractTerms { wage_gbp, expiry_year }) else {
+        return api_error(StatusCode::BAD_REQUEST, "A move needs the new weekly wage (wage_gbp) and the new expiry year (expiry_year): the contract at the new club must be filled in");
+    };
+    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp, Some(terms)) {
         Ok((from_team, to_team)) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -1002,6 +1005,9 @@ pub async fn sign_player(
         return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
     }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
+    if payload.wage_gbp.is_none() || payload.expiry_year.is_none() || (payload.target_club_id.is_none() && payload.target_team_address.is_none()) {
+        return api_error(StatusCode::BAD_REQUEST, "Signing needs the target club (target_club_id), the weekly wage (wage_gbp) and the expiry year (expiry_year): a contract with missing terms is not created");
+    }
     let mut w = state.inner.write().await;
     match w.context_mgr.sign_free_agent(
         payload.player_id,

@@ -97,27 +97,38 @@
         `Release ${name} as a free agent? This detaches the contract and removes the player from every squad. Use a throwaway save.`);
     }
     async function terminateLoan() { return unavailableTransfer(); }
+    // One reading of the transfer form. Club, yearly wage and expiry year are required for Move and Sign; the fee is
+    // optional (Move only). The game stores a weekly wage: the yearly amount divided by 52, rounded to whole GBP.
+    function transferFormState() {
+      const read = id => { const raw = String(document.getElementById(id)?.value ?? "").trim(); return raw === "" ? null : Number(raw); };
+      const club = read("transfer-target-club-id"), yearly = read("transfer-sign-wage"), year = read("transfer-sign-year"), fee = read("transfer-fee");
+      const wage = yearly === null ? null : Math.round(yearly / 52);
+      const missing = [];
+      if (!(Number.isInteger(club) && club > 0)) missing.push("target club ID");
+      if (!(Number.isInteger(yearly) && yearly >= 26 && wage >= 1 && wage <= 2147483647)) missing.push("yearly wage");
+      if (!(Number.isInteger(year) && year >= 2000 && year <= 2100)) missing.push("expiry year");
+      const feeValid = fee === null || (Number.isInteger(fee) && fee >= 1 && fee <= 2147483647);
+      return { club, yearly, wage, year, fee, feeValid, missing };
+    }
+    function refuseMissing(form) {
+      showToast(`Required: ${form.missing.join(", ")}. All three must be filled, or the contract would be incomplete.`, "warning");
+      return false;
+    }
     async function movePlayer() {
-      const club = transferTargetClubId();
-      if (club === null) { showToast("Enter the target club ID (a positive whole number)", "warning"); return false; }
-      const feeRaw = String(document.getElementById("transfer-fee")?.value ?? "").trim();
-      const fee = feeRaw === "" ? null : Number(feeRaw);
-      if (fee !== null && (!Number.isInteger(fee) || fee < 1 || fee > 2147483647)) { showToast("The transfer fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty for no fee)", "warning"); return false; }
+      const form = transferFormState();
+      if (form.missing.length) return refuseMissing(form);
+      if (!form.feeValid) { showToast("The transfer fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty for no fee)", "warning"); return false; }
       const name = state.activePlayer?.name || "this player";
-      const feeText = fee === null ? "" : ` The fee of ${fee.toLocaleString()} moves from the buying club's balance to the selling club's.`;
-      return runTransferAction("/api/transfer/move", fee === null ? { target_club_id: club } : { target_club_id: club, fee_gbp: fee },
-        `Move ${name} to club ${club}?${feeText} The destination first-team squad needs a spare slot. Use a throwaway save.`);
+      const feeText = form.fee === null ? "" : ` The fee of ${form.fee.toLocaleString()} moves from the buying club's balance to the selling club's.`;
+      const body = { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year };
+      if (form.fee !== null) body.fee_gbp = form.fee;
+      return runTransferAction("/api/transfer/move", body,
+        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. The destination first-team squad needs a spare slot. Use a throwaway save.`);
     }
     async function signFreeAgent() {
-      const club = transferTargetClubId();
-      if (club === null) { showToast("Enter the target club ID (a positive whole number)", "warning"); return false; }
-      const yearly = Number(document.getElementById("transfer-sign-wage")?.value);
-      const year = Number(document.getElementById("transfer-sign-year")?.value);
-      // The game stores a weekly wage: the yearly amount divided by 52, rounded to whole GBP.
-      const wage = Math.round(yearly / 52);
-      if (!Number.isInteger(yearly) || yearly < 26 || wage < 1 || wage > 2147483647) { showToast("Enter the yearly wage as a whole number of raw GBP (at least 26)", "warning"); return false; }
-      if (!Number.isInteger(year) || year < 2000 || year > 2100) { showToast("Enter the contract expiry year (2000 to 2100)", "warning"); return false; }
+      const form = transferFormState();
+      if (form.missing.length) return refuseMissing(form);
       const name = state.activePlayer?.name || "this player";
-      return runTransferAction("/api/transfer/sign", { target_club_id: club, wage_gbp: wage, expiry_year: year },
-        `Sign ${name} to club ${club} at ${yearly.toLocaleString()} per year (${wage.toLocaleString()} per week) until ${year}? The player must be a free agent and the squad needs a spare slot. Use a throwaway save.`);
+      return runTransferAction("/api/transfer/sign", { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year },
+        `Sign ${name} to club ${form.club} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Use a throwaway save.`);
     }

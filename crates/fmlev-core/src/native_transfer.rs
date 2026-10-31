@@ -449,6 +449,27 @@ pub fn terminate_loan(
 
 /// Moves a contracted player from their current team to a target team.
 /// Requires the target team squad vector to have spare capacity (`end < capacity`).
+/// Wage and expiry written onto the player's contract when he is moved to a new club.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewContractTerms {
+    /// Weekly wage in raw GBP.
+    pub wage_gbp: u32,
+    pub expiry_year: u32,
+}
+
+impl NewContractTerms {
+    /// Wage 1..=i32::MAX per week and an expiry year from 2000 to 2200; anything else is refused.
+    pub fn validate(&self) -> Result<()> {
+        if self.wage_gbp == 0 || self.wage_gbp > i32::MAX as u32 {
+            return Err(invalid("Wage must be a whole weekly amount from 1 to 2,147,483,647"));
+        }
+        if !(2000..=2200).contains(&self.expiry_year) {
+            return Err(invalid("Contract expiry year must be between 2000 and 2200"));
+        }
+        Ok(())
+    }
+}
+
 /// Moves a contracted player to `target_team`. With `fee_gbp` the fee (raw GBP) is also moved between the club
 /// balances in the same transaction: the receiving club's balance falls by the fee and the selling club's rises.
 /// Transfer budgets are not changed.
@@ -457,6 +478,7 @@ pub fn move_player(
     player: &NativePlayerRecord,
     target_team: usize,
     fee_gbp: Option<u32>,
+    terms: Option<NewContractTerms>,
 ) -> Result<(usize, usize)> {
     let actual_player = player.address - ACTUAL_PLAYER_OFFSET;
     let contract_addr = driver.read_ptr(player.address + CONTRACT_OFFSET)?;
@@ -545,6 +567,16 @@ pub fn move_player(
             0usize.to_le_bytes().to_vec(),
             "clear loan node pointer upon permanent move",
         ));
+    }
+
+    // 6b. New wage and expiry for the new club, written onto the same contract in the same transaction.
+    if let Some(terms) = terms {
+        terms.validate()?;
+        let old_wage = driver.read::<u32>(contract_addr + 0x20)?;
+        edits.push(NativeEdit::new(contract_addr + 0x20, old_wage.to_le_bytes().to_vec(), terms.wage_gbp.to_le_bytes().to_vec(), "move: new weekly wage"));
+        let old_expiry = driver.read::<u32>(contract_addr + 0x48)?;
+        let next_expiry = crate::native_player::expiry_with_year(old_expiry, terms.expiry_year as i32)?;
+        edits.push(NativeEdit::new(contract_addr + 0x48, old_expiry.to_le_bytes().to_vec(), next_expiry.to_le_bytes().to_vec(), "move: new contract expiry year"));
     }
 
     // 7. Transfer fee: buyer pays, seller receives (balances only, same transaction).
@@ -1200,5 +1232,19 @@ mod tests {
         assert_eq!(slot, base + (POOL_SAFETY_SLOTS + 2) * CONTRACT_SIZE);
         // No room left in the mapping is an error, never a slot past the end.
         assert!(zero_slot_after(&driver, base, base + CONTRACT_SIZE * (POOL_SAFETY_SLOTS + 2)).is_err());
+    }
+
+    #[test]
+    fn new_contract_terms_need_a_real_wage_and_a_sane_expiry_year() {
+        let ok = NewContractTerms { wage_gbp: 5000, expiry_year: 2028 };
+        assert!(ok.validate().is_ok());
+        for bad in [
+            NewContractTerms { wage_gbp: 0, ..ok },
+            NewContractTerms { wage_gbp: i32::MAX as u32 + 1, ..ok },
+            NewContractTerms { expiry_year: 1999, ..ok },
+            NewContractTerms { expiry_year: 2201, ..ok },
+        ] {
+            assert!(bad.validate().is_err(), "{bad:?}");
+        }
     }
 }

@@ -127,7 +127,7 @@ struct NativeContract { address: usize, vtable: usize }
 
 fn leap(year: u32) -> bool { year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) }
 
-fn expiry_with_year(raw: u32, year: i32) -> Result<u32> {
+pub(crate) fn expiry_with_year(raw: u32, year: i32) -> Result<u32> {
     let old_year = raw >> 16;
     let mut day = raw & 0x1ff;
     if !(2000..=2200).contains(&old_year) || !(2000..=2200).contains(&year)
@@ -1098,9 +1098,9 @@ impl NativePlayerRecord {
     }
 
     /// Moves a contracted player to a destination team squad vector.
-    pub fn move_player(&self, driver: &LinuxMemoryDriver, target_team: usize, fee_gbp: Option<u32>) -> Result<(usize, usize)> {
+    pub fn move_player(&self, driver: &LinuxMemoryDriver, target_team: usize, fee_gbp: Option<u32>, terms: Option<crate::native_transfer::NewContractTerms>) -> Result<(usize, usize)> {
         self.validate(driver)?;
-        crate::native_transfer::move_player(driver, self, target_team, fee_gbp)
+        crate::native_transfer::move_player(driver, self, target_team, fee_gbp, terms)
     }
 
     /// Signs an unemployed free agent to a target team.

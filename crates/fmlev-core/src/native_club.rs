@@ -46,6 +46,7 @@ const TEAM_REPUTATION_OFFSET: usize = 0xa8;
 #[allow(dead_code)]
 const TEAM_BACKPTR_OFFSET: usize = 0x30;
 const STADIUM_PTR_OFFSET: usize = 0x78;
+const STADIUM_NAME_OFFSET: usize = 0x40;
 const STADIUM_CAP_OFFSET: usize = 0x7c;
 const STADIUM_EXP_OFFSET: usize = 0x8c;
 
@@ -73,6 +74,22 @@ pub struct NativeClubRecord {
 }
 
 pub type NativeClubFinance = NativeClubRecord;
+
+/// u32 length (1..=256) followed by UTF-8 text without control characters, at `pointer`.
+fn read_length_prefixed(driver: &LinuxMemoryDriver, pointer: usize) -> Option<String> {
+    if pointer <= 0x10000 {
+        return None;
+    }
+    let len = driver.read::<u32>(pointer).ok()? as usize;
+    if len == 0 || len > 256 {
+        return None;
+    }
+    let mut buf = vec![0u8; len];
+    if driver.read_bytes(pointer + 4, &mut buf).ok()? != len {
+        return None;
+    }
+    String::from_utf8(buf).ok().filter(|text| !text.chars().any(char::is_control))
+}
 
 impl NativeClubRecord {
     /// Finds the native club record for `club_id` (cached; the cached record is re-validated).
@@ -250,6 +267,30 @@ impl NativeClubRecord {
             return None;
         }
         String::from_utf8(buf).ok()
+    }
+
+    /// Stadium name of the main team's stadium (`stadium + 0x40`): a length-prefixed string, or two pooled
+    /// name references (as for players), matching `fmscan entity ... club --editor` (Camp Nou, Santiago
+    /// Bernabeu and Coliseum on a live save). `None` when the stadium is not mapped or the text does not
+    /// validate; no name is ever invented.
+    pub fn read_stadium_name(&self, driver: &LinuxMemoryDriver) -> Option<String> {
+        let stadium = self.stadium?;
+        let field = driver.read_ptr(stadium + STADIUM_NAME_OFFSET).ok()?;
+        if field <= 0x10000 {
+            return None;
+        }
+        if let Some(name) = read_length_prefixed(driver, field) {
+            return Some(name);
+        }
+        let mut parts = Vec::new();
+        for reference in [field, field + 8] {
+            let pointer = driver.read_ptr(reference).ok()?;
+            if pointer == 0 {
+                continue;
+            }
+            parts.push(read_length_prefixed(driver, driver.read_ptr(pointer).ok()?)?);
+        }
+        (!parts.is_empty()).then(|| parts.join(" "))
     }
 
     // --- Writes ---
@@ -607,5 +648,54 @@ mod tests {
         let mut req_budget = prev.clone();
         req_budget.transfer_budget = -100;
         assert!(f.record.write_club_edits(&f.driver, &prev, &req_budget).is_err());
+    }
+
+    /// A length-prefixed string buffer: u32 length, then the bytes.
+    fn text(value: &str) -> Vec<u8> {
+        let mut bytes = (value.len() as u32).to_le_bytes().to_vec();
+        bytes.extend_from_slice(value.as_bytes());
+        bytes
+    }
+
+    #[test]
+    fn stadium_name_reads_a_direct_length_prefixed_string() {
+        let fixture = mock_club();
+        let name = text("Camp Nou");
+        let stadium = fixture.record.stadium.unwrap();
+        fixture.driver.write(stadium + STADIUM_NAME_OFFSET, &(name.as_ptr() as usize)).unwrap();
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver).as_deref(), Some("Camp Nou"));
+    }
+
+    #[test]
+    fn stadium_name_reads_pooled_parts_and_joins_them() {
+        let fixture = mock_club();
+        let (first, second) = (text("Estadio"), text("Coliseum"));
+        // The field points at two references; each reference points at a pointer to the string.
+        let first_pointer = first.as_ptr() as usize;
+        let second_pointer = second.as_ptr() as usize;
+        let slots = [first_pointer, second_pointer];
+        let refs = [slots.as_ptr() as usize, unsafe { slots.as_ptr().add(1) } as usize];
+        let stadium = fixture.record.stadium.unwrap();
+        fixture.driver.write(stadium + STADIUM_NAME_OFFSET, &(refs.as_ptr() as usize)).unwrap();
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver).as_deref(), Some("Estadio Coliseum"));
+    }
+
+    #[test]
+    fn stadium_name_is_none_for_bad_or_missing_data_never_a_default() {
+        let mut fixture = mock_club();
+        let stadium = fixture.record.stadium.unwrap();
+        // No name pointer written: nothing to read.
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver), None);
+        // Control characters are not a name.
+        let dirty = text("Bad\u{1}Name");
+        fixture.driver.write(stadium + STADIUM_NAME_OFFSET, &(dirty.as_ptr() as usize)).unwrap();
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver), None);
+        // An empty (zero-length) string is not a name either.
+        let empty = text("");
+        fixture.driver.write(stadium + STADIUM_NAME_OFFSET, &(empty.as_ptr() as usize)).unwrap();
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver), None);
+        // A club whose stadium record is not mapped has no stadium name.
+        fixture.record.stadium = None;
+        assert_eq!(fixture.record.read_stadium_name(&fixture.driver), None);
     }
 }

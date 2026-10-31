@@ -127,3 +127,14 @@ test('actions staged during a money save wait for the next explicit Save', async
   assert.equal(ui.requests.length, 1);
   assert.equal(ui.run("pendingActions.get('club:7').length"), 1);
 });
+
+test('club info shows the native stadium name and capacities, and Unavailable for anything unread', () => {
+  const ui = createUi({ fetch: async () => ok({}), ids: ['club-info-id', 'club-info-stadium', 'club-info-capacity', 'club-info-expansion', 'club-money-balance', 'club-money-transfer'], tabs: ['tab-club'] });
+  ui.run("renderClubOverview({ club_id: 1079, club_name: 'Barcelona', stadium_name: 'Camp Nou', stadium_capacity: 62500, stadium_expansion_cap: 105000 })");
+  assert.equal(ui.els['club-info-stadium'].innerText, 'Camp Nou');
+  assert.equal(ui.els['club-info-capacity'].innerText, (62500).toLocaleString());
+  assert.equal(ui.els['club-info-expansion'].innerText, (105000).toLocaleString());
+  // The core now sends an empty name and 0 for an unreadable stadium instead of a placeholder.
+  ui.run("renderClubOverview({ club_id: 1991, club_name: 'Espana Barcelona', stadium_name: '', stadium_capacity: 0, stadium_expansion_cap: 0 })");
+  for (const id of ['club-info-stadium', 'club-info-capacity', 'club-info-expansion']) assert.equal(ui.els[id].innerText, 'Unavailable', id);
+});

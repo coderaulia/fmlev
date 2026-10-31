@@ -1,5 +1,11 @@
 # FMLE Handover
 
+## Update — 2026-10-31 (cheats from verified writes, native stadium name)
+
+- Four cheats that were disabled now stage values for writes that were already verified (Clear Negative Balance, Big Money, Prize Table x10, Wonderkid Forge); nothing is written until Save. Not clicked in game yet.
+- The Club page reads the stadium name natively; unreadable stadiums show Unavailable instead of a placeholder. Rust and `fmscan` agree on live clubs (PID 4496).
+- Still disabled: Max Morale, Wipe Bans, Unlock IGE, Invincible Board, Golden Gen, Relax Rules, Clean Governance (no native path), and the transfer buttons (need a save/reload proof in game).
+
 ## Update — 2026-10-28 (live runbook, audit follow-ups, lock fix)
 
 - **Live runbook (PID 5668, throwaway saves)**: search index, preferred-move bit 39, staff birth year and contract (wage, expiry), the La Liga registration doctor and a Level 3 role preset were each compared with the game screens. Details, what stayed unproven and the commands are in `AGENTS.md` and `LIVE_READ_WRITE.md` (2026-10-28 sections). Nation rules cannot be checked on screen (the Nation screen shows none) and staff reputation and CA/PA have no on-screen numbers.

@@ -55,10 +55,12 @@ impl GameContextManager {
         if let Ok((rep, _)) = record.read_reputations(driver) {
             if rep > 0 { club.reputation = rep; }
         }
-        if let Ok((cap, exp)) = record.read_stadium_capacities(driver) {
-            if cap > 0 { club.stadium_capacity = cap; }
-            if exp > 0 { club.stadium_expansion_cap = exp; }
-        }
+        // A stadium that cannot be read stays empty/0 (shown as unavailable) instead of keeping a default
+        // name or the 45,000/60,000 placeholder capacities.
+        club.stadium_name = record.read_stadium_name(driver).unwrap_or_default();
+        let (capacity, expansion) = record.read_stadium_capacities(driver).unwrap_or((0, 0));
+        club.stadium_capacity = capacity;
+        club.stadium_expansion_cap = expansion;
         if let Ok(sd) = record.read_sugar_daddy(driver) {
             club.sugar_daddy_type = match sd {
                 1 => "Foreground".to_string(),

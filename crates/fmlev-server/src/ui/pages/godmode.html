@@ -26,10 +26,10 @@
             <div class="cheat-row">
               <div class="cheat-info">
                 <div class="cheat-name">Wonderkid Forge</div>
-                <div class="cheat-desc">Intended: 195 PA and faster development.</div>
-                <div class="cheat-why"><span class="pill pill-warn">In development</span> No native write path, so a live save is refused. Label says 195 PA but the code sets PA 200 and CA 165+.</div>
+                <div class="cheat-desc">Raises potential ability to 195 (never lowers it). Current ability and attributes are unchanged.</div>
+                <div class="cheat-why"><span class="pill pill-accent">Working</span> Stages the PA edit; Save writes the native CA/PA field with readback and rollback.</div>
               </div>
-              <button disabled data-unverified="true" title="Unavailable: this action has no verified live implementation" class="btn btn-sm" onclick="applyPlayerPreset('wonderkid')">Forge Wonderkid</button>
+              <button class="btn btn-sm btn-primary" onclick="applyWonderkid()">Forge Wonderkid</button>
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
@@ -99,11 +99,11 @@
           <div class="panel-body cheat-list">
             <div class="cheat-row">
               <div class="cheat-info">
-                <div class="cheat-name" data-money-tpl>Foreground Sugar Daddy ({m:1000000000})</div>
-                <div class="cheat-desc" data-money-tpl>Wipes debt, {m:1000000000} balance, {m:500000000} budget.</div>
-                <div class="cheat-why"><span class="pill pill-warn">In development</span> Preset has no native write path, so a live save is refused. Balance and transfer budget can be saved from the Club page.</div>
+                <div class="cheat-name" data-money-tpl>Big Money ({m:1000000000})</div>
+                <div class="cheat-desc" data-money-tpl>Raises the balance to {m:1000000000} and the transfer budget to {m:500000000} (never lowers them). Benefactor status is not changed.</div>
+                <div class="cheat-why"><span class="pill pill-accent">Working</span> Needs the club's money loaded (Club page, Load in the bottom bar); Save writes the native finance object with readback and rollback.</div>
               </div>
-              <button disabled data-unverified="true" title="Unavailable: this action has no verified live implementation" class="btn btn-sm" onclick="applyClubPreset('sugar_daddy')">Infinite Wealth</button>
+              <button class="btn btn-sm btn-primary" onclick="applyInfiniteWealth()">Big Money</button>
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
@@ -123,11 +123,11 @@
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
-                <div class="cheat-name">Wipe Club Debt</div>
-                <div class="cheat-desc">Clears loans, debentures and bank interest.</div>
-                <div class="cheat-why"><span class="pill pill-warn">In development</span> No native debt write path, so a live save is refused. Offline edit only.</div>
+                <div class="cheat-name">Clear Negative Balance</div>
+                <div class="cheat-desc">Raises a negative balance to 0. Loans, debentures and interest are not stored in a verified field and are not changed.</div>
+                <div class="cheat-why"><span class="pill pill-accent">Working</span> Needs the club's money loaded (Club page, Load in the bottom bar); Save writes the native balance with readback and rollback.</div>
               </div>
-              <button disabled data-unverified="true" title="Unavailable: this action has no verified live implementation" class="btn btn-sm" onclick="applyClubPreset('wipe_debt')">Wipe Debt</button>
+              <button class="btn btn-sm btn-primary" onclick="applyWipeDebt()">Clear Balance</button>
             </div>
           </div>
         </div>
@@ -152,11 +152,11 @@
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
-                <div class="cheat-name" data-money-tpl>Massive Prize Pool ({m:500000000})</div>
-                <div class="cheat-desc" data-money-tpl>Winner prize {m:500000000} and TV pool {m:3000000000}.</div>
-                <div class="cheat-why"><span class="pill pill-warn">In development</span> Prize money and TV pool are not in the native competition writer. Values will not persist.</div>
+                <div class="cheat-name">Prize Table x10</div>
+                <div class="cheat-desc">Multiplies every amount of the loaded league prize table by 10, capped at 2,147,483,647 raw GBP. The TV pool is not changed.</div>
+                <div class="cheat-why"><span class="pill pill-accent">Working</span> Needs the prize table loaded (Competition page, Load in the bottom bar); Save writes it with readback and rollback. The season-end payout source is unconfirmed.</div>
               </div>
-              <button disabled data-unverified="true" title="Unavailable: this action has no verified live implementation" class="btn btn-sm" onclick="applyMassivePrizeMoney()">Massive Prizes</button>
+              <button class="btn btn-sm btn-primary" onclick="applyMassivePrizeMoney()">Prizes x10</button>
             </div>
             <div class="cheat-row">
               <div class="cheat-info">

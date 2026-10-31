@@ -1,5 +1,11 @@
 # FMLE Handover
 
+## Update — 2026-11-01 (latest state)
+
+- **Transfers (user-confirmed working)**: terminate contract, sign and move work from the Contract tab (experimental checkbox, confirm dialog, `experimental: true`). Move takes an optional fee (raw GBP) taken from the buying club's balance and added to the selling club's in the same transaction; the fee path itself has not been run in game. Loan recall stays disabled. A save/reload after a transfer is still unconfirmed in the docs.
+- **Club reputation (NOT working in game)**: the Club header box writes `team + 0xa8` and the write is confirmed in memory (Getafe 6948 to 6949 and back via the API), but the game's club screen does not follow it, or the game recomputes it. Next step: open a club page in the game, dump the UI bindings for it, find the property and match it to a memory field. The separate `world_reputation` (`club + 0x166`) is read but not editable.
+- **Contract**: squad status and release clause are native (see below); happiness is not editable (derived by the game). The tab no longer shows invented values.
+
 ## Update — 2026-11-01 (contract squad status and release clause)
 
 - The Contract tab shows and can edit the native squad status and an existing release clause (Save, readback and rollback). Reads were checked against the game's screens; writes were not tried in game. Happiness has no native field (derived by the game) and stays Unavailable. The tab no longer shows invented "Regular Starter" / "Content" values in live mode. Details and evidence: `AGENTS.md` "Contract squad status, release clause and happiness".
@@ -23,7 +29,7 @@
 - **Safety and robustness**: strict `POST /api/attach`; raw memory writes are bounds-checked and transactional; raw finance writes return 501; core errors map to 400/404/409; Register Anytime restores the original manager bits; the contract slot and transfer queue are found from process maps (no fixed addresses; the vtable address fallback is gone).
 - **Performance**: native record lookups are cached after an identity check and warmed outside the global lock (`locator_cache.rs`); a cold club read is about 1.2 s and a cached one is instant, and status polling no longer waits on scans.
 - **Still open**: loan signing (501), staff reputation/CA/PA/job/role, nation-rule labels, role lists vs FM26's role screens, the registration doctor's non-EU/salary/minimum-squad rules, and the free contract slot heuristic (the game's allocation counter is not updated).
-- **Counts**: Rust 201 passed / 1 ignored, UI 148 passed, C++ synthetic suite 65 passed.
+- **Counts (2026-11-01)**: Rust 214 passed / 1 ignored, UI 175 passed, C++ synthetic suite 65 passed (last run 2026-10-28).
 
 ## Current UI handover — 2026-10-27
 

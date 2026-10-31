@@ -165,7 +165,7 @@ profile open in FM26, falling back to the selected or last-used member; the last
 of birth; Contract shows wage and expiry for staff with a contract, "no contract" otherwise, and keeps job and role
 unavailable. Role lists show native position
 familiarity, not a fabricated role-suitability score. Missing contract write capabilities fail closed.
-Terminate contract, Move player and Sign free agent are enabled only after the Contract tab's experimental checkbox is ticked (attached game, open player, confirm dialog, `experimental: true` in the request); loan recall and unsupported cheats remain disabled; no direct action button performs a game write. The working cheats (Clear Negative Balance, Big Money, Prize Table x10, Wonderkid Forge) only stage values in the Club, Competition and Player inputs, and need the club money or prize table loaded first.
+Terminate contract, Move player (with an optional fee) and Sign free agent are enabled only after the Contract tab's experimental checkbox is ticked (attached game, open player, confirm dialog, `experimental: true` in the request); loan recall and unsupported cheats remain disabled; no direct action button performs a game write. The working cheats (Clear Negative Balance, Big Money, Prize Table x10, Wonderkid Forge) only stage values in the Club, Competition and Player inputs, and need the club money or prize table loaded first.
 
 Validation includes every static inline callback, unique IDs, staged request bodies, race/identity checks,
 contrast ratios and normal/compact browser review. See `tests/ui-wiring.test.cjs` and the per-page tests.

@@ -581,6 +581,12 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Conclusion**: the game writes the fee and date into transfer/record objects (and presumably the career history row) when the join day runs. FMLE Move writes none of them, which explains the missing fee entry.
 - **Not proven**: the container that owns these records, the player's career-history rows (caps/goals per club), whether the +0xd0 vector is that history, and any way to create records safely (they are game-allocated, Rule 7). Cesar Palacios's loan (index 38373) had not started when this was recorded.
 
+### Loan start recorded (2026-11-02, read-only, PID 4496, Cesar Palacios 38373 R. Madrid -> S. Gijon)
+- Game screen (Loan Club tab): loan 4 Jan 26 to 30 Jun 26, 174 days left, loan clauses (can be recalled, can play in cup matches, can play against parent club's B team).
+- The loan object (vtable + person ptr at +8, loan team at +0x10/+0x18, pointed to by the node at record+0x1f0) **already existed before the start date**; the recorder saw no change in the player object, the parent contract (record+0x1e8) or the team pointers when the loan started. Loan dates in the object: +0x44 and +0x4c = 0x07ea3604 (day 4 | flags 0x36, 2026), +0x48 = 0x07ea32b5 (day 181 = 30 Jun 2026). The only change at the start was one byte in the loan object (+0x57: 0x00 -> 0x40, probably an "active" flag) and a counter word at +0x5c.
+- So a loan is: game-allocated loan object + node at record+0x1f0, created when the loan is arranged, activated by a flag. The parent club in `fmscan entity --related` stays R. Madrid during the loan. Loan creation remains unsupported (Rule 7).
+- Not proven: the exact meaning of the +0x57 bit and the +0x5c word, and how the loan appears in career history.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

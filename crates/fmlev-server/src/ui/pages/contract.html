@@ -75,19 +75,15 @@
       <div id="transfer-actions-card" class="panel">
         <div class="panel-head">
           <span>Native transfer and contract actions</span>
-          <span class="pill pill-warn">Experimental</span>
+          <span class="pill pill-warn">Back up first</span>
         </div>
         <div class="panel-body">
           <p class="hint">
             Release a player as a free agent, move a contracted player to another club, or sign a free agent
             (the destination first-team squad needs a spare slot). These redirect objects the game also references
-            elsewhere: terminate, sign and move passed a screen check and a day tick on a throwaway save, but a save/reload
-            was not confirmed. Use a throwaway save and Save As afterwards. Loan recall has no in-game test yet and stays disabled.
+            elsewhere: terminate, sign and move have been tried in the game and worked. Each action asks for confirmation; keep a backup
+            save. Loan recall has no in-game test yet and stays disabled.
           </p>
-          <label class="staff-experimental-toggle">
-            <input id="transfer-experimental" type="checkbox" onchange="updateTransferButtons()">
-            <span>Enable experimental transfer actions (throwaway save only)</span>
-          </label>
           <div class="transfer-required" role="note">
             <b>Required for Move and Sign:</b> target club ID *, yearly wage *, expiry year *. Fill all three, or the
             action stays disabled (a contract with missing terms is never created). <b>Optional:</b> fee (Move only).

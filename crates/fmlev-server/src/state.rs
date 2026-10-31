@@ -281,7 +281,8 @@ pub struct ContractExtendRequest {
     pub years: Option<i32>,
 }
 
-/// Transfer actions create, detach or redirect game-referenced objects; callers must opt in explicitly.
+/// Transfer actions create, detach or redirect game-referenced objects. `experimental` is accepted and ignored
+/// (older clients sent it as an opt-in); the UI asks for confirmation instead.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractTerminateRequest {

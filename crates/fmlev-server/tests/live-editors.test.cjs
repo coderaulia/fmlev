@@ -58,7 +58,7 @@ test('every live editor endpoint the UI calls exists in the router', () => {
     assert.ok(html.includes(`"${route}"`), `UI calls ${route}`);
     assert.ok(router.includes(`"${route}"`), `router serves ${route}`);
   }
-  // Terminate, move and sign start disabled and are enabled only by the experimental opt-in; loan recall stays off.
+  // Terminate, move and sign start disabled and are enabled by script (attached game, open player, filled form); loan recall stays off.
   for (const id of ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent'])
     assert.match(html, new RegExp(`id="${id}" disabled class=`), `${id} starts disabled`);
   assert.match(html, /id="btn-terminate-loan" disabled data-unverified="true"/, 'Loan recall stays unavailable');

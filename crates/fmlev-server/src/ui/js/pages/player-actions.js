@@ -1,19 +1,17 @@
-    // Transfer/contract actions need a live attached game, an open player and the explicit experimental opt-in.
+    // Transfer/contract actions need a live attached game and an open player (each asks for confirmation).
     // Loan recall has no in-game test yet, so it stays disabled.
-    function transferExperimentalOn() { return !!document.getElementById("transfer-experimental")?.checked; }
     function updateTransferButtons() {
-      const ready = !!state.connected && !!state.activePlayer && transferExperimentalOn();
-      const why = !state.connected ? "Attach to a game first" : !state.activePlayer ? "Open a player first"
-        : "Tick the experimental checkbox first";
+      const ready = !!state.connected && !!state.activePlayer;
+      const why = !state.connected ? "Attach to a game first" : "Open a player first";
       const form = transferFormState();
       const terminate = document.getElementById("btn-terminate-contract");
-      if (terminate) { terminate.disabled = !ready; terminate.title = ready ? "Experimental: throwaway save only" : `Unavailable: ${why}`; }
+      if (terminate) { terminate.disabled = !ready; terminate.title = ready ? "Asks for confirmation" : `Unavailable: ${why}`; }
       for (const [id, needsFee] of [["btn-move-player", true], ["btn-sign-free-agent", false]]) {
         const el = document.getElementById(id);
         if (!el) continue;
         const blocked = !ready ? why : form.missing.length ? `Fill the required fields: ${form.missing.join(", ")}` : (needsFee && !form.feeValid ? "The fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty)" : "");
         el.disabled = !!blocked;
-        el.title = blocked ? `Unavailable: ${blocked}` : "Experimental: throwaway save only";
+        el.title = blocked ? `Unavailable: ${blocked}` : "Asks for confirmation";
       }
       // Mark empty or invalid required fields and say which are missing.
       const fields = [["transfer-target-club-id", "target club ID"], ["transfer-sign-wage", "yearly wage"], ["transfer-sign-year", "expiry year"]];

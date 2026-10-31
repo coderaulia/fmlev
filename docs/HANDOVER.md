@@ -1,5 +1,10 @@
 # FMLE Handover
 
+## Update — 2026-11-02 (transfer tools always available)
+
+- **User-confirmed working**: terminate, sign and move (with the required club, yearly wage and expiry year) were tried in the game and worked. The experimental checkbox is gone: Terminate, Move and Sign are available whenever a game is attached and a player is open (Move and Sign also need the required fields), each behind a confirm dialog. The routes no longer return 501 without `experimental: true`; the field is accepted and ignored for older clients. Loan recall stays disabled (no in-game test). Keep a backup save: these actions redirect objects the game also references elsewhere.
+- Move writes the new weekly wage and expiry onto the moved contract; an optional fee moves between club balances. Move and Sign refuse missing terms with a clear message.
+
 ## Update — 2026-11-01 (index freshness, off-scale feet)
 
 - Players with a foot byte that is not a multiple of 5 (generated youth like Reno Salampessy) were rejected everywhere; fixed (live index 49,035 to 52,752 players).

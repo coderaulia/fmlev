@@ -985,22 +985,25 @@ async fn invalid_entity_updates_are_client_errors_not_500() {
 }
 
 #[tokio::test]
-async fn transfer_routes_need_the_experimental_flag_and_a_game() {
+async fn transfer_routes_need_a_game_and_reject_unknown_fields_without_any_opt_in() {
     let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
     let bodies = [
-        ("/api/player/contract/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
-        ("/api/player/loan/terminate", r#"{"player_id":5}"#, r#"{"player_id":5,"experimental":true}"#),
-        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028}"#, r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028,"experimental":true}"#),
-        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#, r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027,"experimental":true}"#),
-        ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true}"#, r#"{"player_id":5,"instant":true,"experimental":true}"#),
+        ("/api/player/contract/terminate", r#"{"player_id":5}"#),
+        ("/api/player/loan/terminate", r#"{"player_id":5}"#),
+        ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028}"#),
+        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#),
+        ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true}"#),
     ];
-    for (uri, plain, opted_in) in bodies {
-        let refused = app.clone().oneshot(json_post(uri, plain)).await.unwrap();
-        assert_eq!(refused.status(), StatusCode::NOT_IMPLEMENTED, "{uri} without the flag");
-        let detached = app.clone().oneshot(json_post(uri, opted_in)).await.unwrap();
-        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri} with the flag but no game");
-        let unknown = app.clone().oneshot(json_post(uri, r#"{"player_id":5,"experimental":true,"surprise":1}"#)).await.unwrap();
+    for (uri, body) in bodies {
+        // No `experimental` field is needed any more: the request reaches the game check (400 when detached).
+        let detached = app.clone().oneshot(json_post(uri, body)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri} without a game");
+        // The old opt-in field is still accepted (ignored) for older clients.
+        let legacy = body.replacen('{', r#"{"experimental":true,"#, 1);
+        let legacy = app.clone().oneshot(json_post(uri, &legacy)).await.unwrap();
+        assert_eq!(legacy.status(), StatusCode::BAD_REQUEST, "{uri} with the legacy flag");
+        let unknown = app.clone().oneshot(json_post(uri, r#"{"player_id":5,"surprise":1}"#)).await.unwrap();
         assert!(unknown.status().is_client_error(), "{uri} rejects unknown fields");
     }
 }

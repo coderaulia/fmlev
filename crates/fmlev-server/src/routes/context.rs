@@ -921,15 +921,10 @@ pub async fn extend_contract(
 
 /// Terminates a player's contract in native memory, detaching contract, team, and agreement links,
 /// and removing the player from team squad vectors. Releases the player as a free agent.
-const TRANSFER_EXPERIMENTAL: &str = "Transfer actions are experimental: they redirect pointers the game also references elsewhere. Send \"experimental\": true and use a throwaway save.";
-
 pub async fn terminate_contract(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::ContractTerminateRequest>,
 ) -> impl IntoResponse {
-    if !payload.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
-    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_contract(payload.player_id) {
@@ -950,9 +945,6 @@ pub async fn terminate_loan(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::LoanTerminateRequest>,
 ) -> impl IntoResponse {
-    if !payload.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
-    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     match w.context_mgr.terminate_loan(payload.player_id) {
@@ -974,9 +966,6 @@ pub async fn move_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerMoveRequest>,
 ) -> impl IntoResponse {
-    if !payload.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
-    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     let Some(terms) = payload.wage_gbp.zip(payload.expiry_year).map(|(wage_gbp, expiry_year)| fmlev_core::native_transfer::NewContractTerms { wage_gbp, expiry_year }) else {
@@ -1001,9 +990,6 @@ pub async fn sign_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerSignRequest>,
 ) -> impl IntoResponse {
-    if !payload.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
-    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     if payload.wage_gbp.is_none() || payload.expiry_year.is_none() || (payload.target_club_id.is_none() && payload.target_team_address.is_none()) {
         return api_error(StatusCode::BAD_REQUEST, "Signing needs the target club (target_club_id), the weekly wage (wage_gbp) and the expiry year (expiry_year): a contract with missing terms is not created");
@@ -1033,9 +1019,6 @@ pub async fn accelerate_transfer(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::TransferAccelerateRequest>,
 ) -> impl IntoResponse {
-    if !payload.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, TRANSFER_EXPERIMENTAL);
-    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     if payload.instant {

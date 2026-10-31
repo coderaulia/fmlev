@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createUi } = require('./helpers/fake-dom.cjs');
 const ok = data => ({ ok: true, json: async () => data });
 
-const IDS = ['transfer-fee', 'transfer-missing-note', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent', 'transfer-experimental',
+const IDS = ['transfer-fee', 'transfer-missing-note', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent',
   'transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year', 'savebar', 'savebar-status', 'savebar-error'];
 
 function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true } = {}) {
@@ -14,28 +14,32 @@ function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true
 const fill = (ui, { club = '1094', wage = '260000', year = '2028' } = {}) => {
   ui.els['transfer-target-club-id'].value = club; ui.els['transfer-sign-wage'].value = wage; ui.els['transfer-sign-year'].value = year;
 };
-const opt = (ui, on = true) => { ui.els['transfer-experimental'].checked = on; ui.run('updateTransferButtons()'); };
+const opt = ui => ui.run('updateTransferButtons()'); // no opt-in any more: just refresh the button state
 
-test('terminate asks for confirmation, sends the experimental opt-in and reloads the player', async () => {
+test('terminate asks for confirmation, sends the request and reloads the player', async () => {
   const ui = app(async (url) => (url === '/api/context/select' ? ok({ player: { id: 42, name: 'Test Player', club_id: 0 } }) : ok({ message: 'Player contract terminated.' })));
   opt(ui);
   ui.run('displayPlayer = player => { state.activePlayer = player; }');
   assert.equal(await ui.run('terminateContract()'), true);
   const call = ui.requests.find(r => r.url === '/api/player/contract/terminate');
-  assert.deepEqual(call.body, { player_id: 42, experimental: true });
+  assert.deepEqual(call.body, { player_id: 42 });
   assert.ok(ui.requests.some(r => r.url === '/api/context/select' && r.body.player_id === 42), 'the player is reloaded');
   assert.match(ui.run('messages.at(-1).message'), /Advance a day/);
 });
 
-test('declining the confirmation or leaving the opt-in off sends nothing', async () => {
+test('declining the confirmation, no player or no game sends nothing', async () => {
   const declined = app(undefined, { confirmAnswer: false });
   opt(declined);
   assert.equal(await declined.run('terminateContract()'), false);
   assert.equal(declined.requests.length, 0);
-  const off = app();
-  assert.equal(await off.run('terminateContract()'), false);
-  assert.equal(off.requests.length, 0);
-  assert.match(off.run('messages.at(-1).message'), /experimental checkbox/);
+  const noPlayer = app();
+  noPlayer.run('state.activePlayer = null');
+  assert.equal(await noPlayer.run('terminateContract()'), false);
+  assert.match(noPlayer.run('messages.at(-1).message'), /open a player first/i);
+  const detached = app();
+  detached.run('state.connected = false');
+  assert.equal(await detached.run('terminateContract()'), false);
+  assert.equal(detached.requests.length, 0);
 });
 
 test('a server refusal is shown and the player is not reloaded; loan recall stays unavailable', async () => {
@@ -70,8 +74,6 @@ const ENABLED = ui => ['btn-terminate-contract', 'btn-move-player', 'btn-sign-fr
 
 test('Move and Sign stay disabled until the target club, yearly wage and expiry year are all filled; loan recall never', () => {
   const ui = app();
-  opt(ui, false);
-  assert.deepEqual(ENABLED(ui), [false, false, false], 'nothing without the opt-in');
   opt(ui);
   assert.deepEqual(ENABLED(ui), [true, false, false], 'terminate needs no fields; Move and Sign need the form');
   assert.match(ui.els['btn-move-player'].title, /Fill the required fields: target club ID, yearly wage, expiry year/);
@@ -130,12 +132,12 @@ test('Move sends the new wage (yearly / 52) and expiry with the club, plus the f
   fill(ui, { wage: '4160000' }); // 80,000 per week
   assert.equal(await ui.run('movePlayer()'), true);
   assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body,
-    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028, experimental: true });
+    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028 });
   ui.requests.length = 0;
   ui.els['transfer-fee'].value = '15000000';
   assert.equal(await ui.run('movePlayer()'), true);
   assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body,
-    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028, fee_gbp: 15000000, experimental: true });
+    { player_id: 42, target_club_id: 1094, wage_gbp: 80000, expiry_year: 2028, fee_gbp: 15000000 });
   ui.requests.length = 0;
   for (const bad of ['0', '-5', '1.5', '2147483648', 'abc']) {
     ui.els['transfer-fee'].value = bad;
@@ -151,7 +153,7 @@ test('Sign sends the stored weekly wage (yearly / 52, rounded), the expiry year 
   fill(ui, { wage: '245000' }); // 4711.5 per week rounds to 4712
   assert.equal(await ui.run('signFreeAgent()'), true);
   assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/sign').body,
-    { player_id: 42, target_club_id: 1094, wage_gbp: 4712, expiry_year: 2028, experimental: true });
+    { player_id: 42, target_club_id: 1094, wage_gbp: 4712, expiry_year: 2028 });
 });
 
 test('the confirm text names the contract terms that will be written', async () => {

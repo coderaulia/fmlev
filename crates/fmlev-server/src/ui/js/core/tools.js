@@ -30,17 +30,16 @@
       return false;
     }
 
-    // Sends one experimental transfer request for the open player, then reloads that player from the game.
+    // Sends one transfer request for the open player (after confirmation), then reloads that player from the game.
     async function runTransferAction(url, extra, confirmText) {
       const player = state.activePlayer;
       if (!state.connected || !player) { showToast("Attach to a game and open a player first", "warning"); return false; }
-      if (!transferExperimentalOn()) { showToast("Tick the experimental checkbox first", "warning"); return false; }
       if (typeof canReplaceDraft === "function" && !canReplaceDraft("player")) return false;
       if (typeof confirm === "function" && !confirm(confirmText)) return false;
       try {
         const res = await fetch(url, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player_id: player.id, ...extra, experimental: true })
+          body: JSON.stringify({ player_id: player.id, ...extra })
         });
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Transfer action failed");
@@ -94,7 +93,7 @@
     async function terminateContract() {
       const name = state.activePlayer?.name || "this player";
       return runTransferAction("/api/player/contract/terminate", {},
-        `Release ${name} as a free agent? This detaches the contract and removes the player from every squad. Use a throwaway save.`);
+        `Release ${name} as a free agent? This detaches the contract and removes the player from every squad. Keep a backup save.`);
     }
     async function terminateLoan() { return unavailableTransfer(); }
     // One reading of the transfer form. Club, yearly wage and expiry year are required for Move and Sign; the fee is
@@ -123,12 +122,12 @@
       const body = { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year };
       if (form.fee !== null) body.fee_gbp = form.fee;
       return runTransferAction("/api/transfer/move", body,
-        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. The destination first-team squad needs a spare slot. Use a throwaway save.`);
+        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. The destination first-team squad needs a spare slot. Keep a backup save.`);
     }
     async function signFreeAgent() {
       const form = transferFormState();
       if (form.missing.length) return refuseMissing(form);
       const name = state.activePlayer?.name || "this player";
       return runTransferAction("/api/transfer/sign", { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year },
-        `Sign ${name} to club ${form.club} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Use a throwaway save.`);
+        `Sign ${name} to club ${form.club} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Keep a backup save.`);
     }

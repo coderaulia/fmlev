@@ -563,6 +563,10 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Tests**: UI (`transfer-ui.test.cjs`: gating, refusals listing the missing fields, payloads, confirm text), server (`move_and_sign_refuse_missing_contract_terms_with_a_clear_message`), core (`new_contract_terms_need_a_real_wage_and_a_sane_expiry_year`).
 - **Not run in game**: no move with new terms was executed here; whether the game accepts the rewritten wage and expiry on the moved contract (and shows them on the Contract screen) is unconfirmed.
 
+### Transfer tools no longer behind an opt-in (2026-11-02)
+- **User report**: terminate, sign and move (with club, yearly wage and expiry filled) all worked in the game; the user asked for the tools to be always usable. The "Enable experimental transfer actions" checkbox was removed. Buttons enable when a game is attached and a player is open (Move and Sign also need the required fields); every action keeps its confirm dialog. The routes no longer require `experimental: true` (the field is still accepted and ignored). Loan recall (disabled in the UI) and accelerate (no UI) stay unproven in game. The evidence ladder for save/reload persistence of these actions was not separately recorded; the hint text now says keep a backup save.
+- **Tests**: UI tests updated (no checkbox, `{ player_id: 42 }` terminate body, no-player and detached refusals), server test `transfer_routes_need_a_game_and_reject_unknown_fields_without_any_opt_in`.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

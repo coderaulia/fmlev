@@ -567,6 +567,12 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **User report**: terminate, sign and move (with club, yearly wage and expiry filled) all worked in the game; the user asked for the tools to be always usable. The "Enable experimental transfer actions" checkbox was removed. Buttons enable when a game is attached and a player is open (Move and Sign also need the required fields); every action keeps its confirm dialog. The routes no longer require `experimental: true` (the field is still accepted and ignored). Loan recall (disabled in the UI) and accelerate (no UI) stay unproven in game. The evidence ladder for save/reload persistence of these actions was not separately recorded; the hint text now says keep a backup save.
 - **Tests**: UI tests updated (no checkbox, `{ player_id: 42 }` terminate body, no-player and detached refusals), server test `transfer_routes_need_a_game_and_reject_unknown_fields_without_any_opt_in`.
 
+### Career history after Move (2026-11-02, report, read-only discovery, nothing fixed)
+- **User report (Ezra Walian 21106/37045584, now Persib 2313)**: after a mid-season Move the career caps and goals continue from the previous club, and the history shows no fee entry.
+- **Cause**: `move_player` writes only the contract, team pointers, squad vectors, wage/expiry and the optional balance fee. The game's career history (caps, goals per club row, transfer fee column) is a separate structure that the move never touches.
+- **Read-only search (PID 4496)**: no `PLAYING_HISTORY` or `NON_PLAYING_HISTORY` pointer is reachable from the player object (depth 2, 400 objects). 110 inbound references to the player object are squad/list vectors. A scan for the index value found it in `GAME_MATCH_PLAYER_STATS`, not in a history object. Inline `(day, year)` u16 pairs at ACTUAL_PLAYER+0x3a0 (e.g. 206/2024, 182/2019, 60/2023) look like contract/join dates, not stat rows.
+- **Not proven**: where career rows live, their layout, and how the game closes a row and records a fee. Next step: snapshot a player before and after a transfer made by the game itself (not FMLE) on a throwaway save and diff the record plus the objects it newly references. No write is justified until then (Rule 7).
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

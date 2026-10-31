@@ -24,6 +24,8 @@ pub(crate) fn unsupported_live_player_changes(previous: &Player, requested: &Pla
     comparable.potential_ability = previous.potential_ability;
     comparable.contract.wage_per_week = previous.contract.wage_per_week;
     comparable.contract.expiry_year = previous.contract.expiry_year;
+    comparable.contract.squad_status = previous.contract.squad_status.clone();
+    comparable.contract.release_clause = previous.contract.release_clause;
     for field in crate::native_player::native_attributes() {
         (field.set)(&mut comparable.attributes, (field.get)(&previous.attributes));
     }
@@ -161,6 +163,9 @@ pub(crate) fn build_template_live_player(id: i32, name: String, position: String
             release_clause: 0,
             squad_status: String::new(),
             happiness: String::new(),
+            squad_status_code: None,
+            release_clause_present: None,
+            terms_note: String::new(),
         },
         attributes: PlayerAttributes::default(),
         user_modified: false,

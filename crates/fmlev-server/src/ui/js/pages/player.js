@@ -189,21 +189,7 @@
           cExp.value = player.contract.expiry_year ?? 0;
           state.activePlayer.contract.expiry_year = player.contract.expiry_year ?? 0;
         }
-        const cRel = document.getElementById("contract-release");
-        if (cRel && document.activeElement !== cRel && !state.playerDirtyFields.has("contract.release_clause")) {
-          setMoneyInput(cRel, player.contract.release_clause || 0);
-          state.activePlayer.contract.release_clause = player.contract.release_clause || 0;
-        }
-        const cStat = document.getElementById("contract-status");
-        if (cStat && document.activeElement !== cStat && !state.playerDirtyFields.has("contract.squad_status")) {
-          cStat.value = player.contract.squad_status || "Regular Starter";
-          state.activePlayer.contract.squad_status = player.contract.squad_status || "Regular Starter";
-        }
-        const cHap = document.getElementById("contract-happiness");
-        if (cHap && document.activeElement !== cHap && !state.playerDirtyFields.has("contract.happiness")) {
-          cHap.value = player.contract.happiness || "Content";
-          state.activePlayer.contract.happiness = player.contract.happiness || "Content";
-        }
+        renderContractTerms(player);
       }
 
       // Positions & Foot ability tab

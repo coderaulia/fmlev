@@ -10,6 +10,7 @@ pub mod native_nation;
 pub mod native_nation_rules;
 pub mod native_registration;
 pub mod locator_cache;
+pub mod native_contract_terms;
 pub mod native_staff;
 pub mod open_staff;
 pub mod native_transfer;

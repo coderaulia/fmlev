@@ -1,5 +1,9 @@
 # FMLE Handover
 
+## Update — 2026-11-01 (contract squad status and release clause)
+
+- The Contract tab shows and can edit the native squad status and an existing release clause (Save, readback and rollback). Reads were checked against the game's screens; writes were not tried in game. Happiness has no native field (derived by the game) and stays Unavailable. The tab no longer shows invented "Regular Starter" / "Content" values in live mode. Details and evidence: `AGENTS.md` "Contract squad status, release clause and happiness".
+
 ## Update — 2026-11-01 (transfer actions in the UI, club reputation)
 
 - Contract tab: Terminate contract, Move player and Sign free agent work from the UI behind an experimental checkbox, a confirm dialog and `experimental: true` (the routes return 501 without it). Loan recall stays disabled (no in-game test). The target-club field shows the club's spare squad slots (`POST /api/club/squad-space`, read-only). Terminate, sign and move had a screen check and day tick on a throwaway save earlier; a save/reload was not confirmed.

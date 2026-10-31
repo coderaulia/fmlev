@@ -15,6 +15,16 @@ pub struct PlayerContract {
     pub squad_status: String, // "Star Player", "Important Player", "Regular Starter", "Squad Player", "Breakthrough Prospect"
     #[serde(default)]
     pub happiness: String,    // "Delighted", "Happy", "Content"
+    /// Live only: the native squad status code (`+0x54`), `None` when unreadable or not a native read.
+    #[serde(default)]
+    pub squad_status_code: Option<u8>,
+    /// Live only: `Some(true)` when the contract has a native release clause entry, `Some(false)` when it has
+    /// none, `None` when unreadable or not a native read.
+    #[serde(default)]
+    pub release_clause_present: Option<bool>,
+    /// Live only: why squad status or the release clause is unavailable (empty when both were read).
+    #[serde(default)]
+    pub terms_note: String,
 }
 
 impl Default for PlayerContract {
@@ -25,6 +35,9 @@ impl Default for PlayerContract {
             release_clause: 0,
             squad_status: "Regular Starter".to_string(),
             happiness: "Content".to_string(),
+            squad_status_code: None,
+            release_clause_present: None,
+            terms_note: String::new(),
         }
     }
 }

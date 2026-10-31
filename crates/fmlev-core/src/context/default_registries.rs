@@ -637,6 +637,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 200_000_000,
                 squad_status: "Star Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 finishing: 19,
@@ -696,6 +697,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 1_000_000_000,
                 squad_status: "Star Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 finishing: 18,
@@ -751,6 +753,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 1_000_000_000,
                 squad_status: "Star Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 finishing: 16,
@@ -805,6 +808,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Happy".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 dribbling: 17,
@@ -853,6 +857,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Content".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 passing: 20,
@@ -904,6 +909,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 1_000_000_000,
                 squad_status: "Important Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 flair: 19,
@@ -954,6 +960,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Happy".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 reflexes: 19,
@@ -1006,6 +1013,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 passing: 18,
@@ -1058,6 +1066,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 finishing: 19,
@@ -1110,6 +1119,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Star Player".to_string(),
                 happiness: "Happy".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 finishing: 18,
@@ -1160,6 +1170,7 @@ pub(crate) fn build_default_registries() -> (
                 release_clause: 0,
                 squad_status: "Regular Starter".to_string(),
                 happiness: "Delighted".to_string(),
+                ..PlayerContract::default()
             },
             attributes: PlayerAttributes {
                 tackling: 14,

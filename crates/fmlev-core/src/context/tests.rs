@@ -30,9 +30,14 @@ use crate::session::LiveSession;
         requested.current_ability = 100;
         requested.contract.wage_per_week = 123;
         assert!(unsupported_live_player_changes(&previous, &requested).is_empty());
+        // Squad status and the release clause reach the native writer, which validates them itself.
         requested.contract.release_clause = 123;
+        requested.contract.squad_status = "Star Player".into();
+        assert!(unsupported_live_player_changes(&previous, &requested).is_empty());
+        // Happiness is derived by the game and has no native write path.
+        requested.contract.happiness = "Delighted".into();
         requested.name = "Another name".into();
-        assert_eq!(unsupported_live_player_changes(&previous, &requested), vec!["contract.release_clause", "name"]);
+        assert_eq!(unsupported_live_player_changes(&previous, &requested), vec!["contract.happiness", "name"]);
     }
 
     #[test]

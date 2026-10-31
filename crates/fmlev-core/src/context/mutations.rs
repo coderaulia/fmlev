@@ -65,6 +65,10 @@ impl GameContextManager {
                 fields.extend(crate::native_player::native_attributes().map(|field| format!("attributes.{}", field.name)));
                 fields.extend(["current_ability", "potential_ability"].map(str::to_string));
                 if record.has_contract(&session.driver) { fields.extend(["contract.wage_per_week", "contract.expiry_year"].map(str::to_string)); }
+                // Read from the native contract on load; present only when that read succeeded for this player.
+                let contract = &self.context.player.contract;
+                if contract.squad_status_code.is_some() { fields.push("contract.squad_status".to_string()); }
+                if contract.release_clause_present == Some(true) { fields.push("contract.release_clause".to_string()); }
             }
         }
         Some(fields)

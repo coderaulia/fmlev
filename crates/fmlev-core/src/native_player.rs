@@ -2,7 +2,7 @@
 //! No managed reference is ever accepted as a native record.
 use crate::{
     error::{CoreError, Result},
-    models::{Player, PlayerAttributes, PlayerPositions},
+    models::{Player, PlayerAttributes, PlayerContract, PlayerPositions},
     preferred_moves::{PreferredMoves, PPM_BITSET_OFFSET},
 };
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
@@ -11,6 +11,8 @@ const POSITIONS: usize = 8;
 const LEFT_FOOT: usize = 0x2f;
 const RIGHT_FOOT: usize = 0x30;
 const PERSON: usize = 0x140;
+/// Pointer at record + 0x1f0 to a loan node; non-null while the player is on loan (the screens then show the loan contract).
+const LOAN_NODE_OFFSET: usize = 0x1f0;
 const INDEX: usize = PERSON + 8;
 const UID: usize = PERSON + 12;
 const SQUAD_NUMBER: usize = 0x5d;
@@ -739,6 +741,7 @@ impl NativePlayerRecord {
             let wage = driver.read::<u32>(contract.address + 0x20)?;
             player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);
             player.contract.expiry_year = (driver.read::<u32>(contract.address + 0x48)? >> 16) as i32;
+            self.refresh_contract_terms(driver, contract.address, &mut player.contract);
             let team = driver.read_ptr(contract.address + CONTRACT_TEAM).unwrap_or(0);
             if team > 0x10000 {
                 let club = driver.read_ptr(team + 0x30).unwrap_or(0);
@@ -763,8 +766,62 @@ impl NativePlayerRecord {
         } else {
             player.contract.wage_per_week = 0;
             player.contract.expiry_year = 0;
+            player.contract.squad_status = String::new();
+            player.contract.squad_status_code = None;
+            player.contract.release_clause = 0;
+            player.contract.release_clause_present = None;
+            player.contract.happiness = String::new();
+            player.contract.terms_note = "no contract".to_string();
         }
         Ok(())
+    }
+
+    /// True while the player has a loan agreement: the loan node at `+0x1f0` points to a node whose first
+    /// pointer is an agreement owned by this player (`+0x8` is the person sub-object). A non-null node with an
+    /// empty first pointer (for example Bruno Iglesias, a reserve-team player) is not a loan. Unreadable state
+    /// counts as on loan, so nothing is shown or edited on a guess.
+    fn is_on_loan(&self, driver: &LinuxMemoryDriver) -> bool {
+        let Ok(node) = driver.read_ptr(self.address + LOAN_NODE_OFFSET) else { return true };
+        if node <= 0x10000 {
+            return false;
+        }
+        let Ok(agreement) = driver.read_ptr(node) else { return true };
+        if agreement <= 0x10000 {
+            return false;
+        }
+        driver.read_ptr(agreement + 8).map(|owner| owner == self.address + PERSON).unwrap_or(true)
+    }
+
+    /// Fills squad status and the release clause from the native contract; anything not read stays empty/None
+    /// (never the template defaults). Happiness is derived by the game from several factors and is never read.
+    fn refresh_contract_terms(&self, driver: &LinuxMemoryDriver, contract: usize, out: &mut PlayerContract) {
+        use crate::native_contract_terms::{read_terms, squad_status_label, ReleaseClause};
+        out.happiness = String::new();
+        out.squad_status = String::new();
+        out.squad_status_code = None;
+        out.release_clause = 0;
+        out.release_clause_present = None;
+        out.terms_note = String::new();
+        // A loaned player's screens show the loan contract; the parent contract's terms would be misleading.
+        if self.is_on_loan(driver) {
+            out.terms_note = "on loan: the game shows the loan contract, not this one".to_string();
+            return;
+        }
+        let Ok(terms) = read_terms(driver, contract) else {
+            out.terms_note = "contract terms unreadable".to_string();
+            return;
+        };
+        out.squad_status_code = Some(terms.squad_status_code);
+        out.squad_status = squad_status_label(terms.squad_status_code).map(str::to_string)
+            .unwrap_or_else(|| format!("Code {}", terms.squad_status_code));
+        match terms.release_clause {
+            ReleaseClause::Present { value, .. } => {
+                out.release_clause = i64::from(value);
+                out.release_clause_present = Some(true);
+            }
+            ReleaseClause::Absent => out.release_clause_present = Some(false),
+            ReleaseClause::Unavailable(reason) => out.terms_note = format!("release clause {reason}"),
+        }
     }
 
     /// Read-only diagnostic: the raw contract record bytes (`len` <= 0x200) and its address.
@@ -840,8 +897,11 @@ impl NativePlayerRecord {
                 patches.push(NativeEdit::capture(driver, self.address + offset, (next as u16).to_le_bytes().to_vec())?);
             }
         }
+        let terms_changed = previous.contract.squad_status != requested.contract.squad_status
+            || previous.contract.release_clause != requested.contract.release_clause;
         let contract = if previous.contract.wage_per_week != requested.contract.wage_per_week
             || previous.contract.expiry_year != requested.contract.expiry_year
+            || terms_changed
         {
             if !self.attributes_verified { return Err(invalid("Native player layout has not been calibrated")); }
             let contract = self.contract(driver)?;
@@ -853,6 +913,20 @@ impl NativePlayerRecord {
                 let old = driver.read::<u32>(contract.address + 0x48)?;
                 let next = expiry_with_year(old, requested.contract.expiry_year)?;
                 patches.push(NativeEdit::capture(driver, contract.address + 0x48, next.to_le_bytes().to_vec())?);
+            }
+            if terms_changed && self.is_on_loan(driver) {
+                return Err(invalid("This player is on loan (or the loan state is unreadable); the game shows the loan contract, so the parent contract's terms are not edited"));
+            }
+            if previous.contract.squad_status != requested.contract.squad_status {
+                let code = crate::native_contract_terms::squad_status_code(&requested.contract.squad_status)
+                    .ok_or_else(|| invalid("Squad status must be Star Player, Important Player, Regular Starter, Squad Player or Fringe Player"))?;
+                for (address, bytes) in crate::native_contract_terms::squad_status_edits(driver, contract.address, code)? {
+                    patches.push(NativeEdit::capture(driver, address, bytes)?);
+                }
+            }
+            if previous.contract.release_clause != requested.contract.release_clause {
+                let (address, bytes) = crate::native_contract_terms::release_clause_edit(driver, contract.address, requested.contract.release_clause)?;
+                patches.push(NativeEdit::capture(driver, address, bytes)?);
             }
             Some(contract)
         } else { None };
@@ -1056,352 +1130,5 @@ impl NativePlayerRecord {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    fn fixture() -> (Vec<u64>, NativePlayerRecord) {
-        let mut data = vec![0u64; 80];
-        let a = data.as_mut_ptr() as usize;
-        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
-        let r = NativePlayerRecord {
-            address: a,
-            pid: driver.pid(),
-            index: 65304,
-            uid: 2000448177,
-            player_vtable: 42,
-            person_vtable: 43,
-            attributes_verified: false,
-        };
-        driver.write(a, &42usize).unwrap();
-        driver.write(a + PERSON, &43usize).unwrap();
-        driver.write(a + INDEX, &r.index).unwrap();
-        driver.write(a + UID, &r.uid).unwrap();
-        driver.write(a + UID + 4, &r.uid).unwrap();
-        driver.write(a + POSITIONS, &[1u8; 15]).unwrap();
-        driver.write(a + LEFT_FOOT, &40u8).unwrap();
-        driver.write(a + RIGHT_FOOT, &100u8).unwrap();
-        (data, r)
-    }
-    #[test]
-    fn preferred_moves_read_bitset_and_name_only_verified_bits() {
-        let (data, record) = fixture();
-        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
-        driver.write(record.address + PPM_BITSET_OFFSET, &((1u64 << 39) | (1u64 << 11))).unwrap();
-        let before = data.clone();
-        let ppm = record.read_preferred_moves(&driver).unwrap();
-        assert_eq!(ppm.named_moves, vec!["Cuts Inside From Both Wings"]);
-        assert_eq!(ppm.unnamed_set_bits, 1);
-        assert_eq!(ppm.bits.iter().map(|b| b.bit).collect::<Vec<_>>(), vec![11, 39]);
-        assert_eq!(data, before, "preferred-move reads never write");
-        // A record whose identity no longer matches is refused rather than guessed.
-        driver.write(record.address + INDEX, &7i32).unwrap();
-        assert!(record.read_preferred_moves(&driver).is_err());
-    }
-
-    #[test]
-    fn calendar_year_edits_preserve_month_day_and_packed_flags() {
-        // 2028 is leap: June 1 = day 153; 2029 June 1 = day 152.
-        assert_eq!(expiry_with_year((2028 << 16) | 0x8800 | 153, 2029).unwrap(), (2029 << 16) | 0x8800 | 152);
-        assert_eq!(expiry_with_year((2028 << 16) | 60, 2029).unwrap(), (2029 << 16) | 59);
-        assert!(expiry_with_year((2029 << 16) | 366, 2030).is_err());
-        assert!(expiry_with_year((2028 << 16) | 153, 0).is_err());
-    }
-
-    #[test]
-    fn attribute_schema_has_unique_offsets_and_correct_scales() {
-        let fields: Vec<_> = native_attributes().collect();
-        assert_eq!(fields.len(), 60);
-        let offsets: std::collections::HashSet<_> = fields.iter().map(|f| f.offset).collect();
-        assert_eq!(offsets.len(), fields.len());
-        assert_eq!(fields.iter().find(|f| f.name == "composure").unwrap().offset, 0x4b);
-        assert_eq!(fields.iter().find(|f| f.name == "concentration").unwrap().offset, 0x4c);
-        let personality = fields.iter().find(|f| f.name == "professionalism").unwrap();
-        assert_eq!(personality.decode(12).unwrap(), 12);
-        assert!(personality.decode(60).is_err());
-    }
-
-    #[test]
-    fn indexed_abilities_require_calibration_and_preserve_unread_contract_fields() {
-        let (_data, mut record) = fixture();
-        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
-        driver.write(record.address + 0x11c, &125u16).unwrap();
-        driver.write(record.address + 0x11e, &175u16).unwrap();
-        let mut player = Player::default();
-        player.contract.wage_per_week = 543;
-        player.contract.expiry_year = 2029;
-        let contract = player.contract.clone();
-        assert!(record.refresh_abilities(&driver, &mut player).is_err());
-        let mut observed = PlayerAttributes::default();
-        for field in NATIVE_OUTFIELD_ATTRIBUTES {
-            driver.write(record.address + field.offset, &50u8).unwrap();
-            (field.set)(&mut observed, 10);
-        }
-        record.verify_attributes(&driver, &observed).unwrap();
-        record.refresh_abilities(&driver, &mut player).unwrap();
-        assert_eq!((player.current_ability, player.potential_ability), (125, 175));
-        assert_eq!(player.contract, contract);
-        driver.write(record.address + 0x11c, &201u16).unwrap();
-        driver.write(record.address + 0x11e, &0u16).unwrap();
-        record.refresh_abilities(&driver, &mut player).unwrap();
-        assert_eq!((player.current_ability, player.potential_ability), (0, 0));
-    }
-
-    #[test]
-    fn goalkeeper_attributes_verify_and_calibrate_layout() {
-        let (_data, mut record) = fixture();
-        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
-        driver.write(record.address + 0x11c, &130u16).unwrap();
-        driver.write(record.address + 0x11e, &160u16).unwrap();
-        let mut observed = PlayerAttributes::default();
-        for field in NATIVE_GOALKEEPER_ATTRIBUTES {
-            driver.write(record.address + field.offset, &65u8).unwrap();
-            (field.set)(&mut observed, 13);
-        }
-        record.verify_attributes(&driver, &observed).unwrap();
-        assert!(record.attributes_verified());
-        let mut player = Player::default();
-        record.refresh_abilities(&driver, &mut player).unwrap();
-        assert_eq!((player.current_ability, player.potential_ability), (130, 160));
-    }
-
-    #[test]
-    fn mixed_attributes_abilities_and_owned_contract_round_trip() {
-        struct ContractTag(String);
-        impl std::fmt::Display for ContractTag {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
-        }
-        let tag = ContractTag(String::from("contract type"));
-        let typed: &dyn std::fmt::Display = &tag;
-        // A genuine read-only vtable with an executable destructor, for contract guards.
-        let (_, vtable): (usize, usize) = unsafe { std::mem::transmute(typed) };
-        let (data, mut r) = fixture();
-        let mut contract = vec![0u64; 32];
-        let c = contract.as_mut_ptr() as usize;
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        d.write(c, &vtable).unwrap();
-        d.write(c + 8, &(r.address + PERSON)).unwrap();
-        d.write(c + 0x20, &542u32).unwrap();
-        d.write(c + 0x48, &((2028u32 << 16) | 153)).unwrap();
-        d.write(r.address + 0x1e8, &c).unwrap();
-        d.write(r.address + 0x11c, &80u16).unwrap();
-        d.write(r.address + 0x11e, &104u16).unwrap();
-        let mut observed = PlayerAttributes::default();
-        for field in native_attributes() {
-            d.write(r.address + field.offset, &(10u8 * field.scale)).unwrap();
-            (field.set)(&mut observed, 10);
-        }
-        r.verify_attributes(&d, &observed).unwrap();
-        let mut previous = Player { attributes: observed, positions: r.read_positions(&d).unwrap(), ..Player::default() };
-        r.refresh_player_fields(&d, &mut previous).unwrap();
-        let original = data.clone();
-        let original_contract = contract.clone();
-        let mut requested = previous.clone();
-        requested.attributes.passing = 15;
-        requested.attributes.professionalism = 12;
-        requested.current_ability = 81;
-        requested.potential_ability = 105;
-        requested.contract.wage_per_week = 543;
-        requested.contract.expiry_year = 2029;
-        r.write_player_edits(&d, &previous, &requested).unwrap();
-        let mut actual = previous.clone();
-        r.refresh_player_fields(&d, &mut actual).unwrap();
-        assert!(actual.preferred_moves.is_some(), "refresh publishes the read-only PPM bitset");
-        assert_eq!(actual, requested);
-        r.write_player_edits(&d, &actual, &previous).unwrap();
-        assert_eq!(data, original);
-        assert_eq!(contract, original_contract);
-        // A contract that now belongs to somebody else is rejected before Passing changes.
-        d.write(c + 8, &0usize).unwrap();
-        assert!(r.write_player_edits(&d, &previous, &requested).is_err());
-        assert_eq!(data, original);
-    }
-
-    #[test]
-    fn calibrated_type_discovers_another_player_and_rejects_wrong_vtable() {
-        let (_seed_data, mut seed) = fixture();
-        let (_peer_data, peer) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let mut text = vec![0u64; 4];
-        let string = text.as_mut_ptr() as usize;
-        d.write(string, &4u32).unwrap();
-        d.write(string + 4, b"Peer").unwrap();
-        let reference = vec![string];
-        let mut attrs = PlayerAttributes::default();
-        for record in [&seed, &peer] {
-            for field in native_attributes() { d.write(record.address + field.offset, &(10u8 * field.scale)).unwrap(); (field.set)(&mut attrs, 10); }
-            for offset in [0x190, 0x198] { d.write(record.address + offset, &(reference.as_ptr() as usize)).unwrap(); }
-        }
-        d.write(peer.address + INDEX, &54762i32).unwrap();
-        d.write(peer.address + UID, &2000249370u32).unwrap();
-        d.write(peer.address + UID + 4, &2000249370u32).unwrap();
-        assert!(seed.peer_at(&d, peer.address).is_err());
-        seed.verify_attributes(&d, &attrs).unwrap();
-        let found = seed.peer_at(&d, peer.address).unwrap();
-        assert_eq!(found.index(), 54762);
-        assert_eq!(found.name(&d).unwrap(), "Peer Peer");
-        d.write(peer.address + PERSON, &44usize).unwrap();
-        assert!(seed.peer_at(&d, peer.address).is_err());
-    }
-
-    #[test]
-    fn attributes_and_positions_save_together_without_touching_other_bytes() {
-        let (data, mut r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let mut observed = PlayerAttributes::default();
-        for field in native_attributes() {
-            d.write(r.address + field.offset, &if field.scale == 5 { 53u8 } else { 11u8 }).unwrap();
-            (field.set)(&mut observed, 11);
-        }
-        r.verify_attributes(&d, &observed).unwrap();
-        let before = data.clone();
-        let previous = Player { positions: r.read_positions(&d).unwrap(), attributes: observed, ..Player::default() };
-        let mut requested = previous.clone();
-        requested.attributes.passing = 20;
-        requested.positions.dr = 19;
-        r.write_player_edits(&d, &previous, &requested).unwrap();
-        let mut actual = PlayerAttributes::default();
-        r.refresh_attributes(&d, &mut actual).unwrap();
-        assert_eq!(actual.passing, 20);
-        assert_eq!(r.read_positions(&d).unwrap().dr, 19);
-        for i in 0..data.len() * 8 {
-            if [0x1e, 12].contains(&i) { continue; }
-            let expected = (before[i / 8] >> ((i % 8) * 8)) as u8;
-            assert_eq!(d.read::<u8>(r.address + i).unwrap(), expected, "byte {i:x}");
-        }
-    }
-
-    #[test]
-    fn invalid_last_attribute_prevents_every_write() {
-        let (data, mut r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let mut attrs = PlayerAttributes::default();
-        for field in native_attributes() {
-            d.write(r.address + field.offset, &(10u8 * field.scale)).unwrap();
-            (field.set)(&mut attrs, 10);
-        }
-        r.verify_attributes(&d, &attrs).unwrap();
-        let before = data.clone();
-        let previous = Player { attributes: attrs, positions: r.read_positions(&d).unwrap(), ..Player::default() };
-        let mut requested = previous.clone();
-        requested.attributes.passing = 20;
-        requested.attributes.controversy = 21;
-        assert!(r.write_player_edits(&d, &previous, &requested).is_err());
-        assert_eq!(data, before);
-    }
-
-    #[test]
-    fn conflict_rolls_back_exact_fractional_bytes() {
-        let (_data, r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        d.write(r.address + 0x1e, &53u8).unwrap();
-        d.write(r.address + 0x20, &61u8).unwrap();
-        assert!(r.apply_byte_edits(&d, &[(0x1e, 53, 100), (0x20, 60, 100)]).is_err());
-        assert_eq!(d.read::<u8>(r.address + 0x1e).unwrap(), 53);
-        assert_eq!(d.read::<u8>(r.address + 0x20).unwrap(), 61);
-    }
-
-    #[test]
-    fn attribute_verification_requires_all_observed_fields() {
-        let (_data, mut r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let attrs = PlayerAttributes::default();
-        assert!(r.verify_attributes(&d, &attrs).is_err());
-        assert!(!r.attributes_verified());
-        assert!(r.refresh_attributes(&d, &mut PlayerAttributes::default()).is_err());
-    }
-
-    #[test]
-    fn attribute_scale_rounds_without_truncation_or_overflow() {
-        for (raw, value) in [(0, 1), (4, 1), (5, 1), (7, 1), (8, 2), (52, 10), (53, 11), (99, 20), (100, 20)] {
-            assert_eq!(displayed_rating(raw).unwrap(), value);
-        }
-        assert!(displayed_rating(101).is_err());
-    }
-
-    #[test]
-    fn native_round_trip_preserves_identity_and_surrounding_bytes() {
-        let (data, r) = fixture();
-        let before = data.clone();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let mut p = r.read_positions(&d).unwrap();
-        p.dl = 15;
-        p.wbr = 14;
-        p.left_foot = 15;
-        r.write_positions(&d, &p).unwrap();
-        assert_eq!(r.read_positions(&d).unwrap(), p);
-        for i in 0..data.len() * 8 {
-            if (POSITIONS..POSITIONS + 15).contains(&i) || i == LEFT_FOOT || i == RIGHT_FOOT {
-                continue;
-            }
-            let expected = (before[i / 8] >> ((i % 8) * 8)) as u8;
-            assert_eq!(d.read::<u8>(r.address + i).unwrap(), expected, "byte {i:x}");
-        }
-    }
-    #[test]
-    fn rollback_restores_all_fields_but_refuses_recycled_record() {
-        let (_data, r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let old = d.read::<[u8; 15]>(r.address + POSITIONS).unwrap();
-        d.write(r.address + POSITIONS, &[20u8; 15]).unwrap();
-        d.write(r.address + LEFT_FOOT, &75u8).unwrap();
-        d.write(r.address + RIGHT_FOOT, &75u8).unwrap();
-        r.rollback_positions(&d, &old, 40, 100).unwrap();
-        assert_eq!(d.read::<[u8; 15]>(r.address + POSITIONS).unwrap(), old);
-        assert_eq!(d.read::<u8>(r.address + LEFT_FOOT).unwrap(), 40);
-        assert_eq!(d.read::<u8>(r.address + RIGHT_FOOT).unwrap(), 100);
-        d.write(r.address + INDEX, &99i32).unwrap();
-        assert!(r.rollback_positions(&d, &[20u8; 15], 75, 75).is_err());
-        assert_eq!(d.read::<[u8; 15]>(r.address + POSITIONS).unwrap(), old);
-        assert_eq!(d.read::<u8>(r.address + LEFT_FOOT).unwrap(), 40);
-    }
-    #[test]
-    fn rejects_both_stale_uids_and_vtables() {
-        let (_data, r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        for offset in [0, PERSON, UID, UID + 4] {
-            let original = d.read::<u32>(r.address + offset).unwrap();
-            d.write(r.address + offset, &0u32).unwrap();
-            assert!(r.read_positions(&d).is_err(), "identity offset {offset:x}");
-            assert!(r.rollback_positions(&d, &[20u8; 15], 100, 100).is_err());
-            d.write(r.address + offset, &original).unwrap();
-        }
-    }
-    #[test]
-    fn rating_boundaries_and_fractional_feet() {
-        let (_data, r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        for value in [1, 20] {
-            let mut p = r.read_positions(&d).unwrap();
-            p.dl = value;
-            p.left_foot = value;
-            p.right_foot = value;
-            r.write_positions(&d, &p).unwrap();
-            assert_eq!(r.read_positions(&d).unwrap(), p);
-        }
-        let p = r.read_positions(&d).unwrap();
-        for value in [0, 21] {
-            let mut invalid = p.clone();
-            invalid.left_foot = value;
-            assert!(r.write_positions(&d, &invalid).is_err());
-            invalid = p.clone();
-            invalid.right_foot = value;
-            assert!(r.write_positions(&d, &invalid).is_err());
-            invalid = p.clone();
-            invalid.dr = value;
-            assert!(r.write_positions(&d, &invalid).is_err());
-            assert_eq!(r.read_positions(&d).unwrap(), p);
-        }
-        d.write(r.address + LEFT_FOOT, &99u8).unwrap();
-        assert!(r.read_positions(&d).is_err());
-    }
-    #[test]
-    fn rejects_stale_identity_and_invalid_ratings_before_writing() {
-        let (_data, r) = fixture();
-        let d = LinuxMemoryDriver::new(std::process::id() as i32);
-        let mut p = r.read_positions(&d).unwrap();
-        p.dl = 21;
-        assert!(r.write_positions(&d, &p).is_err());
-        d.write(r.address + INDEX, &7i32).unwrap();
-        assert!(r.read_positions(&d).is_err());
-        assert!(r.write_positions(&d, &PlayerPositions::default()).is_err());
-    }
-}
+#[path = "native_player_tests.rs"]
+mod tests;

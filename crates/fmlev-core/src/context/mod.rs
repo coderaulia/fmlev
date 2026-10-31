@@ -68,6 +68,9 @@ pub struct GameContextManager {
     pub session: Option<LiveSession>,
     pub(crate) native_player_records: HashMap<i32, crate::native_player::NativePlayerRecord>,
     pub(crate) failed_native_fingerprints: HashMap<i32, crate::live_write::NativePlayerFingerprint>,
+    /// Polling skips native discovery of a followed id until this time after a failed full scan
+    /// (e.g. the game shows a manager or staff profile, which is not a player record).
+    pub(crate) native_discovery_retry_at: HashMap<i32, std::time::Instant>,
     pub(crate) auto_discovery_attempted: bool,
     pub registry: OffsetsRegistry,
     pub player_registry: HashMap<i32, Player>,
@@ -144,6 +147,7 @@ impl GameContextManager {
             session: None,
             native_player_records: HashMap::new(),
             failed_native_fingerprints: HashMap::new(),
+            native_discovery_retry_at: HashMap::new(),
             auto_discovery_attempted: false,
             registry,
             player_registry,
@@ -184,6 +188,7 @@ impl GameContextManager {
     pub(crate) fn reset_live_state(&mut self) {
         self.native_player_records.clear();
         self.failed_native_fingerprints.clear();
+        self.native_discovery_retry_at.clear();
         self.auto_discovery_attempted = false;
         self.live_clubs.clear();
         self.live_nations.clear();
@@ -344,7 +349,7 @@ impl GameContextManager {
             && !self.native_player_records.get(&id).is_some_and(|r| r.attributes_verified())
         {
             // Discovery is read-only and attempted on selection, not every polling tick.
-            let _ = self.verified_native_player(id);
+            self.discover_native_player_throttled(id);
         }
         if let (Some(record), Some(session)) = (self.native_player_records.get(&id), self.session.as_ref()) {
             player.positions = record.read_positions(&session.driver)?;

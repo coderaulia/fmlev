@@ -13,6 +13,9 @@ use super::inspector::{
 };
 use super::GameContextManager;
 
+/// How long polling waits before repeating a failed native discovery of the followed id.
+const NATIVE_DISCOVERY_RETRY: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl GameContextManager {
     /// The configured entity offsets describe test records, not FM26's native records.
     /// Managed PersonReference/ClubReference objects must never be treated as those records.
@@ -188,6 +191,20 @@ impl GameContextManager {
         self.player_registry.insert(player_id, player);
         self.active_player_addr = self.player_memory_bindings.get(&player_id).copied();
         Ok(())
+    }
+
+    /// Native discovery for selection and polling. A failed attempt is a full process scan (seconds,
+    /// under the state lock), so it is not repeated for the same id within `NATIVE_DISCOVERY_RETRY`.
+    pub(crate) fn discover_native_player_throttled(&mut self, id: i32) {
+        let now = std::time::Instant::now();
+        if self.native_discovery_retry_at.get(&id).is_some_and(|at| now < *at) {
+            return;
+        }
+        if self.verified_native_player(id).is_ok() {
+            self.native_discovery_retry_at.remove(&id);
+        } else {
+            self.native_discovery_retry_at.insert(id, now + NATIVE_DISCOVERY_RETRY);
+        }
     }
 
     pub(crate) fn verified_native_player(&mut self, id: i32) -> Result<crate::native_player::NativePlayerRecord> {
@@ -1365,8 +1382,7 @@ impl GameContextManager {
             && !self.native_player_records.contains_key(&self.context.player.id)
         {
             // Retry when a newly opened profile gains a complete/changed fingerprint.
-            // Failed complete fingerprints suppress repeated full process scans.
-            let _ = self.verified_native_player(self.context.player.id);
+            self.discover_native_player_throttled(self.context.player.id);
         }
         if self.native_player_records.get(&self.context.player.id).is_some_and(|r| !r.attributes_verified()) {
             let _ = self.verified_native_player(self.context.player.id);

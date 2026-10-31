@@ -667,3 +667,17 @@ use crate::session::LiveSession;
         fake_tv[0x20..0x24].copy_from_slice(&2i32.to_ne_bytes());
         assert_eq!(extract_binding_number(&driver, tv_addr), Some(14));
     }
+
+    #[test]
+    fn failed_native_discovery_is_not_repeated_on_every_poll() {
+        // Without a session discovery fails; the failure must set a retry time that later calls respect.
+        let mut manager = GameContextManager::new_offline();
+        manager.discover_native_player_throttled(110396);
+        let first = *manager.native_discovery_retry_at.get(&110396).expect("failure records a retry time");
+        assert!(first > std::time::Instant::now());
+        manager.discover_native_player_throttled(110396);
+        assert_eq!(manager.native_discovery_retry_at.get(&110396), Some(&first), "no new attempt inside the window");
+        manager.native_discovery_retry_at.insert(110396, std::time::Instant::now());
+        manager.discover_native_player_throttled(110396);
+        assert!(manager.native_discovery_retry_at[&110396] > first, "a due retry runs again and pushes the time");
+    }

@@ -625,3 +625,10 @@ Nothing from plan workstreams C, E, F, B, D or G is verified live yet. Run these
 10. Write the results into this file, README support table and `LIVE_READ_WRITE.md`. Commit locally; push only when you ask.
 
 Undo for step 2 if wanted: `sudo sysctl -w kernel.yama.ptrace_scope=1`, and delete `/etc/sysctl.d/99-fmle-ptrace.conf` if you used `persist`.
+
+### Slow UI: repeated failed player scans under the state lock (2026-10-31, fixed)
+- **Symptom (user report)**: loading the in-game screen and saving became very slow. Measured on PID 4496: server at 100% CPU, `/api/status` 10-14 s, `/api/context` 18 s.
+- **Cause** (thread stacks): the game showed the user's own manager profile (id 110396, a `HUMAN_NON_PLAYER`, not a player record). Every `/api/context` poll ran `verified_native_player` -> `discover_by_index`, a full 5.7 GB scan, inside the global state write lock; failures are never cached, so it repeated on every poll and every request (including saves) queued behind it.
+- **Fix**: `discover_native_player_throttled` (polling and selection) waits 60 s before retrying a failed discovery of the same id; cleared on attach. Explicit write paths still call `verified_native_player` directly. Unit test `failed_native_discovery_is_not_repeated_on_every_poll`.
+- **Live after restart**: `/api/status` 0.3 ms, `/api/context` about 30 ms, server CPU about 6%. The manager-profile case itself was not re-measured live (the game had moved to another player); it is covered by the unit test.
+- **Not done**: routing manager/staff profiles opened in the game to the right tab instead of following them as players.

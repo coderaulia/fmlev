@@ -573,6 +573,14 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Read-only search (PID 4496)**: no `PLAYING_HISTORY` or `NON_PLAYING_HISTORY` pointer is reachable from the player object (depth 2, 400 objects). 110 inbound references to the player object are squad/list vectors. A scan for the index value found it in `GAME_MATCH_PLAYER_STATS`, not in a history object. Inline `(day, year)` u16 pairs at ACTUAL_PLAYER+0x3a0 (e.g. 206/2024, 182/2019, 60/2023) look like contract/join dates, not stat rows.
 - **Not proven**: where career rows live, their layout, and how the game closes a row and records a fee. Next step: snapshot a player before and after a transfer made by the game itself (not FMLE) on a throwaway save and diff the record plus the objects it newly references. No write is justified until then (Rule 7).
 
+### Career history: game-made transfer diff (2026-11-02, read-only, PID 4496, partly mapped)
+- **Test**: David Alaba (7577/16010162, R. Madrid -> Galatasaray A.S., permanent, arranged in the game, joined 5 Jan 2026). Snapshots with example `snapshot_player` before, while pending and after, plus a background recorder of his ACTUAL_PLAYER object (0x700 bytes), contract and agreement on every change. No writes.
+- **Pending**: arranging the deal changed no player/contract field I recorded (only the agreement pointer at record+0x1e0 existed).
+- **On the join day** the game: allocated a new FULL_CONTRACT (record+0x1e8 new pointer), cleared the agreement at record+0x1e0, set the team pointers, rewrote the date words near ACTUAL_PLAYER+0x3a0, and gave the player a vector at ACTUAL_PLAYER+0xd0/+0xd8/+0xe0 (begin/end/cap, one 8-byte entry; empty on every other player checked). That vector's meaning is NOT decoded.
+- **Transfer record found (heuristic layout)**: new references to the person sub-object (ACTUAL_PLAYER+0x288) sit in several copies of a record shaped `{ from_team ptr, to_team ptr, ..., person ptr, join date u32 (0x07ea1605 = day 5 | flags 0x16 << 8, year 2026), fee u32 (1,940,961) }`, e.g. at 0x26c0ec578, 0x26c0a8650, 0x269e02a28, 0x269e2a830, plus entries in `HIGHEST_TRANSFER_FEE_PAID_RECORD`, `HIGHEST_TRANSFER_FEE_RECEIVED_RECORD` and `HIGHEST_NATIONAL_TRANSFER_FEE_RECORD` lists (26b8ac018, 26b8fc538, 26bcc3af8..). The fee value was matched by co-occurrence, not yet against the on-screen fee.
+- **Conclusion**: the game writes the fee and date into transfer/record objects (and presumably the career history row) when the join day runs. FMLE Move writes none of them, which explains the missing fee entry.
+- **Not proven**: the container that owns these records, the player's career-history rows (caps/goals per club), whether the +0xd0 vector is that history, and any way to create records safely (they are game-allocated, Rule 7). Cesar Palacios's loan (index 38373) had not started when this was recorded.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

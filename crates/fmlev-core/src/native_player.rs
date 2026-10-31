@@ -1095,9 +1095,9 @@ impl NativePlayerRecord {
     }
 
     /// Moves a contracted player to a destination team squad vector.
-    pub fn move_player(&self, driver: &LinuxMemoryDriver, target_team: usize) -> Result<(usize, usize)> {
+    pub fn move_player(&self, driver: &LinuxMemoryDriver, target_team: usize, fee_gbp: Option<u32>) -> Result<(usize, usize)> {
         self.validate(driver)?;
-        crate::native_transfer::move_player(driver, self, target_team)
+        crate::native_transfer::move_player(driver, self, target_team, fee_gbp)
     }
 
     /// Signs an unemployed free agent to a target team.

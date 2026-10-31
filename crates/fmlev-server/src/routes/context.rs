@@ -969,7 +969,7 @@ pub async fn move_player(
     }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
-    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address) {
+    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp) {
         Ok((from_team, to_team)) => (
             StatusCode::OK,
             Json(serde_json::json!({

@@ -531,6 +531,11 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **UI fix**: the Contract tab used to show invented values in live mode (`Regular Starter`, `Content`, release clause 0). It now shows only native values and Unavailable otherwise. A contract created by signing a free agent has status code 0 (the signing code writes only wage, expiry, team and owner), shown as "Code 0".
 - **Tests**: `native_contract_terms` unit tests (6), a player round-trip test (`squad_status_and_release_clause_read_write_and_guard_loans`), `contract-terms.test.cjs` (7). `native_player` tests moved to `native_player_tests.rs` to stay under 1,500 lines.
 
+### Transfer fee on Move (2026-11-01)
+- **What**: `POST /api/transfer/move` accepts an optional `fee_gbp` (raw GBP, 1..2,147,483,647). When set, the same native transaction that moves the player also subtracts the fee from the buying club's balance and adds it to the selling club's (`club + 0x150` finance object, i32 at `+0x14`, finance back-pointer checked, overflow refused, both clubs must be resolvable and different). Transfer budgets are not changed. UI: optional "Fee (raw GBP)" box next to Move player; the confirm dialog states the fee. Sign (free agents) has no fee.
+- **Evidence**: the balance field and finance object are the verified native club money path (`POST /api/club/money`). Live read-only check (PID 4496): the selling club (Girona, Blind's current team) and a buying club (Dewa United Banten FC) resolved from team pointers, with finance back-pointers valid. Tests: `native_club::balance_edit` unit test, a UI test for the optional fee field. **Not run**: no transfer with a fee was executed; whether the game shows the fee in its transfer history, or reverts balances at month end, is unknown.
+- **Not covered**: a core test of `move_player` with fees on fake squads (the fake setup is large); transfer budget changes; installment or sell-on terms.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

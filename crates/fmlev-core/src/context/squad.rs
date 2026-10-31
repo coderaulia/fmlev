@@ -61,6 +61,7 @@ impl GameContextManager {
         id: i32,
         target_club_id: Option<i32>,
         target_team_address: Option<usize>,
+        fee_gbp: Option<u32>,
     ) -> Result<(usize, usize)> {
         let record = self.verified_native_player(id)?;
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
@@ -72,7 +73,7 @@ impl GameContextManager {
             }
             (None, None) => return Err(CoreError::InvalidValue("Either target_club_id or target_team_address must be provided".into())),
         };
-        let res = record.move_player(&session.driver, team_addr)?;
+        let res = record.move_player(&session.driver, team_addr, fee_gbp)?;
         let _ = self.sync_live_context();
         Ok(res)
     }

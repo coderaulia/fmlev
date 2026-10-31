@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createUi } = require('./helpers/fake-dom.cjs');
 const ok = data => ({ ok: true, json: async () => data });
 
-const IDS = ['btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent', 'transfer-experimental',
+const IDS = ['transfer-fee', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent', 'transfer-experimental',
   'transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year', 'savebar', 'savebar-status', 'savebar-error'];
 
 function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true } = {}) {
@@ -105,4 +105,23 @@ test('target club squad space is read-only and shown next to the club id', async
   assert.equal(await ui.run('loadTransferSpace()'), null);
   assert.equal(ui.els['transfer-space-note'].innerText, '');
   assert.equal(ui.requests.length, 1, 'an invalid id makes no request');
+});
+
+test('move sends an optional transfer fee only when one is entered, and rejects invalid fees', async () => {
+  const ui = app();
+  opt(ui);
+  ui.run('displayPlayer = () => {}');
+  ui.els['transfer-target-club-id'].value = '1094';
+  for (const bad of ['0', '-5', '1.5', '2147483648', 'abc']) {
+    ui.els['transfer-fee'].value = bad;
+    assert.equal(await ui.run('movePlayer()'), false, bad);
+  }
+  assert.equal(ui.requests.length, 0);
+  ui.els['transfer-fee'].value = '15000000';
+  assert.equal(await ui.run('movePlayer()'), true);
+  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, fee_gbp: 15000000, experimental: true });
+  ui.requests.length = 0;
+  ui.els['transfer-fee'].value = '';
+  assert.equal(await ui.run('movePlayer()'), true);
+  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/move').body, { player_id: 42, target_club_id: 1094, experimental: true }, 'no fee field without a fee');
 });

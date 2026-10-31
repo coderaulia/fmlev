@@ -75,6 +75,21 @@ pub struct NativeClubRecord {
 
 pub type NativeClubFinance = NativeClubRecord;
 
+/// `(address, old bytes, new bytes)` that add `delta` raw GBP to the native balance of the club at `club`
+/// (`finance + 0x14`, i32). The finance object must point back at the club; overflow is refused, not wrapped.
+pub fn balance_edit(driver: &LinuxMemoryDriver, club: usize, delta: i64) -> Result<(usize, Vec<u8>, Vec<u8>)> {
+    if club <= 0x10000 {
+        return Err(invalid("Club pointer is not valid"));
+    }
+    let finance = driver.read_ptr(club + FINANCE_OFFSET)?;
+    if finance <= 0x10000 || driver.read_ptr(finance + 8)? != club {
+        return Err(invalid("Club finance object does not point back at the club"));
+    }
+    let old = driver.read::<i32>(finance + BALANCE_OFFSET)?;
+    let next = i32::try_from(i64::from(old) + delta).map_err(|_| invalid("The club balance would leave the 32-bit range"))?;
+    Ok((finance + BALANCE_OFFSET, old.to_le_bytes().to_vec(), next.to_le_bytes().to_vec()))
+}
+
 /// u32 length (1..=256) followed by UTF-8 text without control characters, at `pointer`.
 fn read_length_prefixed(driver: &LinuxMemoryDriver, pointer: usize) -> Option<String> {
     if pointer <= 0x10000 {
@@ -705,5 +720,20 @@ mod tests {
         // A club whose stadium record is not mapped has no stadium name.
         fixture.record.stadium = None;
         assert_eq!(fixture.record.read_stadium_name(&fixture.driver), None);
+    }
+
+    #[test]
+    fn balance_edit_adds_a_delta_and_refuses_overflow_or_a_foreign_finance_object() {
+        let f = mock_club();
+        let (address, old, next) = balance_edit(&f.driver, f.record.club, -5_000_000).unwrap();
+        assert_eq!(address, f.record.finance + BALANCE_OFFSET);
+        assert_eq!(i32::from_le_bytes(old.try_into().unwrap()), 50_000_000);
+        assert_eq!(i32::from_le_bytes(next.try_into().unwrap()), 45_000_000);
+        assert!(balance_edit(&f.driver, f.record.club, i64::from(i32::MAX)).is_err(), "would overflow upwards");
+        assert!(balance_edit(&f.driver, f.record.club, -i64::from(i32::MAX) * 2).is_err(), "would overflow downwards");
+        // A finance object that does not point back at the club is refused.
+        f.driver.write(f.record.finance + 8, &0usize).unwrap();
+        assert!(balance_edit(&f.driver, f.record.club, 1).is_err());
+        assert!(balance_edit(&f.driver, 0, 1).is_err());
     }
 }

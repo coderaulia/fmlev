@@ -100,9 +100,13 @@
     async function movePlayer() {
       const club = transferTargetClubId();
       if (club === null) { showToast("Enter the target club ID (a positive whole number)", "warning"); return false; }
+      const feeRaw = String(document.getElementById("transfer-fee")?.value ?? "").trim();
+      const fee = feeRaw === "" ? null : Number(feeRaw);
+      if (fee !== null && (!Number.isInteger(fee) || fee < 1 || fee > 2147483647)) { showToast("The transfer fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty for no fee)", "warning"); return false; }
       const name = state.activePlayer?.name || "this player";
-      return runTransferAction("/api/transfer/move", { target_club_id: club },
-        `Move ${name} to club ${club}? The destination first-team squad needs a spare slot. Use a throwaway save.`);
+      const feeText = fee === null ? "" : ` The fee of ${fee.toLocaleString()} moves from the buying club's balance to the selling club's.`;
+      return runTransferAction("/api/transfer/move", fee === null ? { target_club_id: club } : { target_club_id: club, fee_gbp: fee },
+        `Move ${name} to club ${club}?${feeText} The destination first-team squad needs a spare slot. Use a throwaway save.`);
     }
     async function signFreeAgent() {
       const club = transferTargetClubId();

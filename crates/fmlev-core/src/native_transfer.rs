@@ -449,10 +449,14 @@ pub fn terminate_loan(
 
 /// Moves a contracted player from their current team to a target team.
 /// Requires the target team squad vector to have spare capacity (`end < capacity`).
+/// Moves a contracted player to `target_team`. With `fee_gbp` the fee (raw GBP) is also moved between the club
+/// balances in the same transaction: the receiving club's balance falls by the fee and the selling club's rises.
+/// Transfer budgets are not changed.
 pub fn move_player(
     driver: &LinuxMemoryDriver,
     player: &NativePlayerRecord,
     target_team: usize,
+    fee_gbp: Option<u32>,
 ) -> Result<(usize, usize)> {
     let actual_player = player.address - ACTUAL_PLAYER_OFFSET;
     let contract_addr = driver.read_ptr(player.address + CONTRACT_OFFSET)?;
@@ -541,6 +545,21 @@ pub fn move_player(
             0usize.to_le_bytes().to_vec(),
             "clear loan node pointer upon permanent move",
         ));
+    }
+
+    // 7. Transfer fee: buyer pays, seller receives (balances only, same transaction).
+    if let Some(fee) = fee_gbp.filter(|fee| *fee > 0) {
+        let fee = i64::from(i32::try_from(fee).map_err(|_| invalid("The transfer fee must be at most 2,147,483,647"))?);
+        let club_of = |team: usize| driver.read_ptr(team + 0x30);
+        let seller_team = if cur_team > 0x10000 { cur_team } else { parent_team };
+        let (seller, buyer) = (club_of(seller_team)?, club_of(target_team)?);
+        if seller <= 0x10000 || buyer <= 0x10000 || seller == buyer {
+            return Err(invalid("A transfer fee needs two different clubs; the selling or buying club could not be resolved"));
+        }
+        for (club, delta, label) in [(buyer, -fee, "transfer fee: buying club balance"), (seller, fee, "transfer fee: selling club balance")] {
+            let (address, old, next) = crate::native_club::balance_edit(driver, club, delta)?;
+            edits.push(NativeEdit::new(address, old, next, label));
+        }
     }
 
     apply_transaction(driver, &edits)?;

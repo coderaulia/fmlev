@@ -96,6 +96,7 @@
             <div class="transfer-group">
               <input id="transfer-target-club-id" type="number" min="1" class="form-control" placeholder="Target club ID" style="width: 150px;" aria-label="Target club ID" onchange="loadTransferSpace()">
               <span id="transfer-space-note" class="unverified-note"></span>
+              <input id="transfer-fee" type="number" min="1" max="2147483647" class="form-control" placeholder="Fee (raw GBP, optional)" style="width: 170px;" aria-label="Transfer fee in raw GBP">
               <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
             </div>
             <div class="transfer-group">
@@ -104,7 +105,7 @@
               <button id="btn-sign-free-agent" disabled class="btn" onclick="signFreeAgent()">Sign free agent</button>
             </div>
           </div>
-          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage and expiry year are required to sign.</p>
+          <p class="unverified-note">Sign and Move use the target club ID above (the club's first team). Wage and expiry year are required to sign. A move fee is optional: it is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
         </div>
       </div>
     </section>

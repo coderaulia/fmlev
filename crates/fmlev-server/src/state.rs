@@ -295,6 +295,9 @@ pub struct PlayerMoveRequest {
     pub player_id: i32,
     pub target_club_id: Option<i32>,
     pub target_team_address: Option<usize>,
+    /// Optional transfer fee in raw GBP, moved from the buying club's balance to the selling club's.
+    #[serde(default)]
+    pub fee_gbp: Option<u32>,
     #[serde(default)]
     pub experimental: bool,
 }

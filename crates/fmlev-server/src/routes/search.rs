@@ -51,15 +51,26 @@ pub(crate) fn status_json(search: &SearchState) -> Value {
         "error": search.error,
         "pid": index.map(|i| i.pid).or(search.attempted_pid),
         "duplicates_dropped": index.map_or(0, |i| i.duplicates_dropped),
+        "built_game_date": search.built_game_date,
+        "rebuild_reason": search.rebuild_reason,
     })
 }
 
 /// Starts a background build for `driver`'s process. Returns false when one is already running.
 pub(crate) fn start_index_build(state: &ServerState, driver: LinuxMemoryDriver) -> bool {
+    start_index_build_at(state, driver, None)
+}
+
+/// Same, remembering the raw game date at build start so a later date change can trigger a rebuild.
+pub(crate) fn start_index_build_at(state: &ServerState, driver: LinuxMemoryDriver, game_date: Option<i64>) -> bool {
     {
         let mut search = state.search_write();
         if search.building {
             return false;
+        }
+        search.last_build_started = Some(Instant::now());
+        if game_date.is_some() {
+            search.built_game_date = game_date;
         }
         search.building = true;
         search.stage = Some("scanning");
@@ -96,6 +107,8 @@ pub(crate) fn ensure_index(state: &ServerState, driver: Option<LinuxMemoryDriver
         let mut search = state.search_write();
         if search.index.as_ref().is_some_and(|index| index.pid != driver.pid()) {
             search.index = None;
+            search.unindexed_seen.clear();
+            search.built_game_date = None;
         }
         if search.building || search.index.is_some() || search.attempted_pid == Some(driver.pid()) {
             return;
@@ -130,6 +143,68 @@ pub(crate) fn check_stale(state: &ServerState, driver: &LinuxMemoryDriver) {
         tracing::info!("Search index is stale (record identity changed); rebuilding");
         start_index_build(state, *driver);
     }
+}
+
+/// Players are created while the game runs (youth intake, regens), so a built index goes stale without any
+/// record changing. Read the game date at most this often.
+const DATE_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+/// A date change rebuilds the index at most this often (a build scans all game memory, about 3 seconds).
+const MIN_DATE_REBUILD: std::time::Duration = std::time::Duration::from_secs(60);
+/// A followed player missing from the index rebuilds it at most this often.
+const MIN_UNKNOWN_REBUILD: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// True (and the check is recorded) when it is time to read the game date again.
+pub(crate) fn date_check_due(state: &ServerState) -> bool {
+    let mut search = state.search_write();
+    if search.last_date_checked.is_some_and(|at| at.elapsed() < DATE_CHECK_EVERY) {
+        return false;
+    }
+    search.last_date_checked = Some(Instant::now());
+    true
+}
+
+/// Decides whether a ready index must be rebuilt because new records may exist: the game date changed since the
+/// build (days passed), or the player the game is showing is not in the index (a new youth player, for example).
+/// Each unindexable followed id causes at most one rebuild, and builds are rate limited.
+pub(crate) fn maintain_index(state: &ServerState, driver: LinuxMemoryDriver, game_date: Option<i64>, followed_player: Option<i32>) {
+    let reason = decide_rebuild(&mut state.search_write(), driver.pid(), game_date, followed_player);
+    if let Some(reason) = reason {
+        tracing::info!("Search index rebuild: {reason}");
+        start_index_build_at(state, driver, game_date);
+    }
+}
+
+/// The rebuild decision of `maintain_index`, on plain state so it can be tested: `Some(reason)` when a rebuild
+/// must start (the reason is also recorded for the status route).
+pub(crate) fn decide_rebuild(search: &mut SearchState, pid: i32, game_date: Option<i64>, followed_player: Option<i32>) -> Option<String> {
+    if search.building {
+        return None;
+    }
+    let has_player = search.index.as_ref().filter(|index| index.pid == pid).map(|index| {
+        followed_player.filter(|id| *id > 0).map(|id| (id, index.get(EntityKind::Player, id).is_some()))
+    })?;
+    let since_build = search.last_build_started.map(|at| at.elapsed());
+    let allowed = |minimum: std::time::Duration| since_build.is_none_or(|elapsed| elapsed >= minimum);
+    let mut reason = None;
+    if let Some(date) = game_date {
+        match search.built_game_date {
+            None => search.built_game_date = Some(date),
+            Some(built) if built != date && allowed(MIN_DATE_REBUILD) => reason = Some("the game date changed (new players may exist)".to_string()),
+            Some(_) => {}
+        }
+    }
+    if reason.is_none() {
+        if let Some((id, false)) = has_player {
+            if !search.unindexed_seen.contains(&id) && allowed(MIN_UNKNOWN_REBUILD) {
+                search.unindexed_seen.insert(id);
+                reason = Some(format!("the followed player {id} is not in the index"));
+            }
+        }
+    }
+    if reason.is_some() {
+        search.rebuild_reason = reason.clone();
+    }
+    reason
 }
 
 /// Drops an index entry whose record failed to open (moved or gone after a reload).
@@ -362,6 +437,63 @@ mod tests {
         assert_eq!(status["duplicates_dropped"], 3);
         assert_eq!(status["duration_ms"], 1200);
     }
+
+    fn index_with_player(pid: i32, id: i32) -> SearchIndex {
+        SearchIndex::new(pid, vec![IndexEntry::new(EntityKind::Player, id, 1000 + id as u32, "Known Player".into(), None, 0x1000)], 0, 5)
+    }
+
+    fn ready(pid: i32, date: Option<i64>) -> SearchState {
+        SearchState { index: Some(index_with_player(pid, 7)), built_game_date: date, ..Default::default() }
+    }
+
+    #[test]
+    fn a_new_game_date_rebuilds_a_ready_index_once_the_minimum_interval_passed() {
+        let mut state = ready(1, Some(100));
+        state.last_build_started = Some(Instant::now() - std::time::Duration::from_secs(120));
+        assert_eq!(decide_rebuild(&mut state, 1, Some(100), Some(7)), None, "same date: nothing to do");
+        let reason = decide_rebuild(&mut state, 1, Some(101), Some(7)).expect("date changed");
+        assert!(reason.contains("date changed"), "{reason}");
+        assert_eq!(state.rebuild_reason.as_deref(), Some(reason.as_str()));
+        // Too soon after the last build: wait.
+        state.last_build_started = Some(Instant::now());
+        assert_eq!(decide_rebuild(&mut state, 1, Some(102), Some(7)), None);
+    }
+
+    #[test]
+    fn the_first_observed_date_is_adopted_not_treated_as_a_change() {
+        let mut state = ready(1, None);
+        assert_eq!(decide_rebuild(&mut state, 1, Some(500), Some(7)), None);
+        assert_eq!(state.built_game_date, Some(500));
+    }
+
+    #[test]
+    fn a_followed_player_missing_from_the_index_rebuilds_once_per_id() {
+        let mut state = ready(1, Some(100));
+        state.last_build_started = Some(Instant::now() - std::time::Duration::from_secs(120));
+        let reason = decide_rebuild(&mut state, 1, Some(100), Some(99)).expect("player 99 is new");
+        assert!(reason.contains("99"), "{reason}");
+        // The same id never triggers again (a staff member or an unindexable record), even after the interval.
+        state.last_build_started = Some(Instant::now() - std::time::Duration::from_secs(120));
+        assert_eq!(decide_rebuild(&mut state, 1, Some(100), Some(99)), None);
+        // A different unknown id does, once the minimum interval has passed.
+        assert!(decide_rebuild(&mut state, 1, Some(100), Some(100)).is_some());
+        state.last_build_started = Some(Instant::now());
+        assert_eq!(decide_rebuild(&mut state, 1, Some(100), Some(101)), None, "rate limited right after a build");
+    }
+
+    #[test]
+    fn nothing_is_decided_while_building_for_another_process_or_without_an_index() {
+        let mut building = ready(1, Some(100));
+        building.building = true;
+        assert_eq!(decide_rebuild(&mut building, 1, Some(999), Some(5)), None);
+        let mut other_pid = ready(2, Some(100));
+        assert_eq!(decide_rebuild(&mut other_pid, 1, Some(999), Some(5)), None);
+        let mut none = SearchState::default();
+        assert_eq!(decide_rebuild(&mut none, 1, Some(999), Some(5)), None);
+        let mut known = ready(1, Some(100));
+        assert_eq!(decide_rebuild(&mut known, 1, Some(100), Some(7)), None, "a followed player already indexed is fine");
+        assert_eq!(decide_rebuild(&mut known, 1, Some(100), Some(0)), None, "id 0 means no player");
+    }
 }
 
 /// A record to locate before a route takes the global state lock.
@@ -404,4 +536,5 @@ pub(crate) async fn warm(state: &ServerState, targets: &[Warm]) {
         }
     })
     .await;
+
 }

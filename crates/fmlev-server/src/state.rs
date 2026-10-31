@@ -37,6 +37,15 @@ pub struct SearchState {
     pub attempted_pid: Option<i32>,
     /// Last time the index was spot-checked against the live process.
     pub last_checked: Option<std::time::Instant>,
+    /// Raw game date when the last build started; a different date means days passed (youth intake, regens).
+    pub built_game_date: Option<i64>,
+    pub last_date_checked: Option<std::time::Instant>,
+    pub last_build_started: Option<std::time::Instant>,
+    /// Why the most recent automatic rebuild was started (shown by the status route).
+    pub rebuild_reason: Option<String>,
+    /// Followed player ids that already caused a rebuild without being found (e.g. a staff member), so one
+    /// unindexable id cannot trigger rebuilds forever.
+    pub unindexed_seen: std::collections::HashSet<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

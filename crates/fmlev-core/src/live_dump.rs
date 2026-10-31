@@ -115,6 +115,16 @@ pub fn dump_bound_properties(
     driver: &LinuxMemoryDriver,
     binding_subsystem: usize,
 ) -> Vec<BoundProperty> {
+    dump_bound_properties_where(driver, binding_subsystem, &|_, _| true)
+}
+
+/// Like `dump_bound_properties`, but `keep(reference_class, property)` is checked before a value is decoded, so
+/// asking for one property does not pay for decoding every bound value.
+pub fn dump_bound_properties_where(
+    driver: &LinuxMemoryDriver,
+    binding_subsystem: usize,
+    keep: &dyn Fn(&str, &str) -> bool,
+) -> Vec<BoundProperty> {
     let mut out = Vec::new();
     let (Ok(m_data), Ok(m_ctx)) = (
         driver.read_ptr(binding_subsystem + 0x78),
@@ -171,6 +181,9 @@ pub fn dump_bound_properties(
                 Il2CppString::read(driver, p).ok().filter(|s| !s.is_empty())
             });
         let Some(property) = property else { continue };
+        if !keep(&ref_class, &property) {
+            continue;
+        }
         let d_obj = driver.read_ptr(data_items + 0x20 + key * 8).unwrap_or(0);
         let tv = driver.read_ptr(d_obj + 0x30).unwrap_or(0);
         let value_class = class_name(driver, tv)
@@ -190,4 +203,13 @@ pub fn dump_bound_properties(
             .cmp(&(b.reference_type, b.reference_id, &b.property))
     });
     out
+}
+
+/// The game's current date as the raw packed value of `GameReference.CurrentGameDate` (changes on every day
+/// tick). `None` when the bindings are unavailable. Used to notice that days have passed, not to interpret the date.
+pub fn read_game_date(session: &crate::session::LiveSession) -> Option<i64> {
+    let binding = crate::context::inspector::resolve_binding_subsystem(session)?;
+    dump_bound_properties_where(&session.driver, binding, &|class, property| class == "GameReference" && property == "CurrentGameDate")
+        .into_iter()
+        .find_map(|p| p.value.strip_prefix("i64 ").and_then(|v| v.trim().parse::<i64>().ok()))
 }

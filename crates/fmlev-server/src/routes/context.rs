@@ -47,6 +47,16 @@ pub async fn get_context(State(state): State<ServerState>) -> impl IntoResponse 
     w.is_attached = ctx.attached;
     w.pid = ctx.pid;
 
+    // New players appear while the game runs (youth intake, regens): keep the search index fresh from the same poll.
+    if let Some(driver) = super::search::live_driver(&w.context_mgr) {
+        let date = if super::search::date_check_due(&state) {
+            w.context_mgr.session.as_ref().and_then(fmlev_core::live_dump::read_game_date)
+        } else {
+            None
+        };
+        super::search::maintain_index(&state, driver, date, Some(ctx.player.id));
+    }
+
     let nations = w.context_mgr.all_nations();
     let competitions = w.context_mgr.all_competitions();
 

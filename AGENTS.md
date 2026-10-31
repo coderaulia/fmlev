@@ -549,6 +549,13 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 - **Not proven**: that the 1-20 display of an off-scale foot matches the game's own label for every value (74 shows as 15 and the game says Strong); no edit was written to Reno.
 - **Side note**: an API call that selects a player pins FMLE to that player; `POST /api/context/select {"unpin": true}` returns to auto-follow. A person who is staff (for example Igor Tolic, staff 799) opened in the game also appears in the Player page and cannot be loaded as a player; auto-follow does not yet route staff profiles to the Staff tab.
 
+### Search index stays fresh when players are created (2026-11-01)
+- **Problem**: the index was built once per process and only dropped when existing records changed (spot check), so players created while the game runs (youth intake, regens, new staff) were missing until a manual Rebuild. Newly generated players are the same record type as Reno Salampessy, so the off-scale foot fix above covers their validation; the missing piece was noticing them.
+- **Change**: the polled `GET /api/context` now calls `maintain_index`. Triggers: (1) the raw `GameReference.CurrentGameDate` binding (`live_dump::read_game_date`, read at most every 10 s) differs from the date when the index was built, at most one rebuild per 60 s; the first observed date is adopted, not treated as a change; (2) the player the game is showing is not in the index, one rebuild per id (so a staff member or unindexable record cannot loop), at most one per 20 s. Rebuilds run in the background and the old index keeps serving. `GET /api/search/status` reports `built_game_date` and `rebuild_reason`. Rebuild index (manual) still works.
+- **Tests**: four `decide_rebuild` unit tests (date change, first date adopted, unknown followed player once per id and rate limit, no decision while building or for another process or without an index).
+- **Live (PID 4496)**: the date is read (265555509) and recorded, the followed player was already indexed (no rebuild). **Not yet seen live**: an actual rebuild after a day tick or after a newly generated player appears; no youth intake was available to test, so that is covered only by the unit tests and the earlier Reno finding.
+- **Limit**: new players that appear without a day tick or without being opened in the game are found at the next date change; a player created and left unopened is searchable after the next day passes.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

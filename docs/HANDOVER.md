@@ -1,5 +1,10 @@
 # FMLE Handover
 
+## Update — 2026-11-01 (index freshness, off-scale feet)
+
+- Players with a foot byte that is not a multiple of 5 (generated youth like Reno Salampessy) were rejected everywhere; fixed (live index 49,035 to 52,752 players).
+- The search index now rebuilds itself in the background when the game date changes (at most once a minute) or when the player shown in the game is not in the index. Status route fields: `built_game_date`, `rebuild_reason`. Not yet seen live after a day tick.
+
 ## Update — 2026-11-01 (latest state)
 
 - **Transfers (user-confirmed working)**: terminate contract, sign and move work from the Contract tab (experimental checkbox, confirm dialog, `experimental: true`). Move takes an optional fee (raw GBP) taken from the buying club's balance and added to the selling club's in the same transaction; the fee path itself has not been run in game. Loan recall stays disabled. A save/reload after a transfer is still unconfirmed in the docs.

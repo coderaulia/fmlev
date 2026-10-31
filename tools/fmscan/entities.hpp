@@ -46,7 +46,7 @@ inline std::optional<NativeEntity> read_entity(const Memory& m, const NativeCata
         auto vt_region = m.region(player_vt, 8), code = m.region(function);
         if (!vt_region || vt_region->perms[1] == 'w' || !code || code->perms[2] != 'x') return {};
         if (!m.read(record + 8, positions) || !m.read(record + 0x2f, left) || !m.read(record + 0x30, right) ||
-            !left || left > 100 || left % 5 || !right || right > 100 || right % 5 ||
+            !left || left > 100 || !right || right > 100 ||
             !std::all_of(positions.begin(), positions.end(), [](uint8_t p) { return p >= 1 && p <= 20; })) return {};
         for (U off : {0x190, 0x198}) {
             U ref = 0; if (!m.read(record + off, ref)) return {};

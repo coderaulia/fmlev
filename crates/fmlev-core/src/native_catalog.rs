@@ -249,7 +249,7 @@ impl Pass<'_> {
         }
         let positions = driver.read::<[u8; 15]>(record + 8).ok()?;
         let feet = driver.read::<[u8; 2]>(record + 0x2f).ok()?;
-        if !positions.iter().all(|p| (1..=20).contains(p)) || !feet.iter().all(|f| (1..=100).contains(f) && f % 5 == 0) {
+        if !positions.iter().all(|p| (1..=20).contains(p)) || !feet.iter().all(|f| (1..=100).contains(f)) {
             return None;
         }
         Some((record, id, uid, pooled_name(driver, record + 0x190)?))

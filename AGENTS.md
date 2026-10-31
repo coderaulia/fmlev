@@ -541,6 +541,14 @@ Workstream E (preferred player moves), read-only. Session 2026-10-28, branch `wo
 ### Sign form wage is yearly (2026-11-01)
 - The Sign free agent form on the Contract tab now takes a **yearly** wage in raw GBP and sends `wage_gbp` = round(yearly / 52) (the game stores a weekly wage; for example 245,000 per year is 4,712 per week). Yearly below 26 is refused. The API (`wage_gbp`) is still weekly. UI tests cover the conversion and the rejects.
 
+### Players with an off-scale foot were invisible (2026-11-01)
+- **Symptom (user report)**: Reno Salampessy (Persib, 18, id 65949, uid 2000461766) opened from the game could not be found by search or edited: no native attributes, CA/PA unavailable, nothing writable.
+- **Cause**: every player validator required each foot byte to be a multiple of 5 (1-20 rating x 5). Reno's right foot is 74 (the game shows it as "Strong", left 100 as "Very Strong"); generated youth players can have such values. The Rust catalog (search index), `NativePlayerRecord::discover_by_index`, `read_positions` and the C++ scanner (`entities.hpp`, `player_data.hpp`) all rejected him, so he was missing from the index, `fmscan entity` and the editor. Found by listing same-id records (`list_id_candidates 65949`: an ACTUAL_PLAYER with a valid identity) and checking each rule on the object.
+- **Fix**: the foot check is now only the 1..=100 range (identity, vtables, positions and names still validate). A foot reads as the nearest 1..20 rating, `(native + 2) / 5` (74 shows as 15, multiples of 5 are unchanged), and a position save rewrites a foot byte only when its rating changed, so a value like 74 is never normalised to 75 by an unrelated edit. Editing a foot writes 5 x rating as before.
+- **Live result (PID 4496)**: the search index grew from 49,035 to 52,752 players (3,717 players had been hidden); Reno is searchable, loads with CA 74 / PA 97, feet 20/15, and 66 writable fields. The scanner finds him too (`fmscan entity ... --id 65949`).
+- **Not proven**: that the 1-20 display of an off-scale foot matches the game's own label for every value (74 shows as 15 and the game says Strong); no edit was written to Reno.
+- **Side note**: an API call that selects a player pins FMLE to that player; `POST /api/context/select {"unpin": true}` returns to auto-follow. A person who is staff (for example Igor Tolic, staff 799) opened in the game also appears in the Player page and cannot be loaded as a player; auto-follow does not yet route staff profiles to the Staff tab.
+
 ## Search index (plan G)
 
 ### Implementation (2026-10-28, NOT yet verified live)

@@ -9,6 +9,10 @@ use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
 const POSITIONS: usize = 8;
 const LEFT_FOOT: usize = 0x2f;
+/// Native foot strength is 1..=100; most players store 5 x a 1..=20 rating, but generated players can hold values
+/// such as 74, so validity only checks the range and the rating is the nearest 1..=20 step.
+fn foot_native_ok(value: u8) -> bool { (1..=100).contains(&value) }
+fn foot_rating(native: u8) -> u8 { ((u16::from(native) + 2) / 5).clamp(1, 20) as u8 }
 const RIGHT_FOOT: usize = 0x30;
 const PERSON: usize = 0x140;
 /// Pointer at record + 0x1f0 to a loan node; non-null while the player is on loan (the screens then show the loan contract).
@@ -319,7 +323,7 @@ impl NativePlayerRecord {
                         }
                         let Ok(left) = driver.read::<u8>(address + LEFT_FOOT) else { continue };
                         let Ok(right) = driver.read::<u8>(address + RIGHT_FOOT) else { continue };
-                        if !(5..=100).contains(&left) || left % 5 != 0 || !(5..=100).contains(&right) || right % 5 != 0 {
+                        if !foot_native_ok(left) || !foot_native_ok(right) {
                             continue;
                         }
                         let mut record = Self {
@@ -371,14 +375,7 @@ impl NativePlayerRecord {
         let p = driver.read::<[u8; 15]>(self.address + POSITIONS)?;
         let left = driver.read::<u8>(self.address + LEFT_FOOT)?;
         let right = driver.read::<u8>(self.address + RIGHT_FOOT)?;
-        if !p.iter().all(|v| (1..=20).contains(v))
-            || left > 100
-            || right > 100
-            || left < 5
-            || right < 5
-            || left % 5 != 0
-            || right % 5 != 0
-        {
+        if !p.iter().all(|v| (1..=20).contains(v)) || !foot_native_ok(left) || !foot_native_ok(right) {
             return Err(invalid(
                 "Native position or foot values no longer match the verified layout",
             ));
@@ -398,8 +395,8 @@ impl NativePlayerRecord {
             st: p[12],
             wbl: p[13],
             wbr: p[14],
-            left_foot: left / 5,
-            right_foot: right / 5,
+            left_foot: foot_rating(left),
+            right_foot: foot_rating(right),
         })
     }
 
@@ -1063,8 +1060,14 @@ impl NativePlayerRecord {
         let old_right = driver.read::<u8>(self.address + RIGHT_FOOT)?;
         let write_result = (|| -> Result<()> {
             driver.write(self.address + POSITIONS, &next)?;
-            driver.write(self.address + LEFT_FOOT, &(positions.left_foot * 5))?;
-            driver.write(self.address + RIGHT_FOOT, &(positions.right_foot * 5))?;
+            // A foot is rewritten only when its 1-20 rating changed, so a native value that is not a multiple of 5
+            // (generated players, for example 74) is never normalised by an unrelated position edit.
+            if positions.left_foot != foot_rating(old_left) {
+                driver.write(self.address + LEFT_FOOT, &(positions.left_foot * 5))?;
+            }
+            if positions.right_foot != foot_rating(old_right) {
+                driver.write(self.address + RIGHT_FOOT, &(positions.right_foot * 5))?;
+            }
             if &self.read_positions(driver)? != positions {
                 return Err(invalid(
                     "Native position/feet readback did not match the requested edit",

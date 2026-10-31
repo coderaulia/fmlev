@@ -421,7 +421,10 @@ fn rating_boundaries_and_fractional_feet() {
         assert!(r.write_positions(&d, &invalid).is_err());
         assert_eq!(r.read_positions(&d).unwrap(), p);
     }
+    // Off-scale native feet are valid (generated players); only the 1..=100 range is enforced.
     d.write(r.address + LEFT_FOOT, &99u8).unwrap();
+    assert_eq!(r.read_positions(&d).unwrap().left_foot, 20);
+    d.write(r.address + LEFT_FOOT, &101u8).unwrap();
     assert!(r.read_positions(&d).is_err());
 }
 #[test]
@@ -434,4 +437,37 @@ fn rejects_stale_identity_and_invalid_ratings_before_writing() {
     d.write(r.address + INDEX, &7i32).unwrap();
     assert!(r.read_positions(&d).is_err());
     assert!(r.write_positions(&d, &PlayerPositions::default()).is_err());
+}
+
+#[test]
+fn generated_player_with_an_off_scale_foot_is_read_and_not_normalised_by_a_position_edit() {
+    // Reno Salampessy (65949): right foot 74 (shown as "Strong" in game), left foot 100.
+    let (data, r) = fixture();
+    let d = LinuxMemoryDriver::new(std::process::id() as i32);
+    d.write(r.address + LEFT_FOOT, &100u8).unwrap();
+    d.write(r.address + RIGHT_FOOT, &74u8).unwrap();
+    let mut p = r.read_positions(&d).unwrap();
+    assert_eq!((p.left_foot, p.right_foot), (20, 15), "74 reads as the nearest 1-20 rating");
+    // An unrelated position edit leaves both foot bytes exactly as they were.
+    p.dl = 12;
+    r.write_positions(&d, &p).unwrap();
+    assert_eq!((d.read::<u8>(r.address + LEFT_FOOT).unwrap(), d.read::<u8>(r.address + RIGHT_FOOT).unwrap()), (100, 74));
+    // Changing the foot rating does write the new 5 x rating.
+    p.right_foot = 17;
+    r.write_positions(&d, &p).unwrap();
+    assert_eq!(d.read::<u8>(r.address + RIGHT_FOOT).unwrap(), 85);
+    // Out-of-range native values are still rejected.
+    d.write(r.address + RIGHT_FOOT, &101u8).unwrap();
+    assert!(r.read_positions(&d).is_err());
+    d.write(r.address + RIGHT_FOOT, &0u8).unwrap();
+    assert!(r.read_positions(&d).is_err());
+    drop(data);
+}
+
+#[test]
+fn foot_rating_is_the_nearest_step_and_matches_the_old_scale_for_multiples_of_five() {
+    for rating in 1..=20u8 {
+        assert_eq!(foot_rating(rating * 5), rating);
+    }
+    assert_eq!((foot_rating(1), foot_rating(2), foot_rating(3), foot_rating(74), foot_rating(77), foot_rating(78), foot_rating(100)), (1, 1, 1, 15, 15, 16, 20));
 }

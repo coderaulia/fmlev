@@ -133,9 +133,11 @@ inline PlayerData read_player_data(const Memory &m, U record, uint32_t index,
   }
   for (size_t i = 0; i < 2; ++i) {
     unsigned v = b[0x2f + i];
-    if (!v || v > 100 || v % 5)
+    // Native foot strength is 1..100; generated players can hold values that are not a multiple of 5 (for
+    // example 74), so only the range is checked and the rating is the nearest 1..20 step.
+    if (!v || v > 100)
       throw std::runtime_error("invalid native foot");
-    p.positions[15 + i] = v / 5;
+    p.positions[15 + i] = static_cast<uint8_t>(std::min(20u, std::max(1u, (v + 2) / 5)));
   }
   p.ca = field<uint16_t>(b, 0x11c);
   p.pa = field<uint16_t>(b, 0x11e);

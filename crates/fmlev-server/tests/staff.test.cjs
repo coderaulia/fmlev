@@ -362,14 +362,14 @@ test('contract wage and expiry year are editable only with experimental editing 
   assert.doesNotMatch(app.run('els["staff-detail"].innerHTML'), /staff-contract-weekly_wage/, 'read-only until experimental editing is on');
   app.run('toggleStaffEditing(true)');
   assert.match(app.run('els["staff-detail"].innerHTML'), /staff-contract-weekly_wage/);
-  app.run('staffSetContractEdit("weekly_wage", "1670")');
+  app.run('staffSetContractEdit("weekly_wage", "86840")');
   assert.deepEqual(app.run('staffState.contractEdits'), {}, 'an unchanged value is not an edit');
-  app.run('staffSetContractEdit("weekly_wage", "2500"); staffSetContractEdit("contract_expiry", "2030")');
+  app.run('staffSetContractEdit("weekly_wage", "130000"); staffSetContractEdit("contract_expiry", "2030")');
   assert.equal(app.run('staffChanges().length'), 2);
   assert.equal(await app.run('saveStaffAttributes()'), true);
   const write = calls.find(c => c.url === '/api/staff/contract/update');
   assert.deepEqual(write.body, { staff_id: 5, staff_uid: 50, experimental: true, weekly_wage: 2500, expiry_year: 2030 });
   assert.equal(calls.some(c => c.url === '/api/staff/update'), false, 'no attribute write without attribute edits');
   assert.deepEqual(app.run('staffState.contractEdits'), {});
-  assert.equal(app.run('staffContractValue("weekly_wage")'), 2500);
+  assert.equal(app.run('staffContractValue("weekly_wage")'), 130000, 'shown as yearly (2500 x 52)');
 });

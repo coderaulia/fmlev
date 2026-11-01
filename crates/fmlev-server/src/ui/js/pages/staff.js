@@ -110,6 +110,7 @@
 
     // Information / Contract: read-only rows. Only fields the server marks "verified" show a value; the rest say why not.
     function staffExtraRow(f) {
+      if (f.field === "weekly_wage" && f.status === "verified" && Number.isFinite(Number(f.value))) f = { ...f, label: "Wage (raw GBP per year)", value: Number(f.value) * 52 };
       const label = escapeHtml(f.label || staffFieldLabel(f.field));
       if (f.status === "verified" && f.value !== null && f.value !== undefined) {
         return `<div class="attr-line"><span class="attr-line-name">${label}</span><b class="attr-line-val">${escapeHtml(String(f.value))}</b></div>`;
@@ -139,7 +140,7 @@
         rows = `<div class="attr-col"><div class="attr-col-head">Contract <span class="pill pill-warn">${head}</span></div>${c.fields.map(f => editable && STAFF_CONTRACT_FIELDS[f.field] ? staffContractInput(f) : staffExtraRow(f)).join("")}</div>`;
       }
       const note = kind === "contract" ? entry.data.contract.reason : entry.data.verification;
-      const editNote = kind === "contract" ? (staffState.editing ? " Wage and expiry year are editable (experimental); role and jobs stay unavailable." : " Tick experimental editing to change wage and expiry year.") : " Editing is unavailable for this view.";
+      const editNote = kind === "contract" ? (staffState.editing ? " Wage (yearly, saved as weekly = yearly / 52) and expiry year are editable (experimental); role and jobs stay unavailable." : " Tick experimental editing to change wage and expiry year.") : " Editing is unavailable for this view.";
       return `<div class="attr-table">${rows}</div><div class="staff-note">${escapeHtml(note || "")}${editNote}</div>`;
     }
     async function loadStaffExtra(kind) {
@@ -198,15 +199,17 @@
     }
 
     // Contract tab: raw weekly wage and expiry year are the only editable fields (experimental).
-    const STAFF_CONTRACT_FIELDS = { weekly_wage: { label: "Wage (raw GBP per week)", min: 1, max: 10000000 }, contract_expiry: { label: "Expiry year", min: 2000, max: 2200 } };
+    const STAFF_CONTRACT_FIELDS = { weekly_wage: { label: "Wage (raw GBP per year)", min: 26, max: 520000000 }, contract_expiry: { label: "Expiry year", min: 2000, max: 2200 } };
     function staffContractValue(field) {
       const f = staffState.extra.contract?.data?.contract?.fields?.find(x => x.field === field);
-      return f && f.value !== null && f.value !== undefined ? Number(f.value) : null;
+      if (!f || f.value === null || f.value === undefined) return null;
+      // The game stores a weekly wage; the page shows and takes yearly (weekly x 52).
+      return field === "weekly_wage" ? Number(f.value) * 52 : Number(f.value);
     }
     function staffContractInput(f) {
       const spec = STAFF_CONTRACT_FIELDS[f.field];
       const edited = Object.prototype.hasOwnProperty.call(staffState.contractEdits, f.field);
-      const shown = edited ? staffState.contractEdits[f.field] : f.value;
+      const shown = edited ? staffState.contractEdits[f.field] : staffContractValue(f.field);
       return `<div class="attr-line"><span class="attr-line-name">${escapeHtml(spec.label)}</span>` +
         `<input id="staff-contract-${f.field}" type="number" min="${spec.min}" max="${spec.max}" value="${escapeHtml(String(shown))}" class="${edited ? "changed" : ""}" oninput="staffSetContractEdit('${f.field}', this.value)"></div>`;
     }
@@ -326,7 +329,7 @@
         const spec = STAFF_CONTRACT_FIELDS[field];
         const v = typeof raw === "number" ? raw : Number.parseInt(raw, 10);
         if (!Number.isInteger(v) || v < spec.min || v > spec.max) { showToast(`${spec.label} must be ${spec.min}-${spec.max}.`, "warning"); return false; }
-        body[field === "weekly_wage" ? "weekly_wage" : "expiry_year"] = v;
+        body[field === "weekly_wage" ? "weekly_wage" : "expiry_year"] = field === "weekly_wage" ? Math.round(v / 52) : v;
       }
       try {
         const res = await staffRequest("/api/staff/contract/update", body);

@@ -542,6 +542,7 @@
           state.playerDirty = false;
           SaveBar.clear("player");
           displayPlayer(player);
+          if (typeof Shell !== "undefined") Shell.syncEntities(state);
           state.isPinned = true;
           updateSyncUI();
           switchTab("tab-player");
@@ -570,6 +571,7 @@
           state.clubDirty = false;
           SaveBar.clear("club");
           displayClub(club);
+          if (typeof Shell !== "undefined") Shell.syncEntities(state);
           state.isPinned = true;
           updateSyncUI();
           switchTab("tab-club");
@@ -598,6 +600,7 @@
           state.nationDirty = false;
           SaveBar.clear("nation");
           displayNation(nation);
+          if (typeof Shell !== "undefined") Shell.syncEntities(state);
           state.isPinned = true;
           updateSyncUI();
           switchTab("tab-nation");
@@ -626,6 +629,7 @@
           state.competitionDirty = false;
           SaveBar.clear("competition");
           displayCompetition(competition);
+          if (typeof Shell !== "undefined") Shell.syncEntities(state);
           state.isPinned = true;
           updateSyncUI();
           switchTab("tab-competition");

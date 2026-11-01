@@ -71,3 +71,14 @@ test('a failed request shows the server message', async () => {
   await app.run('runScout()');
   assert.match(app.els['scout-results'].innerHTML, /not ready/);
 });
+
+test('selecting a player updates the header title even while pinned', async () => {
+  const app = createUi({
+    ids: ['context-title', 'context-subtitle'],
+    fetch: async () => ok({ player: { id: 9, name: 'New Player', position: 'ST (C)', club_name: 'Persib', attributes: {}, positions: {}, contract: {} } }),
+  });
+  app.run('Shell.setContext({ section: "player", kind: "player", id: 1, title: "Old Player" }); Shell.state.section = "player";');
+  app.run('displayPlayer = () => { state.activePlayer = { id: 9, name: "New Player", position: "ST (C)", club_name: "Persib" }; }; canReplaceDraft = () => true; clearSearch = () => {}; switchTab = () => {}; updateSyncUI = () => {}; rememberSearchSelection = () => {};');
+  await app.run('selectSearchedPlayer(9)');
+  assert.equal(app.run('Shell.state.contexts.player.title'), 'New Player');
+});

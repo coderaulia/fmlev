@@ -36,6 +36,8 @@
         if (editName) editName.value = player.name || "";
         const godPlayerTarget = document.getElementById("god-player-target");
         if (godPlayerTarget) godPlayerTarget.innerText = `Target: ${dispName}`;
+        // Every path that shows a player (select, Load, poll) refreshes the header, even while pinned.
+        if (typeof Shell !== "undefined" && Shell.syncEntities) Shell.syncEntities(state);
       }
 
       // Age: 0 -> "—"

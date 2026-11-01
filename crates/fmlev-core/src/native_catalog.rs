@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver, MemoryMapping};
 
 use crate::error::{CoreError, Result};
-use crate::search_index::{drop_duplicate_ids, EntityKind, IndexEntry};
+use crate::search_index::{drop_duplicate_ids, EntityKind, IndexEntry, PlayerProfile};
 
 const CHUNK: usize = 16 << 20;
 const MAX_STRING: usize = 512;
@@ -255,6 +255,16 @@ impl Pass<'_> {
         Some((record, id, uid, pooled_name(driver, record + 0x190)?))
     }
 
+    /// CA/PA (u16 at record + 0x11c / 0x11e) and the 15 position ratings; abilities outside 1..=200 read as `None`.
+    fn player_profile(&self, record: usize) -> Option<PlayerProfile> {
+        let positions = self.driver.read::<[u8; 15]>(record + 8).ok()?;
+        let ability = |offset: usize| {
+            let value = self.driver.read::<u16>(record + offset).ok()?;
+            (1..=200).contains(&value).then_some(value as u8)
+        };
+        Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions })
+    }
+
     fn staff(&self, address: usize) -> Option<(i32, u32, String)> {
         let second = address + (STAFF_SECOND_SUBOBJECT - STAFF_SUBOBJECT) as usize;
         if !self.catalog.is(self.driver, second, CatalogKind::Staff, STAFF_SECOND_SUBOBJECT) {
@@ -374,7 +384,8 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
     }
     for (record, id, uid, name) in players {
         let club = pass.player_club(record, &teams, &clubs);
-        entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record));
+        let profile = pass.player_profile(record);
+        entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record).with_profile(profile));
     }
     for (record, id, uid, name) in staff_found {
         let club = pass.staff_club(record, &teams, &clubs);

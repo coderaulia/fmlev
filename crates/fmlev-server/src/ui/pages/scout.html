@@ -1,0 +1,72 @@
+    <!-- SCOUT: filtered browse of the search index (players and staff). Click a name to open it on the Player or Staff tab. -->
+    <section id="tab-scout" class="tab-view">
+      <div class="card scout-card">
+        <div class="scout-filters">
+          <div class="form-group">
+            <label class="form-label" for="scout-kind">Type</label>
+            <select id="scout-kind" class="form-control" onchange="scoutKindChanged()">
+              <option value="players">Players</option>
+              <option value="staff">Staff</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="scout-q">Name</label>
+            <input id="scout-q" type="text" class="form-control" placeholder="Any name" onkeydown="if (event.key === 'Enter') runScout()">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="scout-club">Club</label>
+            <input id="scout-club" type="text" class="form-control" placeholder="Any club" onkeydown="if (event.key === 'Enter') runScout()">
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-position">Position</label>
+            <select id="scout-position" class="form-control">
+              <option value="">Any</option>
+              <option value="gk">GK</option><option value="dl">D (L)</option><option value="dc">D (C)</option><option value="dr">D (R)</option>
+              <option value="wbl">WB (L)</option><option value="wbr">WB (R)</option><option value="dm">DM</option>
+              <option value="ml">M (L)</option><option value="mc">M (C)</option><option value="mr">M (R)</option>
+              <option value="aml">AM (L)</option><option value="amc">AM (C)</option><option value="amr">AM (R)</option><option value="st">ST</option>
+            </select>
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-pos-min">Min position rating</label>
+            <input id="scout-pos-min" type="number" min="1" max="20" value="15" class="form-control">
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-ca-min">CA min / max</label>
+            <div class="scout-range">
+              <input id="scout-ca-min" type="number" min="1" max="200" class="form-control" placeholder="min">
+              <input id="scout-ca-max" type="number" min="1" max="200" class="form-control" placeholder="max">
+            </div>
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-pa-min">PA min / max</label>
+            <div class="scout-range">
+              <input id="scout-pa-min" type="number" min="1" max="200" class="form-control" placeholder="min">
+              <input id="scout-pa-max" type="number" min="1" max="200" class="form-control" placeholder="max">
+            </div>
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-sort">Sort by</label>
+            <select id="scout-sort" class="form-control">
+              <option value="name">Name</option>
+              <option value="ca">Current ability</option>
+              <option value="pa">Potential ability</option>
+            </select>
+          </div>
+        </div>
+        <div class="scout-actions">
+          <button class="btn btn-primary" onclick="runScout()">Search</button>
+          <button class="btn" onclick="resetScout()">Reset</button>
+          <span id="scout-summary" class="scout-summary"></span>
+        </div>
+        <p class="unverified-note">
+          Browses the search index of the loaded save. CA, PA and position ratings are a snapshot from the last index build
+          (Rebuild index refreshes them); opening a player reads live values. Staff can be filtered by name and club only.
+        </p>
+        <div id="scout-results" class="scout-results"></div>
+        <div class="scout-pager">
+          <button id="scout-prev" class="btn btn-sm" onclick="scoutPage(-1)" disabled>Previous</button>
+          <button id="scout-next" class="btn btn-sm" onclick="scoutPage(1)" disabled>Next</button>
+        </div>
+      </div>
+    </section>

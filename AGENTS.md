@@ -632,3 +632,10 @@ Undo for step 2 if wanted: `sudo sysctl -w kernel.yama.ptrace_scope=1`, and dele
 - **Fix**: `discover_native_player_throttled` (polling and selection) waits 60 s before retrying a failed discovery of the same id; cleared on attach. Explicit write paths still call `verified_native_player` directly. Unit test `failed_native_discovery_is_not_repeated_on_every_poll`.
 - **Live after restart**: `/api/status` 0.3 ms, `/api/context` about 30 ms, server CPU about 6%. The manager-profile case itself was not re-measured live (the game had moved to another player); it is covered by the unit test.
 - **Not done**: routing manager/staff profiles opened in the game to the right tab instead of following them as players.
+
+### Scout page (2026-11-01, not run against a live game)
+- **What**: sidebar "Scout" page (Editors) browses the search index with filters and opens a name on the Player or Staff tab (`selectSearchedPlayer` / `selectSearchedStaff`). Route `GET /api/scout?kind=players|staff&q=&club=&position=&pos_min=&ca_min=&ca_max=&pa_min=&pa_max=&sort=name|ca|pa&limit=&offset=`; 409 until the index is ready, 400 on bad filters. Read-only, never scans memory.
+- **Index change**: player entries now carry a `profile` snapshot read during enumeration: CA/PA (u16 at record + 0x11c / 0x11e, outside 1..=200 reads as unknown) and the 15 position bytes at record + 8 (same layout as `read_positions`). It is refreshed only by an index rebuild, so ability edits or growth show after Rebuild index; opening the player reads live values. Unknown CA/PA never matches an ability range.
+- **Limits**: staff can be filtered by name and club only (staff CA/PA offsets are unverified); no nationality, age or attribute filters (not in the index). Position filter means rating >= `pos_min` (default 15).
+- **Not proven**: CA/PA/position snapshot agreement with the game on a live save (same offsets as the verified player reads, but the enumeration read path itself was only tested synthetically).
+- Tests: core `scout_*` (2), server `scout_filter_validates_inputs`, Node `scout.test.cjs` (4).

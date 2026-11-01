@@ -7,6 +7,7 @@
     const Shell = (() => {
       const ICONS = {
         player: '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>',
+        scout: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
         staff: '<path d="M3 9l9-4 9 4-9 4-9-4z"/><path d="M7 11.5V16c0 1.2 2.2 2.5 5 2.5s5-1.3 5-2.5v-4.5"/>',
         club: '<path d="M12 3l7 3v5c0 5-3 8.3-7 10-4-1.7-7-5-7-10V6l7-3z"/>',
         nation: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.5 2.6 14.5 0 17M12 3.5c-2.6 2.5-2.6 14.5 0 17"/>',
@@ -24,6 +25,7 @@
       const NAV = [
         { id: "player", label: "Player", group: "Editors", tab: "tab-player", tabs: ["tab-player", "tab-positions", "tab-contract", "tab-registration"], subTabs: PLAYER_SUBTABS },
         { id: "staff", label: "Staff", group: "Editors", tab: "tab-staff", tabs: ["tab-staff"] },
+        { id: "scout", label: "Scout", group: "Editors", tab: "tab-scout", tabs: ["tab-scout"] },
         { id: "club", label: "Club", group: "Editors", tab: "tab-club", tabs: ["tab-club"] },
         { id: "nation", label: "Nation", group: "Editors", tab: "tab-nation", tabs: ["tab-nation"] },
         { id: "competition", label: "Competition", group: "Editors", tab: "tab-competition", tabs: ["tab-competition"] },

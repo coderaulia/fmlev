@@ -18,6 +18,7 @@
     "pages/competition.html",
     "pages/godmode.html",
     "pages/staff.html",
+    "pages/scout.html",
     "pages/settings.html",
     "pages/status.html"
   ],
@@ -35,6 +36,7 @@
     "js/core/input-guard.js",
     "js/core/tools.js",
     "js/pages/staff.js",
+    "js/pages/scout.js",
     "js/pages/eligibility.js",
     "js/pages/role-presets.js",
     "js/pages/attributes.js",

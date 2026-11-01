@@ -51,6 +51,9 @@ pub struct IndexEntry {
     pub detail: Option<String>,
     #[serde(skip)]
     pub address: usize,
+    /// Players only: scouting fields read during enumeration (`None` when unreadable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<PlayerProfile>,
     #[serde(skip)]
     folded: String,
     #[serde(skip)]
@@ -61,8 +64,56 @@ impl IndexEntry {
     pub fn new(kind: EntityKind, id: i32, uid: u32, name: String, detail: Option<String>, address: usize) -> Self {
         let folded = fold(&name);
         let folded_detail = detail.as_deref().map(fold).unwrap_or_default();
-        Self { kind, id, uid, name, detail, address, folded, folded_detail }
+        Self { kind, id, uid, name, detail, address, profile: None, folded, folded_detail }
     }
+
+    pub fn with_profile(mut self, profile: Option<PlayerProfile>) -> Self {
+        self.profile = profile;
+        self
+    }
+}
+
+/// Position keys in the order of `PlayerProfile::positions` (native bytes 0..15; byte 1 is unused).
+pub const POSITION_KEYS: [(&str, usize); 14] = [
+    ("gk", 0), ("dl", 2), ("dc", 3), ("dr", 4), ("dm", 5), ("ml", 6), ("mc", 7),
+    ("mr", 8), ("aml", 9), ("amc", 10), ("amr", 11), ("st", 12), ("wbl", 13), ("wbr", 14),
+];
+
+/// Scouting fields of an indexed player, read at enumeration time (a snapshot: ability changes after the
+/// build show only after a rebuild; opening the player reads the live values).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct PlayerProfile {
+    /// 1..=200, `None` when the native value is outside that range.
+    pub ca: Option<u8>,
+    pub pa: Option<u8>,
+    /// Native position ratings (1..=20), see `POSITION_KEYS`.
+    pub positions: [u8; 15],
+}
+
+/// Filters of a scouting search. Every set field must match; ability and position filters only match
+/// players whose profile was readable.
+#[derive(Debug, Clone, Default)]
+pub struct ScoutFilter {
+    pub kind: Option<EntityKind>,
+    /// Name tokens (players, staff) and, for staff, the club.
+    pub text: String,
+    /// Case-insensitive substring of the club name.
+    pub club: String,
+    pub ca_min: Option<u8>,
+    pub ca_max: Option<u8>,
+    pub pa_min: Option<u8>,
+    pub pa_max: Option<u8>,
+    /// Index into `POSITION_KEYS`-style native positions plus the minimum rating.
+    pub position: Option<(usize, u8)>,
+    pub sort: ScoutSort,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ScoutSort {
+    #[default]
+    Name,
+    Ca,
+    Pa,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -141,6 +192,50 @@ impl SearchIndex {
             pages.insert(kind, KindPage { hits, total });
         }
         pages
+    }
+}
+
+impl SearchIndex {
+    /// Filtered, sorted, paged listing of players or staff. Returns the page and the total before paging.
+    pub fn scout(&self, filter: &ScoutFilter, limit: usize, offset: usize) -> (Vec<IndexEntry>, usize) {
+        let kind = filter.kind.unwrap_or(EntityKind::Player);
+        let folded = fold(filter.text.trim());
+        let tokens: Vec<&str> = folded.split_whitespace().collect();
+        let club = fold(filter.club.trim());
+        let number = filter.text.trim().parse::<i64>().ok();
+        let needs_profile = filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some()
+            || filter.pa_max.is_some() || filter.position.is_some() || filter.sort != ScoutSort::Name;
+        let in_range = |value: Option<u8>, min: Option<u8>, max: Option<u8>| match (value, min, max) {
+            (_, None, None) => true,
+            (Some(v), min, max) => min.is_none_or(|m| v >= m) && max.is_none_or(|m| v <= m),
+            (None, _, _) => false,
+        };
+        let mut hits: Vec<&IndexEntry> = self
+            .entries(kind)
+            .iter()
+            .filter(|entry| {
+                if !tokens.is_empty() && score(entry, &folded, &tokens, number).is_none() {
+                    return false;
+                }
+                if !club.is_empty() && !entry.folded_detail.contains(&club) {
+                    return false;
+                }
+                if kind != EntityKind::Player {
+                    return !needs_profile;
+                }
+                let profile = entry.profile.as_ref();
+                in_range(profile.and_then(|p| p.ca), filter.ca_min, filter.ca_max)
+                    && in_range(profile.and_then(|p| p.pa), filter.pa_min, filter.pa_max)
+                    && filter.position.is_none_or(|(slot, min)| profile.is_some_and(|p| p.positions.get(slot).is_some_and(|r| *r >= min)))
+            })
+            .collect();
+        match filter.sort {
+            ScoutSort::Name => {}
+            ScoutSort::Ca => hits.sort_by_key(|e| std::cmp::Reverse(e.profile.and_then(|p| p.ca).unwrap_or(0))),
+            ScoutSort::Pa => hits.sort_by_key(|e| std::cmp::Reverse(e.profile.and_then(|p| p.pa).unwrap_or(0))),
+        }
+        let total = hits.len();
+        (hits.into_iter().skip(offset).take(limit.clamp(1, MAX_LIMIT)).cloned().collect(), total)
     }
 }
 
@@ -364,5 +459,47 @@ mod tests {
             assert_eq!(EntityKind::from_plural(kind.plural()), Some(kind));
         }
         assert_eq!(EntityKind::from_plural("all"), None);
+    }
+
+    fn scouted() -> SearchIndex {
+        let profile = |ca, pa, st, gk| Some(PlayerProfile { ca, pa, positions: { let mut p = [1u8; 15]; p[12] = st; p[0] = gk; p } });
+        SearchIndex::new(
+            1,
+            vec![
+                IndexEntry::new(EntityKind::Player, 1, 11, "Alpha Striker".into(), Some("Real Madrid".into()), 0).with_profile(profile(Some(150), Some(170), 20, 1)),
+                IndexEntry::new(EntityKind::Player, 2, 12, "Bravo Striker".into(), Some("Getafe".into()), 0).with_profile(profile(Some(90), Some(140), 16, 1)),
+                IndexEntry::new(EntityKind::Player, 3, 13, "Charlie Keeper".into(), Some("Real Madrid".into()), 0).with_profile(profile(Some(120), None, 1, 19)),
+                IndexEntry::new(EntityKind::Player, 4, 14, "Delta Unknown".into(), None, 0),
+                IndexEntry::new(EntityKind::Staff, 30, 31, "Coach Real".into(), Some("Real Madrid".into()), 0),
+            ],
+            0,
+            1,
+        )
+    }
+
+    #[test]
+    fn scout_filters_by_ability_position_and_club() {
+        let index = scouted();
+        let names = |filter: &ScoutFilter| index.scout(filter, 50, 0).0.into_iter().map(|e| e.name).collect::<Vec<_>>();
+        assert_eq!(names(&ScoutFilter::default()).len(), 4, "no filter lists every player");
+        assert_eq!(names(&ScoutFilter { ca_min: Some(100), ..Default::default() }), ["Alpha Striker", "Charlie Keeper"]);
+        assert_eq!(names(&ScoutFilter { pa_max: Some(150), ..Default::default() }), ["Bravo Striker"], "unknown PA never matches a range");
+        assert_eq!(names(&ScoutFilter { position: Some((12, 15)), ..Default::default() }), ["Alpha Striker", "Bravo Striker"]);
+        assert_eq!(names(&ScoutFilter { position: Some((12, 18)), ..Default::default() }), ["Alpha Striker"]);
+        assert_eq!(names(&ScoutFilter { club: "real".into(), ..Default::default() }), ["Alpha Striker", "Charlie Keeper"]);
+        assert_eq!(names(&ScoutFilter { text: "striker".into(), club: "getafe".into(), ..Default::default() }), ["Bravo Striker"]);
+    }
+
+    #[test]
+    fn scout_sorts_pages_and_handles_staff() {
+        let index = scouted();
+        let sorted = ScoutFilter { ca_min: Some(1), sort: ScoutSort::Ca, ..Default::default() };
+        let (page, total) = index.scout(&sorted, 2, 0);
+        assert_eq!((total, page.iter().map(|e| e.id).collect::<Vec<_>>()), (3, vec![1, 3]));
+        assert_eq!(index.scout(&sorted, 2, 2).0.iter().map(|e| e.id).collect::<Vec<_>>(), [2]);
+        let staff = ScoutFilter { kind: Some(EntityKind::Staff), club: "real".into(), ..Default::default() };
+        assert_eq!(index.scout(&staff, 50, 0).1, 1);
+        let by_ca = ScoutFilter { kind: Some(EntityKind::Staff), ca_min: Some(1), ..Default::default() };
+        assert_eq!(index.scout(&by_ca, 50, 0).1, 0, "staff have no ability profile");
     }
 }

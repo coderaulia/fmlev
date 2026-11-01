@@ -111,3 +111,14 @@ body.mode-compact-overlay .cheat-row { grid-template-columns: minmax(0, 1fr); ga
 }
 
 body.mode-compact-overlay .cheat-grid, body.mode-compact-overlay .diag-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* Scout page */
+.scout-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.scout-range { display: flex; gap: 6px; }
+.scout-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.scout-summary { color: var(--text-dim); font-size: 12px; }
+.scout-table { width: 100%; }
+.scout-link { background: none; border: 0; padding: 0; color: var(--accent, #60a5fa); cursor: pointer; font: inherit; text-align: left; }
+.scout-link:hover { text-decoration: underline; }
+.scout-empty { color: var(--text-dim); padding: 14px 0; }
+.scout-pager { display: flex; gap: 8px; margin-top: 10px; }

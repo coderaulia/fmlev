@@ -15,12 +15,12 @@ use axum::{
 use serde_json::{json, Value};
 
 use fmlev_core::native_staff::NativeStaffRecord;
-use fmlev_core::search_index::{EntityKind, IndexEntry, SearchIndex, DEFAULT_LIMIT, MAX_LIMIT};
+use fmlev_core::search_index::{EntityKind, IndexEntry, ScoutFilter, ScoutSort, SearchIndex, DEFAULT_LIMIT, MAX_LIMIT, POSITION_KEYS};
 use fmlev_core::{GameContextManager, SearchResults};
 use fmlev_mem::LinuxMemoryDriver;
 
 use super::api_error;
-use crate::state::{SearchQuery, SearchState, ServerState};
+use crate::state::{ScoutQuery, SearchQuery, SearchState, ServerState};
 
 /// Driver of an attached game process; `None` offline or for the in-process test session.
 pub(crate) fn live_driver(mgr: &GameContextManager) -> Option<LinuxMemoryDriver> {
@@ -387,6 +387,96 @@ pub async fn search_entities(State(state): State<ServerState>, Query(query): Que
     Json(Value::Object(body)).into_response()
 }
 
+/// Builds the index filter from the query; the error text is for a 400 response.
+fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
+    let kind = match query.kind.as_deref().map(str::trim) {
+        None | Some("") | Some("players") => EntityKind::Player,
+        Some("staff") => EntityKind::Staff,
+        Some(other) => return Err(format!("Unknown kind '{other}'; use players or staff")),
+    };
+    let ability = |name: &str, value: Option<u8>| match value {
+        Some(v) if !(1..=200).contains(&v) => Err(format!("{name} must be 1..200")),
+        _ => Ok(value),
+    };
+    let position = match query.position.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+        None => None,
+        Some(key) => {
+            let slot = POSITION_KEYS.iter().find(|(name, _)| name.eq_ignore_ascii_case(key)).map(|(_, slot)| *slot)
+                .ok_or_else(|| format!("Unknown position '{key}'"))?;
+            let min = query.pos_min.unwrap_or(15);
+            if !(1..=20).contains(&min) {
+                return Err("pos_min must be 1..20".into());
+            }
+            Some((slot, min))
+        }
+    };
+    let sort = match query.sort.as_deref().map(str::trim) {
+        None | Some("") | Some("name") => ScoutSort::Name,
+        Some("ca") => ScoutSort::Ca,
+        Some("pa") => ScoutSort::Pa,
+        Some(other) => return Err(format!("Unknown sort '{other}'; use name, ca or pa")),
+    };
+    let filter = ScoutFilter {
+        kind: Some(kind),
+        text: query.q.clone(),
+        club: query.club.clone(),
+        ca_min: ability("ca_min", query.ca_min)?,
+        ca_max: ability("ca_max", query.ca_max)?,
+        pa_min: ability("pa_min", query.pa_min)?,
+        pa_max: ability("pa_max", query.pa_max)?,
+        position,
+        sort,
+    };
+    if kind == EntityKind::Staff && (filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some() || filter.pa_max.is_some() || position.is_some() || sort != ScoutSort::Name) {
+        return Err("Staff can be filtered by name and club only; ability and position data is player-only".into());
+    }
+    Ok(filter)
+}
+
+fn scout_item(entry: &IndexEntry) -> Value {
+    if entry.kind == EntityKind::Staff {
+        return json!({ "index": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail });
+    }
+    let (ca, pa, positions) = match entry.profile {
+        Some(profile) => {
+            let mut best: Vec<(&str, u8)> = POSITION_KEYS.iter().filter_map(|(name, slot)| {
+                let rating = profile.positions[*slot];
+                (rating >= 15).then_some((*name, rating))
+            }).collect();
+            best.sort_by_key(|(_, rating)| std::cmp::Reverse(*rating));
+            (json!(profile.ca), json!(profile.pa), json!(best.into_iter().map(|(n, r)| json!({ "position": n, "rating": r })).collect::<Vec<_>>()))
+        }
+        None => (Value::Null, Value::Null, json!([])),
+    };
+    json!({ "id": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail, "ca": ca, "pa": pa, "positions": positions })
+}
+
+/// `GET /api/scout`: filtered, sorted, paged listing of indexed players or staff. Never scans memory.
+pub async fn scout_entities(State(state): State<ServerState>, Query(query): Query<ScoutQuery>) -> impl IntoResponse {
+    let filter = match scout_filter(&query) {
+        Ok(filter) => filter,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error).into_response(),
+    };
+    let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let offset = query.offset.unwrap_or(0);
+    let driver = live_driver(&state.inner.read().await.context_mgr);
+    ensure_index(&state, driver);
+    let search = state.search_read();
+    let status = status_json(&search);
+    let Some(index) = search.index.as_ref().filter(|index| driver.is_some_and(|driver| driver.pid() == index.pid)) else {
+        return api_error(StatusCode::CONFLICT, "The search index is not ready; attach to FM26 with a save loaded and wait for the index").into_response();
+    };
+    let (hits, total) = index.scout(&filter, limit, offset);
+    Json(json!({
+        "kind": filter.kind.map(EntityKind::plural),
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "items": hits.iter().map(scout_item).collect::<Vec<_>>(),
+        "index": status,
+    })).into_response()
+}
+
 /// Lets a nation or competition found only by the index be selected (registry entry on demand).
 pub(crate) fn prepare_selection(state: &ServerState, mgr: &mut GameContextManager, nation_id: Option<i32>, competition_id: Option<i32>) {
     let search = state.search_read();
@@ -402,6 +492,19 @@ pub(crate) fn prepare_selection(state: &ServerState, mgr: &mut GameContextManage
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scout_filter_validates_inputs() {
+        let ok = ScoutQuery { position: Some("ST".into()), ca_min: Some(120), sort: Some("pa".into()), ..Default::default() };
+        let filter = scout_filter(&ok).unwrap();
+        assert_eq!(filter.position, Some((12, 15)));
+        assert_eq!(filter.sort, ScoutSort::Pa);
+        assert!(scout_filter(&ScoutQuery { position: Some("xx".into()), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { ca_min: Some(0), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { kind: Some("clubs".into()), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), ca_min: Some(10), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), club: "madrid".into(), ..Default::default() }).is_ok());
+    }
 
     #[test]
     fn kind_filter_accepts_known_kinds_only() {

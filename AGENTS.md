@@ -639,3 +639,8 @@ Undo for step 2 if wanted: `sudo sysctl -w kernel.yama.ptrace_scope=1`, and dele
 - **Limits**: staff can be filtered by name and club only (staff CA/PA offsets are unverified); no nationality, age or attribute filters (not in the index). Position filter means rating >= `pos_min` (default 15).
 - **Not proven**: CA/PA/position snapshot agreement with the game on a live save (same offsets as the verified player reads, but the enumeration read path itself was only tested synthetically).
 - Tests: core `scout_*` (2), server `scout_filter_validates_inputs`, Node `scout.test.cjs` (4).
+
+### Header showed the previous player (2026-11-01, fixed)
+- **Symptom**: opening a player while pinned (search or Scout) left the header name and subtitle on the previous player; only the poll (`Shell.syncEntities`) refreshed it and the poll does not run reliably while pinned or in a background tab.
+- **Fix**: the four `selectSearched*` functions and `displayPlayer` call `Shell.syncEntities(state)` after showing the entity, so every path updates the header. Checked in the built-in browser: Scout to player showed the right title and history entry. Test: `scout.test.cjs` (header after select).
+- A browser tab loaded before a server rebuild keeps the old script; restart with `./start.sh` and hard-refresh.

@@ -876,7 +876,13 @@ async fn staff_routes_are_read_only_strict_and_require_a_game() {
             assert!(app.clone().oneshot(post(uri, body)).await.unwrap().status().is_client_error(), "{uri} {body}");
         }
     }
-    for uri in ["/api/staff/information/update", "/api/staff/contract/update"] {
+    // The contract write needs the experimental opt-in, a game and a strict body.
+    let no_opt_in = app.clone().oneshot(post("/api/staff/contract/update", r#"{"staff_id":79,"staff_uid":1120,"weekly_wage":5000}"#)).await.unwrap();
+    assert_eq!(no_opt_in.status(), StatusCode::NOT_IMPLEMENTED);
+    let detached = app.clone().oneshot(post("/api/staff/contract/update", r#"{"staff_id":79,"staff_uid":1120,"weekly_wage":5000,"experimental":true}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+    assert!(app.clone().oneshot(post("/api/staff/contract/update", r#"{"staff_id":79,"staff_uid":1120,"club_job":1}"#)).await.unwrap().status().is_client_error());
+    for uri in ["/api/staff/information/update"] {
         let write = app.clone().oneshot(post(uri, r#"{"staff_id":79,"staff_uid":1120}"#)).await.unwrap();
         assert_eq!(write.status(), StatusCode::NOT_IMPLEMENTED, "{uri}");
     }

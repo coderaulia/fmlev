@@ -340,3 +340,36 @@ test('Open in game says so when no staff profile is open, and errors are surface
   assert.equal(await failing.run('openStaffFromGame()'), null);
   assert.equal(failing.run('messages[0].type'), 'error');
 });
+
+test('contract wage and expiry year are editable only with experimental editing and save through their own route', async () => {
+  const calls = [];
+  const contract = { status: 'ok', reason: 'verified', fields: [
+    { field: 'weekly_wage', label: 'Wage', status: 'verified', value: 1670, reason: null },
+    { field: 'contract_expiry', label: 'Expiry year', status: 'verified', value: 2028, reason: null },
+    { field: 'club_job', label: 'Club job', status: 'unavailable', value: null, reason: 'unmapped' }] };
+  const app = ui(async (url, request) => {
+    const body = JSON.parse(request.body);
+    calls.push({ url, body });
+    if (url === '/api/staff/contract/update') {
+      return { ok: true, text: async () => '', json: async () => ({ message: '2 contract value(s) written', contract: { ...contract, fields: [
+        { ...contract.fields[0], value: 2500 }, { ...contract.fields[1], value: 2030 }, contract.fields[2]] } }) };
+    }
+    if (url === '/api/staff/contract') return { ok: true, text: async () => '', json: async () => ({ contract }) };
+    return { ok: true, text: async () => '', json: async () => ({ staff: { index: 5, uid: 50, name: 'Daffa' }, attributes: [], verification: '' }) };
+  });
+  await app.run('selectStaff(5, 50)');
+  await app.run('setStaffTab("contract")');
+  assert.doesNotMatch(app.run('els["staff-detail"].innerHTML'), /staff-contract-weekly_wage/, 'read-only until experimental editing is on');
+  app.run('toggleStaffEditing(true)');
+  assert.match(app.run('els["staff-detail"].innerHTML'), /staff-contract-weekly_wage/);
+  app.run('staffSetContractEdit("weekly_wage", "1670")');
+  assert.deepEqual(app.run('staffState.contractEdits'), {}, 'an unchanged value is not an edit');
+  app.run('staffSetContractEdit("weekly_wage", "2500"); staffSetContractEdit("contract_expiry", "2030")');
+  assert.equal(app.run('staffChanges().length'), 2);
+  assert.equal(await app.run('saveStaffAttributes()'), true);
+  const write = calls.find(c => c.url === '/api/staff/contract/update');
+  assert.deepEqual(write.body, { staff_id: 5, staff_uid: 50, experimental: true, weekly_wage: 2500, expiry_year: 2030 });
+  assert.equal(calls.some(c => c.url === '/api/staff/update'), false, 'no attribute write without attribute edits');
+  assert.deepEqual(app.run('staffState.contractEdits'), {});
+  assert.equal(app.run('staffContractValue("weekly_wage")'), 2500);
+});

@@ -33,6 +33,19 @@ pub struct StaffUpdateRequest {
     pub experimental: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StaffContractUpdateRequest {
+    pub staff_id: i32,
+    pub staff_uid: i32,
+    /// Raw GBP per week.
+    pub weekly_wage: Option<u32>,
+    pub expiry_year: Option<u16>,
+    /// Not proven in game yet; callers must opt in explicitly.
+    #[serde(default)]
+    pub experimental: bool,
+}
+
 const NOT_ATTACHED: &str = "Attach to FM26 with a save loaded first";
 
 /// Copies the session driver out of the global state, so no lock is held during a scan.
@@ -211,10 +224,46 @@ pub async fn read_staff_contract(State(state): State<ServerState>, Json(req): Js
     }
 }
 
-/// Staff information/contract writes have no verified layout, so they are never attempted.
+/// EXPERIMENTAL transactional write of the linked contract's weekly wage and/or expiry year (readback +
+/// rollback). 501 without `experimental`; an unlinked contract is refused (one cannot be created).
+pub async fn update_staff_contract(State(state): State<ServerState>, Json(req): Json<StaffContractUpdateRequest>) -> impl IntoResponse {
+    if !req.experimental {
+        return api_error(
+            StatusCode::NOT_IMPLEMENTED,
+            "Staff contract editing is unverified in game. Set experimental: true and use a throwaway save.",
+        )
+        .into_response();
+    }
+    let driver = match session_driver(&state).await {
+        Ok(driver) => driver,
+        Err(response) => return response,
+    };
+    let staff = match locate_staff(&state, driver, req.staff_id, req.staff_uid).await {
+        Ok(staff) => staff,
+        Err(response) => return response,
+    };
+    let _writes = state.inner.write().await;
+    match staff.write_contract(&driver, req.weekly_wage, req.expiry_year) {
+        Ok(changed) => {
+            let contract = staff.read_contract(&driver).ok();
+            Json(serde_json::json!({
+                "status": "ok",
+                "message": if changed.is_empty() { "Contract already had these values; nothing written.".to_string() }
+                    else { format!("{} contract value(s) written and read back. Reopen the staff profile in FM26 to see them.", changed.len()) },
+                "changed": changed,
+                "contract": contract,
+                "verification": "Experimental: transactional write with readback; not yet proven after a day tick and save/reload.",
+            }))
+            .into_response()
+        }
+        Err(error) => api_error(StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+
+/// Staff information writes have no verified layout, so they are never attempted.
 pub async fn staff_write_unsupported() -> impl IntoResponse {
     api_error(
         StatusCode::NOT_IMPLEMENTED,
-        "Staff information and contract writes are not supported: the layout is unverified (read-only discovery only).",
+        "Staff information writes are not supported: the layout is unverified (read-only discovery only).",
     )
 }

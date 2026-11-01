@@ -1,5 +1,5 @@
     // ---- Staff: search, profile header, ability tabs. Nothing is written until the save bar's Save. ----
-    const staffState = { results: [], selected: null, editing: false, tab: "head_coach", edits: {}, extra: {} };
+    const staffState = { results: [], selected: null, editing: false, tab: "head_coach", edits: {}, contractEdits: {}, extra: {} };
     // Ability tabs: which attribute groups (and sub-groups) each one shows, in order.
     const STAFF_TABS = [
       { id: "head_coach", label: "Head Coach", groups: [{ group: "coaching", title: "Coaching" }, { group: "mental", title: "Mental" }, { group: "knowledge", title: "Knowledge" }] },
@@ -134,10 +134,13 @@
           `<div class="attr-col"><div class="attr-col-head">Personal details</div>${entry.data.fields.map(staffExtraRow).join("")}</div>`;
       } else {
         const c = entry.data.contract;
-        rows = `<div class="attr-col"><div class="attr-col-head">Contract <span class="pill pill-warn">Read-only</span></div>${c.fields.map(staffExtraRow).join("")}</div>`;
+        const editable = staffState.editing && c.status === "ok";
+        const head = editable ? "Experimental editing" : "Read-only";
+        rows = `<div class="attr-col"><div class="attr-col-head">Contract <span class="pill pill-warn">${head}</span></div>${c.fields.map(f => editable && STAFF_CONTRACT_FIELDS[f.field] ? staffContractInput(f) : staffExtraRow(f)).join("")}</div>`;
       }
       const note = kind === "contract" ? entry.data.contract.reason : entry.data.verification;
-      return `<div class="attr-table">${rows}</div><div class="staff-note">${escapeHtml(note || "")} Editing is unavailable for this view.</div>`;
+      const editNote = kind === "contract" ? (staffState.editing ? " Wage and expiry year are editable (experimental); role and jobs stay unavailable." : " Tick experimental editing to change wage and expiry year.") : " Editing is unavailable for this view.";
+      return `<div class="attr-table">${rows}</div><div class="staff-note">${escapeHtml(note || "")}${editNote}</div>`;
     }
     async function loadStaffExtra(kind) {
       const current = staffState.selected;
@@ -166,7 +169,7 @@
 
     function toggleStaffEditing(enabled) {
       staffState.editing = !!enabled;
-      if (!enabled) staffState.edits = {};
+      if (!enabled) { staffState.edits = {}; staffState.contractEdits = {}; }
       renderStaffDetail(staffState.selected);
     }
 
@@ -194,11 +197,38 @@
       staffSetEdit(field, next);
     }
 
+    // Contract tab: raw weekly wage and expiry year are the only editable fields (experimental).
+    const STAFF_CONTRACT_FIELDS = { weekly_wage: { label: "Wage (raw GBP per week)", min: 1, max: 10000000 }, contract_expiry: { label: "Expiry year", min: 2000, max: 2200 } };
+    function staffContractValue(field) {
+      const f = staffState.extra.contract?.data?.contract?.fields?.find(x => x.field === field);
+      return f && f.value !== null && f.value !== undefined ? Number(f.value) : null;
+    }
+    function staffContractInput(f) {
+      const spec = STAFF_CONTRACT_FIELDS[f.field];
+      const edited = Object.prototype.hasOwnProperty.call(staffState.contractEdits, f.field);
+      const shown = edited ? staffState.contractEdits[f.field] : f.value;
+      return `<div class="attr-line"><span class="attr-line-name">${escapeHtml(spec.label)}</span>` +
+        `<input id="staff-contract-${f.field}" type="number" min="${spec.min}" max="${spec.max}" value="${escapeHtml(String(shown))}" class="${edited ? "changed" : ""}" oninput="staffSetContractEdit('${f.field}', this.value)"></div>`;
+    }
+    function staffSetContractEdit(field, raw) {
+      if (!STAFF_CONTRACT_FIELDS[field] || !staffState.editing) return;
+      const text = String(raw).trim();
+      const n = Number(text);
+      if (text !== "" && Number.isInteger(n) && n === staffContractValue(field)) delete staffState.contractEdits[field];
+      else staffState.contractEdits[field] = text !== "" && Number.isInteger(n) ? n : text;
+      const input = staffEl(`staff-contract-${field}`);
+      if (input && input.classList) { if (field in staffState.contractEdits) input.classList.add("changed"); else input.classList.remove("changed"); }
+      if (typeof SaveBar !== "undefined") SaveBar.markDirty("staff");
+    }
+
     function staffChanges() {
-      return Object.keys(staffState.edits).map(field => {
+      const attributes = Object.keys(staffState.edits).map(field => {
         const a = staffByField(field);
         return { label: staffFieldLabel(field), from: a ? a.value : undefined, to: staffState.edits[field] };
       });
+      const contract = Object.keys(staffState.contractEdits).map(field =>
+        ({ label: STAFF_CONTRACT_FIELDS[field].label, from: staffContractValue(field) ?? undefined, to: staffState.contractEdits[field] }));
+      return attributes.concat(contract);
     }
 
     async function loadStaff(id, uid) {
@@ -207,6 +237,7 @@
       if (!res.ok) throw new Error(data.message || "Staff read failed");
       staffState.selected = data;
       staffState.edits = {};
+      staffState.contractEdits = {};
       staffState.extra = {};
       renderStaffDetail(data);
       const open = STAFF_TABS.find(t => t.id === staffState.tab);
@@ -253,12 +284,13 @@
       try { await loadStaff(current.staff.index, current.staff.uid); return true; }
       catch (error) { showToast(error.message, "error"); return false; }
     }
-    function discardStaffEdits() { staffState.edits = {}; renderStaffDetail(staffState.selected); if (typeof SaveBar !== "undefined") SaveBar.clear("staff"); return true; }
+    function discardStaffEdits() { staffState.edits = {}; staffState.contractEdits = {}; renderStaffDetail(staffState.selected); if (typeof SaveBar !== "undefined") SaveBar.clear("staff"); return true; }
 
     // Save bar "Save": only changed fields, with the experimental opt-in and staff identity.
-    async function saveStaffAttributes() {
+    async function saveStaffAttributeEdits() {
       const data = staffState.selected;
       if (!data || !staffState.editing) return false;
+      if (!Object.keys(staffState.edits).length) return true;
       const attributes = {};
       for (const [field, raw] of Object.entries(staffState.edits)) {
         const a = staffByField(field);
@@ -281,6 +313,41 @@
         renderStaffDetail(data);
         return Object.keys(staffState.edits).length === 0;
       } catch (error) { showToast(error.message, "error"); return false; }
+    }
+
+    // Contract edits go to their own route; attribute edits keep theirs. Each part clears only what it saved.
+    async function saveStaffContractEdits() {
+      const data = staffState.selected;
+      if (!data || !staffState.editing) return false;
+      const edits = { ...staffState.contractEdits };
+      if (!Object.keys(edits).length) return true;
+      const body = { staff_id: data.staff.index, staff_uid: data.staff.uid, experimental: true };
+      for (const [field, raw] of Object.entries(edits)) {
+        const spec = STAFF_CONTRACT_FIELDS[field];
+        const v = typeof raw === "number" ? raw : Number.parseInt(raw, 10);
+        if (!Number.isInteger(v) || v < spec.min || v > spec.max) { showToast(`${spec.label} must be ${spec.min}-${spec.max}.`, "warning"); return false; }
+        body[field === "weekly_wage" ? "weekly_wage" : "expiry_year"] = v;
+      }
+      try {
+        const res = await staffRequest("/api/staff/contract/update", body);
+        const reply = await readJson(res);
+        if (!res.ok) throw new Error(reply.message || "Staff contract save failed");
+        if (staffState.selected !== data) return false;
+        showToast(reply.message, "success");
+        if (reply.contract && staffState.extra.contract?.data) staffState.extra.contract.data.contract = reply.contract;
+        else delete staffState.extra.contract;
+        for (const [field, value] of Object.entries(edits)) if (staffState.contractEdits[field] === value) delete staffState.contractEdits[field];
+        renderStaffDetail(data);
+        return Object.keys(staffState.contractEdits).length === 0;
+      } catch (error) { showToast(error.message, "error"); return false; }
+    }
+
+    async function saveStaffAttributes() {
+      if (!staffState.editing) return false;
+      if (!Object.keys(staffState.edits).length && !Object.keys(staffState.contractEdits).length) { showToast("Nothing changed.", "info"); return false; }
+      const attributesOk = await saveStaffAttributeEdits();
+      const contractOk = await saveStaffContractEdits();
+      return attributesOk && contractOk;
     }
 
     showStaffRecents();

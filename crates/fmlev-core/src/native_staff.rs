@@ -318,6 +318,53 @@ impl NativeStaffRecord {
     }
 }
 
+/// One applied staff contract change (old and new raw values).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StaffContractChange {
+    pub field: &'static str,
+    pub old_value: u32,
+    pub new_value: u32,
+}
+
+impl NativeStaffRecord {
+    /// EXPERIMENTAL: sets the weekly wage (raw GBP) and/or the expiry year of the linked contract in one
+    /// transaction (readback, rollback). Runs the same guards as `read_contract` (PE timestamp, vtable,
+    /// owner back-pointer, value ranges); a missing contract is refused because creating one is not
+    /// possible by raw writes. The expiry keeps its day of year and flag bits. Values equal to the current
+    /// ones are skipped.
+    pub fn write_contract(&self, driver: &LinuxMemoryDriver, weekly_wage: Option<u32>, expiry_year: Option<u16>) -> Result<Vec<StaffContractChange>> {
+        self.validate(driver)?;
+        if weekly_wage.is_none() && expiry_year.is_none() {
+            return Err(invalid("No staff contract change given"));
+        }
+        if weekly_wage.is_some_and(|wage| wage == 0 || wage > MAX_WEEKLY_WAGE) {
+            return Err(invalid(&format!("Weekly wage must be 1..={MAX_WEEKLY_WAGE}")));
+        }
+        let (old_wage, ..) = match self.read_contract_values(driver) {
+            Ok(Some(values)) => values,
+            Ok(None) => return Err(invalid("This staff member has no contract; one cannot be created by memory writes")),
+            Err(reason) => return Err(invalid(&reason)),
+        };
+        let link = driver.read_ptr(self.record + CONTRACT_LINK_OFFSET)?;
+        let old_expiry = driver.read::<u32>(link + CONTRACT_EXPIRY_OFFSET)?;
+        let mut edits = Vec::new();
+        let mut report = Vec::new();
+        if let Some(wage) = weekly_wage.filter(|wage| *wage != old_wage) {
+            edits.push(NativeEdit::new(link + CONTRACT_WAGE_OFFSET, old_wage.to_le_bytes().to_vec(), wage.to_le_bytes().to_vec(), "contract wage"));
+            report.push(StaffContractChange { field: "weekly_wage", old_value: old_wage, new_value: wage });
+        }
+        if let Some(year) = expiry_year.filter(|year| u32::from(*year) != old_expiry >> 16) {
+            let new_expiry = crate::native_player::expiry_with_year(old_expiry, i32::from(year))?;
+            edits.push(NativeEdit::new(link + CONTRACT_EXPIRY_OFFSET, old_expiry.to_le_bytes().to_vec(), new_expiry.to_le_bytes().to_vec(), "contract expiry"));
+            report.push(StaffContractChange { field: "contract_expiry", old_value: old_expiry >> 16, new_value: u32::from(year) });
+        }
+        if !edits.is_empty() {
+            apply_transaction(driver, &edits)?;
+        }
+        Ok(report)
+    }
+}
+
 /// Why Information-tab candidates and the Contract tab stay unavailable (kept in one place for routes/UI/tests).
 pub const UNVERIFIED_INFO_REASON: &str =
     "unverified: offset is a candidate from the task brief; no live range survey or on-screen profile comparison yet";
@@ -545,6 +592,25 @@ mod tests {
         assert_eq!(value("contract_expiry_day"), Some(181));
         let job = info.fields.iter().find(|x| x.field == "club_job").unwrap();
         assert_eq!((job.status, job.value), ("unavailable", None), "job/role stay unmapped");
+    }
+
+    #[test]
+    fn contract_write_changes_wage_and_year_keeping_the_day_and_refuses_bad_links() {
+        let mut f = fake(99, 1199, "Con", "Tract");
+        let staff = read(&f).unwrap();
+        let contract = contract_bytes(f.sub(), 6641, (2027 << 16) | 181);
+        put(&mut f.record, CONTRACT_LINK_OFFSET, contract.as_ptr() as usize);
+        let d = driver();
+        let changes = staff.write_contract(&d, Some(7000), Some(2029)).unwrap();
+        assert_eq!(changes.len(), 2);
+        let info = staff.read_contract(&d).unwrap();
+        let value = |name: &str| info.fields.iter().find(|x| x.field == name).and_then(|x| x.value);
+        assert_eq!((value("weekly_wage"), value("contract_expiry"), value("contract_expiry_day")), (Some(7000), Some(2029), Some(181)));
+        assert!(staff.write_contract(&d, Some(7000), Some(2029)).unwrap().is_empty(), "unchanged values write nothing");
+        assert!(staff.write_contract(&d, Some(0), None).is_err());
+        assert!(staff.write_contract(&d, None, None).is_err());
+        assert!(staff.write_contract(&d, None, Some(1500)).is_err());
+        drop(contract);
     }
 
     #[test]

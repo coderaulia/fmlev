@@ -54,6 +54,11 @@ pub struct IndexEntry {
     /// Players only: scouting fields read during enumeration (`None` when unreadable).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<PlayerProfile>,
+    /// Players only: first nationality, set only when the nation pointer resolved to a validated nation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nation: Option<String>,
+    #[serde(skip)]
+    folded_nation: String,
     #[serde(skip)]
     folded: String,
     #[serde(skip)]
@@ -64,7 +69,13 @@ impl IndexEntry {
     pub fn new(kind: EntityKind, id: i32, uid: u32, name: String, detail: Option<String>, address: usize) -> Self {
         let folded = fold(&name);
         let folded_detail = detail.as_deref().map(fold).unwrap_or_default();
-        Self { kind, id, uid, name, detail, address, profile: None, folded, folded_detail }
+        Self { kind, id, uid, name, detail, address, profile: None, nation: None, folded_nation: String::new(), folded, folded_detail }
+    }
+
+    pub fn with_nation(mut self, nation: Option<String>) -> Self {
+        self.folded_nation = nation.as_deref().map(fold).unwrap_or_default();
+        self.nation = nation;
+        self
     }
 
     pub fn with_profile(mut self, profile: Option<PlayerProfile>) -> Self {
@@ -88,6 +99,9 @@ pub struct PlayerProfile {
     pub pa: Option<u8>,
     /// Native position ratings (1..=20), see `POSITION_KEYS`.
     pub positions: [u8; 15],
+    /// HEURISTIC: uid >= 2,000,000,000. Covers regens and also fictional players generated at game start;
+    /// the game's own `isRegenerated` flag is not located yet.
+    pub generated: bool,
 }
 
 /// Filters of a scouting search. Every set field must match; ability and position filters only match
@@ -99,6 +113,10 @@ pub struct ScoutFilter {
     pub text: String,
     /// Case-insensitive substring of the club name.
     pub club: String,
+    /// Case-insensitive substring of the first nationality (players only).
+    pub nation: String,
+    /// `Some(true)` keeps only generated players (heuristic), `Some(false)` only the rest.
+    pub generated: Option<bool>,
     pub ca_min: Option<u8>,
     pub ca_max: Option<u8>,
     pub pa_min: Option<u8>,
@@ -202,9 +220,11 @@ impl SearchIndex {
         let folded = fold(filter.text.trim());
         let tokens: Vec<&str> = folded.split_whitespace().collect();
         let club = fold(filter.club.trim());
+        let nation = fold(filter.nation.trim());
         let number = filter.text.trim().parse::<i64>().ok();
         let needs_profile = filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some()
-            || filter.pa_max.is_some() || filter.position.is_some() || filter.sort != ScoutSort::Name;
+            || filter.pa_max.is_some() || filter.position.is_some() || filter.sort != ScoutSort::Name
+            || !nation.is_empty() || filter.generated.is_some();
         let in_range = |value: Option<u8>, min: Option<u8>, max: Option<u8>| match (value, min, max) {
             (_, None, None) => true,
             (Some(v), min, max) => min.is_none_or(|m| v >= m) && max.is_none_or(|m| v <= m),
@@ -223,7 +243,13 @@ impl SearchIndex {
                 if kind != EntityKind::Player {
                     return !needs_profile;
                 }
+                if !nation.is_empty() && !entry.folded_nation.contains(&nation) {
+                    return false;
+                }
                 let profile = entry.profile.as_ref();
+                if filter.generated.is_some_and(|want| profile.is_none_or(|p| p.generated != want)) {
+                    return false;
+                }
                 in_range(profile.and_then(|p| p.ca), filter.ca_min, filter.ca_max)
                     && in_range(profile.and_then(|p| p.pa), filter.pa_min, filter.pa_max)
                     && filter.position.is_none_or(|(slot, min)| profile.is_some_and(|p| p.positions.get(slot).is_some_and(|r| *r >= min)))
@@ -462,7 +488,7 @@ mod tests {
     }
 
     fn scouted() -> SearchIndex {
-        let profile = |ca, pa, st, gk| Some(PlayerProfile { ca, pa, positions: { let mut p = [1u8; 15]; p[12] = st; p[0] = gk; p } });
+        let profile = |ca, pa, st, gk| Some(PlayerProfile { ca, pa, positions: { let mut p = [1u8; 15]; p[12] = st; p[0] = gk; p }, generated: false });
         SearchIndex::new(
             1,
             vec![
@@ -501,5 +527,26 @@ mod tests {
         assert_eq!(index.scout(&staff, 50, 0).1, 1);
         let by_ca = ScoutFilter { kind: Some(EntityKind::Staff), ca_min: Some(1), ..Default::default() };
         assert_eq!(index.scout(&by_ca, 50, 0).1, 0, "staff have no ability profile");
+    }
+
+    #[test]
+    fn scout_filters_by_nationality_and_generated_flag() {
+        let profile = |generated| Some(PlayerProfile { ca: Some(100), pa: Some(120), positions: [1; 15], generated });
+        let index = SearchIndex::new(
+            1,
+            vec![
+                IndexEntry::new(EntityKind::Player, 1, 11, "Real Spaniard".into(), None, 0).with_profile(profile(false)).with_nation(Some("Spain".into())),
+                IndexEntry::new(EntityKind::Player, 2, 2_000_000_012, "Young Regen".into(), None, 0).with_profile(profile(true)).with_nation(Some("Côte d'Ivoire".into())),
+                IndexEntry::new(EntityKind::Player, 3, 13, "No Nation".into(), None, 0).with_profile(profile(false)),
+            ],
+            0,
+            1,
+        );
+        let ids = |filter: &ScoutFilter| index.scout(filter, 50, 0).0.into_iter().map(|e| e.id).collect::<Vec<_>>();
+        assert_eq!(ids(&ScoutFilter { nation: "spain".into(), ..Default::default() }), [1]);
+        assert_eq!(ids(&ScoutFilter { nation: "cote".into(), ..Default::default() }), [2], "accent-insensitive");
+        assert_eq!(ids(&ScoutFilter { generated: Some(true), ..Default::default() }), [2]);
+        assert_eq!(ids(&ScoutFilter { generated: Some(false), ..Default::default() }), [3, 1]);
+        assert!(ids(&ScoutFilter { nation: "france".into(), ..Default::default() }).is_empty());
     }
 }

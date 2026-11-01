@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createUi } = require('./helpers/fake-dom.cjs');
 const { read, manifest } = require('./helpers/ui.cjs');
 
-const IDS = ['scout-kind', 'scout-q', 'scout-club', 'scout-position', 'scout-pos-min', 'scout-ca-min', 'scout-ca-max', 'scout-pa-min', 'scout-pa-max',
+const IDS = ['scout-kind', 'scout-q', 'scout-club', 'scout-nation', 'scout-generated', 'scout-position', 'scout-pos-min', 'scout-ca-min', 'scout-ca-max', 'scout-pa-min', 'scout-pa-max',
   'scout-sort', 'scout-summary', 'scout-results', 'scout-prev', 'scout-next', 'tab-scout'];
 const ok = body => ({ ok: true, status: 200, json: async () => body, text: async () => '' });
 
@@ -27,11 +27,13 @@ test('player filters become query parameters and results link to the Player tab'
   const urls = [];
   const app = scoutUi(url => {
     urls.push(url);
-    return ok({ kind: 'players', total: 1, offset: 0, limit: 50, items: [{ id: 7, uid: 70, name: 'A <b>Striker', club_name: 'Getafe', ca: 130, pa: null, positions: [{ position: 'st', rating: 20 }] }] });
+    return ok({ kind: 'players', total: 1, offset: 0, limit: 50, items: [{ id: 7, uid: 70, name: 'A <b>Striker', club_name: 'Getafe', nation: 'Spain', generated: true, ca: 130, pa: null, positions: [{ position: 'st', rating: 20 }] }] });
   });
   Object.assign(app.els['scout-q'], { value: 'strik' });
   app.els['scout-position'].value = 'st';
   app.els['scout-ca-min'].value = '120';
+  app.els['scout-nation'].value = 'spain';
+  app.els['scout-generated'].value = 'false';
   app.els['scout-sort'].value = 'ca';
   await app.run('runScout()');
   const query = new URL(urls[0], 'http://x').searchParams;
@@ -40,12 +42,16 @@ test('player filters become query parameters and results link to the Player tab'
   assert.equal(query.get('position'), 'st');
   assert.equal(query.get('pos_min'), '15');
   assert.equal(query.get('ca_min'), '120');
+  assert.equal(query.get('nation'), 'spain');
+  assert.equal(query.get('generated'), 'false');
   assert.equal(query.get('sort'), 'ca');
   assert.equal(query.has('pa_min'), false);
   const html = app.els['scout-results'].innerHTML;
   assert.match(html, /openScoutPlayer\(7\)/);
   assert.doesNotMatch(html, /<b>/, 'names are escaped');
   assert.match(html, /ST 20/);
+  assert.match(html, /Spain/);
+  assert.match(html, /scout-tag/);
   assert.equal(app.els['scout-summary'].textContent, '1-1 of 1');
 });
 
@@ -57,12 +63,15 @@ test('staff search sends only name and club and opens the Staff tab', async () =
   });
   app.els['scout-kind'].value = 'staff';
   app.els['scout-ca-min'].value = '100';
+  app.els['scout-nation'].value = 'spain';
+  app.els['scout-generated'].value = 'true';
   app.els['scout-club'].value = 'madrid';
   await app.run('runScout()');
   const query = new URL(urls[0], 'http://x').searchParams;
   assert.equal(query.get('kind'), 'staff');
   assert.equal(query.get('club'), 'madrid');
   assert.equal(query.has('ca_min'), false);
+  assert.equal(query.has('nation') || query.has('generated'), false);
   assert.match(app.els['scout-results'].innerHTML, /openScoutStaff\(5, 99\)/);
 });
 

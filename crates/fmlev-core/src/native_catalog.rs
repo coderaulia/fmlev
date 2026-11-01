@@ -256,13 +256,20 @@ impl Pass<'_> {
     }
 
     /// CA/PA (u16 at record + 0x11c / 0x11e) and the 15 position ratings; abilities outside 1..=200 read as `None`.
-    fn player_profile(&self, record: usize) -> Option<PlayerProfile> {
+    fn player_profile(&self, record: usize, uid: u32) -> Option<PlayerProfile> {
         let positions = self.driver.read::<[u8; 15]>(record + 8).ok()?;
         let ability = |offset: usize| {
             let value = self.driver.read::<u16>(record + offset).ok()?;
             (1..=200).contains(&value).then_some(value as u8)
         };
-        Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions })
+        Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions, generated: uid >= 2_000_000_000 })
+    }
+
+    /// First nationality: NATION pointer at record + 0x1a8 (ACTUAL_PLAYER + 0x2f0). Only a pointer to a
+    /// nation validated in the same pass counts. Matched to the game for four players (Mbappe, Yamal,
+    /// Haaland, Salampessy).
+    fn player_nation(&self, record: usize, nations: &HashMap<usize, String>) -> Option<String> {
+        nations.get(&self.driver.read_ptr(record + 0x1a8).ok()?).cloned()
     }
 
     fn staff(&self, address: usize) -> Option<(i32, u32, String)> {
@@ -384,8 +391,9 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
     }
     for (record, id, uid, name) in players {
         let club = pass.player_club(record, &teams, &clubs);
-        let profile = pass.player_profile(record);
-        entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record).with_profile(profile));
+        let profile = pass.player_profile(record, uid);
+        let nation = pass.player_nation(record, &nations);
+        entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record).with_profile(profile).with_nation(nation));
     }
     for (record, id, uid, name) in staff_found {
         let club = pass.staff_club(record, &teams, &clubs);
@@ -539,6 +547,7 @@ mod tests {
         a.ptr(0xc10, team);
         let contract = a.at(0xc00);
         a.ptr(0x1000 + PLAYER_RECORD + 0x1e8, contract);
+        a.ptr(0x1000 + PLAYER_RECORD + 0x1a8, nation);
         // Staff sub-object at 0x3100 (record 0x3000).
         a.ptr(0x3100, STAFF_VT);
         a.ptr(0x3128, STAFF_SECOND_VT);
@@ -569,6 +578,8 @@ mod tests {
         let player = find(EntityKind::Player).unwrap();
         assert_eq!((player.id, player.uid, player.name.as_str()), (77, 9077, "Kylian Mbappé"));
         assert_eq!(player.detail.as_deref(), Some("ASEC Mimosas"));
+        assert_eq!(player.nation.as_deref(), Some("Côte d'Ivoire"), "nation comes from the validated pointer at record + 0x1a8");
+        assert!(!player.profile.unwrap().generated, "uid 9077 is not in the generated range");
         let club = find(EntityKind::Club).unwrap();
         assert_eq!((club.id, club.detail.as_deref()), (70, Some("Côte d'Ivoire")));
         let comp = find(EntityKind::Competition).unwrap();

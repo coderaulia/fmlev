@@ -223,6 +223,11 @@ pub struct ScoutQuery {
     pub q: String,
     #[serde(default)]
     pub club: String,
+    /// Nationality substring (players only).
+    #[serde(default)]
+    pub nation: String,
+    /// true: generated players only (heuristic, uid >= 2,000,000,000); false: exclude them.
+    pub generated: Option<bool>,
     pub ca_min: Option<u8>,
     pub ca_max: Option<u8>,
     pub pa_min: Option<u8>,

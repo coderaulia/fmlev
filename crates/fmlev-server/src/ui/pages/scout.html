@@ -18,6 +18,18 @@
             <input id="scout-club" type="text" class="form-control" placeholder="Any club" onkeydown="if (event.key === 'Enter') runScout()">
           </div>
           <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-nation">Nationality</label>
+            <input id="scout-nation" type="text" class="form-control" placeholder="Any nation" onkeydown="if (event.key === 'Enter') runScout()">
+          </div>
+          <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-generated">Regen / generated</label>
+            <select id="scout-generated" class="form-control">
+              <option value="">Any</option>
+              <option value="true">Only generated</option>
+              <option value="false">Exclude generated</option>
+            </select>
+          </div>
+          <div class="form-group scout-player-only">
             <label class="form-label" for="scout-position">Position</label>
             <select id="scout-position" class="form-control">
               <option value="">Any</option>
@@ -61,7 +73,7 @@
         </div>
         <p class="unverified-note">
           Browses the search index of the loaded save. CA, PA and position ratings are a snapshot from the last index build
-          (Rebuild index refreshes them); opening a player reads live values. Staff can be filtered by name and club only.
+          (Rebuild index refreshes them); opening a player reads live values. Nationality is the first nationality. "Generated" is a heuristic (unique id 2,000,000,000 or above): it includes regens and also players the game created at the start of the save. Staff can be filtered by name and club only.
         </p>
         <div id="scout-results" class="scout-results"></div>
         <div class="scout-pager">

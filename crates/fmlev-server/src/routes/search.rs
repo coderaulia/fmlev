@@ -420,6 +420,8 @@ fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
         kind: Some(kind),
         text: query.q.clone(),
         club: query.club.clone(),
+        nation: query.nation.clone(),
+        generated: query.generated,
         ca_min: ability("ca_min", query.ca_min)?,
         ca_max: ability("ca_max", query.ca_max)?,
         pa_min: ability("pa_min", query.pa_min)?,
@@ -427,7 +429,7 @@ fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
         position,
         sort,
     };
-    if kind == EntityKind::Staff && (filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some() || filter.pa_max.is_some() || position.is_some() || sort != ScoutSort::Name) {
+    if kind == EntityKind::Staff && (!filter.nation.trim().is_empty() || filter.generated.is_some() || filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some() || filter.pa_max.is_some() || position.is_some() || sort != ScoutSort::Name) {
         return Err("Staff can be filtered by name and club only; ability and position data is player-only".into());
     }
     Ok(filter)
@@ -448,7 +450,8 @@ fn scout_item(entry: &IndexEntry) -> Value {
         }
         None => (Value::Null, Value::Null, json!([])),
     };
-    json!({ "id": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail, "ca": ca, "pa": pa, "positions": positions })
+    json!({ "id": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail, "ca": ca, "pa": pa, "positions": positions,
+        "nation": entry.nation, "generated": entry.profile.map(|p| p.generated) })
 }
 
 /// `GET /api/scout`: filtered, sorted, paged listing of indexed players or staff. Never scans memory.
@@ -503,6 +506,7 @@ mod tests {
         assert!(scout_filter(&ScoutQuery { ca_min: Some(0), ..Default::default() }).is_err());
         assert!(scout_filter(&ScoutQuery { kind: Some("clubs".into()), ..Default::default() }).is_err());
         assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), ca_min: Some(10), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), nation: "spain".into(), ..Default::default() }).is_err());
         assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), club: "madrid".into(), ..Default::default() }).is_ok());
     }
 

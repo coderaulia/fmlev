@@ -122,3 +122,4 @@ body.mode-compact-overlay .cheat-grid, body.mode-compact-overlay .diag-grid { gr
 .scout-link:hover { text-decoration: underline; }
 .scout-empty { color: var(--text-dim); padding: 14px 0; }
 .scout-pager { display: flex; gap: 8px; margin-top: 10px; }
+.scout-tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--text-dim); color: var(--text-dim); }

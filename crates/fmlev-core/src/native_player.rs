@@ -19,6 +19,23 @@ const PERSON: usize = 0x140;
 const LOAN_NODE_OFFSET: usize = 0x1f0;
 const INDEX: usize = PERSON + 8;
 const UID: usize = PERSON + 12;
+
+/// The player's uid from the two identity words after the index. Established players store it twice;
+/// generated players may hold -1 or 0 in one of the words. Any other disagreement is not an identity.
+pub(crate) fn player_uid_from_words(first: u32, second: u32) -> Option<u32> {
+    let real = |w: u32| w != 0 && w != u32::MAX;
+    match (real(first), real(second)) {
+        (true, true) => (first == second).then_some(first),
+        (true, false) => Some(first),
+        (false, true) => Some(second),
+        (false, false) => None,
+    }
+}
+
+fn read_player_uid(driver: &LinuxMemoryDriver, address: usize) -> Result<u32> {
+    player_uid_from_words(driver.read::<u32>(address + UID)?, driver.read::<u32>(address + UID + 4)?)
+        .ok_or_else(|| invalid("Native player identity words are not a valid uid"))
+}
 const SQUAD_NUMBER: usize = 0x5d;
 const NO_SQUAD_NUMBER: u8 = 255;
 const CONTRACT_TEAM: usize = 0x10;
@@ -298,11 +315,8 @@ impl NativePlayerRecord {
                         if word(i) != index {
                             continue;
                         }
-                        let uid = uword(i + 4);
-                        let uid2 = uword(i + 8);
-                        if uid == 0 || uid != uid2 {
-                            continue;
-                        }
+                        // Generated (regen) players carry -1 in the first uid word; the second is the real uid.
+                        let Some(uid) = player_uid_from_words(uword(i + 4), uword(i + 8)) else { continue };
                         let address = start + i - INDEX;
                         if address % 8 != 0 {
                             continue;
@@ -360,8 +374,7 @@ impl NativePlayerRecord {
         if driver.read_ptr(self.address)? != self.player_vtable
             || driver.read_ptr(self.address + PERSON)? != self.person_vtable
             || driver.read::<i32>(self.address + INDEX)? != self.index
-            || driver.read::<u32>(self.address + UID)? != self.uid
-            || driver.read::<u32>(self.address + UID + 4)? != self.uid
+            || read_player_uid(driver, self.address).ok() != Some(self.uid)
         {
             return Err(invalid(
                 "Native player identity changed; rediscover the player before editing",
@@ -440,7 +453,7 @@ impl NativePlayerRecord {
                     address: *address,
                     pid: self.pid,
                     index: driver.read::<i32>(address + INDEX)?,
-                    uid: driver.read::<u32>(address + UID)?,
+                    uid: read_player_uid(driver, *address)?,
                     player_vtable: self.player_vtable,
                     person_vtable: driver.read_ptr(address + PERSON)?,
                     attributes_verified: false,
@@ -563,7 +576,7 @@ impl NativePlayerRecord {
                             || driver.read_ptr(c + CONTRACT_TEAM).ok() != Some(team)
                         { continue; }
                         let Ok(person_vtable) = driver.read_ptr(address + PERSON) else { continue };
-                        let (Ok(index), Ok(uid)) = (driver.read::<i32>(address + INDEX), driver.read::<u32>(address + UID)) else { continue };
+                        let (Ok(index), Ok(uid)) = (driver.read::<i32>(address + INDEX), read_player_uid(driver, address)) else { continue };
                         found.push(Self { address, pid: self.pid, index, uid, player_vtable: self.player_vtable, person_vtable, attributes_verified: false });
                     }
                 }
@@ -621,7 +634,7 @@ impl NativePlayerRecord {
         self.validate(driver)?;
         if !self.attributes_verified || address % 8 != 0 { return Err(invalid("Uncalibrated native player type or unaligned address")); }
         let index = driver.read::<i32>(address + INDEX)?;
-        let uid = driver.read::<u32>(address + UID)?;
+        let uid = read_player_uid(driver, address)?;
         if index <= 0 || uid == 0 { return Err(invalid("Invalid native player identity")); }
         let candidate = Self { address, index, uid, ..self.clone() };
         candidate.validate(driver)?;
@@ -663,7 +676,9 @@ impl NativePlayerRecord {
         for field in native_attributes() {
             let byte = driver.read::<u8>(self.address + field.offset)?;
             let rating = field.decode(byte)?;
-            if !(1..=20).contains(&rating) {
+            // Hidden personality bytes (scale 1) can legitimately be 0 on generated players.
+            let min = if field.scale == 1 { 0 } else { 1 };
+            if !(min..=20).contains(&rating) {
                 return Err(invalid(&format!("Native attribute {} out of range: {}", field.name, rating)));
             }
         }

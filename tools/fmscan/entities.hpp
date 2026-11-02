@@ -36,7 +36,14 @@ inline std::optional<NativeEntity> read_entity(const Memory& m, const NativeCata
     U record = kind == "player" ? address + 0x148 : address;
     U identity = kind == "player" ? record + 0x148 : address + 8;
     std::array<uint32_t, 3> ids{};
-    if (!m.read(identity, ids) || ids[0] > INT32_MAX || !ids[1] || (kind != "team" && ids[1] != ids[2]) || (kind == "team" && !ids[2])) return {};
+    if (!m.read(identity, ids) || ids[0] > INT32_MAX) return {};
+    // Generated players may hold 0xffffffff or 0 in one uid word; the other word is the real uid.
+    if (kind == "player") {
+        auto real = [](uint32_t w) { return w && w != UINT32_MAX; };
+        if (real(ids[2]) && !real(ids[1])) ids[1] = ids[2];
+        else if (real(ids[1]) && !real(ids[2])) ids[2] = ids[1];
+    }
+    if (!ids[1] || (kind != "team" && ids[1] != ids[2]) || (kind == "team" && !ids[2])) return {};
     std::string name;
     if (kind == "player") {
         auto person = catalog.at(m, record + 0x140, "player", false);

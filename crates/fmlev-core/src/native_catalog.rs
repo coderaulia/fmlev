@@ -199,6 +199,13 @@ fn pooled_name(driver: &LinuxMemoryDriver, first_ref: usize) -> Option<String> {
 }
 
 /// `(index, uid)` when `[index, uid, uid2]` at `address` passes the identity rule.
+/// Player identity: `[index, uid, uid]`, where a generated player may hold -1 or 0 in one uid word.
+fn player_identity(driver: &LinuxMemoryDriver, address: usize) -> Option<(i32, u32)> {
+    let ids = driver.read::<[u32; 3]>(address).ok()?;
+    let uid = crate::native_player::player_uid_from_words(ids[1], ids[2])?;
+    (ids[0] <= i32::MAX as u32).then_some((ids[0] as i32, uid))
+}
+
 fn identity(driver: &LinuxMemoryDriver, address: usize, uid_twice: bool) -> Option<(i32, u32)> {
     let ids = driver.read::<[u32; 3]>(address).ok()?;
     let ok = ids[0] <= i32::MAX as u32 && ids[1] != 0 && if uid_twice { ids[1] == ids[2] } else { ids[2] != 0 };
@@ -237,7 +244,7 @@ impl Pass<'_> {
     fn player(&self, address: usize) -> Option<(usize, i32, u32, String)> {
         let driver = self.driver;
         let record = address + PLAYER_RECORD;
-        let (id, uid) = identity(driver, record + 0x148, true)?;
+        let (id, uid) = player_identity(driver, record + 0x148)?;
         if !self.catalog.is(driver, record + 0x140, CatalogKind::Player, PLAYER_PERSON_SUBOBJECT) {
             return None;
         }

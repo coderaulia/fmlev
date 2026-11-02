@@ -335,6 +335,7 @@ fn attribute_verification_requires_all_observed_fields() {
     let (_data, mut r) = fixture();
     let d = LinuxMemoryDriver::new(std::process::id() as i32);
     let attrs = PlayerAttributes::default();
+    d.write(r.address + 0x1b3, &25u8).unwrap(); // a personality byte outside 0..=20 is not a valid record
     assert!(r.verify_attributes(&d, &attrs).is_err());
     assert!(!r.attributes_verified());
     assert!(r.refresh_attributes(&d, &mut PlayerAttributes::default()).is_err());
@@ -390,7 +391,10 @@ fn rejects_both_stale_uids_and_vtables() {
     let d = LinuxMemoryDriver::new(std::process::id() as i32);
     for offset in [0, PERSON, UID, UID + 4] {
         let original = d.read::<u32>(r.address + offset).unwrap();
-        d.write(r.address + offset, &0u32).unwrap();
+        // A uid word may be 0 only for generated players (the other word still holds the uid), so a stale uid
+        // is simulated by a different non-zero value.
+        let stale = if offset == UID || offset == UID + 4 { original.wrapping_add(1) } else { 0u32 };
+        d.write(r.address + offset, &stale).unwrap();
         assert!(r.read_positions(&d).is_err(), "identity offset {offset:x}");
         assert!(r.rollback_positions(&d, &[20u8; 15], 100, 100).is_err());
         d.write(r.address + offset, &original).unwrap();
@@ -470,4 +474,16 @@ fn foot_rating_is_the_nearest_step_and_matches_the_old_scale_for_multiples_of_fi
         assert_eq!(foot_rating(rating * 5), rating);
     }
     assert_eq!((foot_rating(1), foot_rating(2), foot_rating(3), foot_rating(74), foot_rating(77), foot_rating(78), foot_rating(100)), (1, 1, 1, 15, 15, 16, 20));
+}
+
+#[test]
+fn generated_players_may_hold_minus_one_or_zero_in_one_uid_word() {
+    use super::player_uid_from_words as uid;
+    assert_eq!(uid(7, 7), Some(7));
+    assert_eq!(uid(7, 0), Some(7));
+    assert_eq!(uid(u32::MAX, 7), Some(7));
+    assert_eq!(uid(7, u32::MAX), Some(7));
+    assert_eq!(uid(7, 8), None);
+    assert_eq!(uid(0, 0), None);
+    assert_eq!(uid(u32::MAX, 0), None);
 }

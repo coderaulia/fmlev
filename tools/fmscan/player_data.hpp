@@ -104,6 +104,12 @@ inline bool native_vtable(const Memory &m, U vt) {
   auto code = m.region(function);
   return code && code->perms[2] == 'x';
 }
+// Established players store the uid twice; generated ones may hold 0 or 0xffffffff in one word.
+inline bool uid_words_match(uint32_t a, uint32_t b, uint32_t uid) {
+  auto real = [](uint32_t w) { return w && w != UINT32_MAX; };
+  if (real(a) && real(b)) return a == b && a == uid;
+  return (real(a) && a == uid) || (real(b) && b == uid);
+}
 inline PlayerData read_player_data(const Memory &m, U record, uint32_t index,
                                    uint32_t uid) {
   std::array<uint8_t, 0x200> b{};
@@ -111,7 +117,7 @@ inline PlayerData read_player_data(const Memory &m, U record, uint32_t index,
     throw std::runtime_error("unreadable player snapshot");
   auto region = m.region(record, b.size());
   if (!region || !region->heap() || field<uint32_t>(b, 0x148) != index ||
-      field<uint32_t>(b, 0x14c) != uid || field<uint32_t>(b, 0x150) != uid ||
+      !uid_words_match(field<uint32_t>(b, 0x14c), field<uint32_t>(b, 0x150), uid) ||
       !native_vtable(m, field<U>(b, 0)) ||
       !native_vtable(m, field<U>(b, 0x140)))
     throw std::runtime_error("native snapshot identity/type mismatch");
@@ -177,7 +183,7 @@ inline PlayerData read_player_data(const Memory &m, U record, uint32_t index,
   std::array<uint32_t, 3> check{};
   U check_contract = 0;
   if (!m.read(record + 0x148, check) ||
-      check != std::array<uint32_t, 3>{index, uid, uid} ||
+      check[0] != index || !uid_words_match(check[1], check[2], uid) ||
       !m.read(record + 0x1e8, check_contract) || check_contract != contract)
     throw std::runtime_error("player changed during snapshot");
   return p;

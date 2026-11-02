@@ -341,6 +341,9 @@ pub struct PlayerMoveRequest {
     pub wage_gbp: Option<u32>,
     #[serde(default)]
     pub expiry_year: Option<u32>,
+    /// Player of the destination first team to release as a free agent when its squad list is full.
+    #[serde(default)]
+    pub release_player_id: Option<i32>,
     #[serde(default)]
     pub experimental: bool,
 }
@@ -353,6 +356,9 @@ pub struct PlayerSignRequest {
     pub target_team_address: Option<usize>,
     pub wage_gbp: Option<u32>,
     pub expiry_year: Option<u32>,
+    /// Player of the destination first team to release as a free agent when its squad list is full.
+    #[serde(default)]
+    pub release_player_id: Option<i32>,
     #[serde(default)]
     pub experimental: bool,
 }

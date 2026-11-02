@@ -97,6 +97,7 @@
             <div class="transfer-group">
               <input id="transfer-target-club-id" type="number" min="1" required aria-required="true" class="form-control" placeholder="Target club ID *" style="width: 150px;" aria-label="Target club ID (required)" onchange="loadTransferSpace()" oninput="updateTransferButtons()">
               <span id="transfer-space-note" class="unverified-note"></span>
+              <select id="transfer-release-player" class="form-control" style="display:none; width: 260px;" aria-label="Player to release to make room"></select>
             </div>
             <div class="transfer-group">
               <input id="transfer-sign-wage" type="number" min="26" required aria-required="true" class="form-control" placeholder="Yearly wage (raw GBP) *" style="width: 190px;" aria-label="Yearly wage in raw GBP (required)" oninput="updateTransferButtons()">

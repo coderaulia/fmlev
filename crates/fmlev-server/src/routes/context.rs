@@ -971,7 +971,7 @@ pub async fn move_player(
     let Some(terms) = payload.wage_gbp.zip(payload.expiry_year).map(|(wage_gbp, expiry_year)| fmlev_core::native_transfer::NewContractTerms { wage_gbp, expiry_year }) else {
         return api_error(StatusCode::BAD_REQUEST, "A move needs the new weekly wage (wage_gbp) and the new expiry year (expiry_year): the contract at the new club must be filled in");
     };
-    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp, Some(terms)) {
+    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp, Some(terms), payload.release_player_id) {
         Ok((from_team, to_team)) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -1001,6 +1001,7 @@ pub async fn sign_player(
         payload.target_team_address,
         payload.wage_gbp,
         payload.expiry_year,
+        payload.release_player_id,
     ) {
         Ok(team_ptr) => (
             StatusCode::OK,
@@ -1108,13 +1109,18 @@ pub async fn club_squad_space(
     let club_id = payload.club_id;
     let result = tokio::task::spawn_blocking(move || {
         let club = fmlev_core::native_club::NativeClubRecord::discover(&driver, club_id)?;
-        club.first_team_squad_space(&driver)
+        let space = club.first_team_squad_space(&driver)?;
+        let members = club.first_team_members(&driver).unwrap_or_default();
+        Ok::<_, fmlev_core::CoreError>((space, members))
     })
     .await;
     match result {
-        Ok(Ok((players, capacity, spare))) => (
+        Ok(Ok(((players, capacity, spare), members))) => (
             StatusCode::OK,
-            Json(serde_json::json!({ "status": "success", "club_id": club_id, "players": players, "capacity": capacity, "spare_slots": spare })),
+            Json(serde_json::json!({
+                "status": "success", "club_id": club_id, "players": players, "capacity": capacity, "spare_slots": spare,
+                "members": members.into_iter().map(|(id, name)| serde_json::json!({ "id": id, "name": name })).collect::<Vec<_>>()
+            })),
         ),
         Ok(Err(error)) => api_error(core_status(&error), error),
         Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error),

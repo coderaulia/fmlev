@@ -219,6 +219,50 @@ impl SquadVector {
     }
 }
 
+/// Read-only list of `(player index, name)` for a team's squad vector, used to pick a player to release.
+/// The name is `None` when the pooled name does not read cleanly; nothing is invented.
+pub fn squad_member_summaries(driver: &LinuxMemoryDriver, team_address: usize) -> Result<Vec<(i32, Option<String>)>> {
+    let squad = SquadVector::read(driver, team_address)?;
+    let mut out = Vec::new();
+    for actual in squad.entries(driver)? {
+        let record = actual + ACTUAL_PLAYER_OFFSET;
+        let Ok(index) = driver.read::<i32>(record + 0x148) else { continue };
+        if index <= 0 {
+            continue;
+        }
+        out.push((index, read_pooled_name(driver, record)));
+    }
+    Ok(out)
+}
+
+fn read_pooled_name(driver: &LinuxMemoryDriver, record: usize) -> Option<String> {
+    let mut names = Vec::new();
+    for offset in [0x190usize, 0x198] {
+        let reference = driver.read_ptr(record + offset).ok()?;
+        if reference == 0 {
+            continue;
+        }
+        let string = driver.read_ptr(reference).ok()?;
+        if string == 0 {
+            continue;
+        }
+        let length = driver.read::<u32>(string).ok()? as usize;
+        if length == 0 || length > 256 {
+            continue;
+        }
+        let mut bytes = vec![0u8; length];
+        if driver.read_bytes(string + 4, &mut bytes).ok()? != length {
+            return None;
+        }
+        let name = String::from_utf8(bytes).ok()?;
+        if name.chars().any(char::is_control) {
+            return None;
+        }
+        names.push(name);
+    }
+    (!names.is_empty()).then(|| names.join(" "))
+}
+
 /// Applies a sequence of edits with transactional readback and automatic reverse rollback on any failure.
 pub fn apply_transaction(driver: &LinuxMemoryDriver, edits: &[NativeEdit]) -> Result<()> {
     // Indices are recorded before each write, so a short or failed write is still rolled back

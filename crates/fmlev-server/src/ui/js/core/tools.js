@@ -74,7 +74,7 @@
       const note = document.getElementById("transfer-space-note");
       if (!note) return null;
       const club = transferTargetClubId();
-      if (club === null || !state.connected) { note.innerText = ""; return null; }
+      if (club === null || !state.connected) { note.innerText = ""; fillReleaseSelect(null); return null; }
       try {
         const res = await fetch("/api/club/squad-space", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ club_id: club })
@@ -82,12 +82,50 @@
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Squad space unavailable");
         if (document.getElementById("transfer-target-club-id")?.value !== String(club)) return null;
-        note.innerText = `First team: ${data.players} players, ${data.spare_slots} spare slot${data.spare_slots === 1 ? "" : "s"}${data.spare_slots === 0 ? " (full: transfers will be refused)" : ""}`;
+        note.innerText = `First team: ${data.players} players, ${data.spare_slots} spare slot${data.spare_slots === 1 ? "" : "s"}${data.spare_slots === 0 ? " (full: pick a player to release below)" : ""}`;
+        fillReleaseSelect(data);
         return data;
       } catch (error) {
+        fillReleaseSelect(null);
         note.innerText = `Squad space unavailable: ${error.message}`;
         return null;
       }
+    }
+
+    // A full squad list cannot grow, so the user picks one destination player to release as a free agent.
+    function fillReleaseSelect(data) {
+      const select = document.getElementById("transfer-release-player");
+      if (!select) return;
+      const full = !!data && data.spare_slots === 0 && Array.isArray(data.members) && data.members.length > 0;
+      select.style.display = full ? "" : "none";
+      select.innerHTML = "";
+      if (!full) return;
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "Release which player to make room? *";
+      select.appendChild(none);
+      for (const member of data.members) {
+        const option = document.createElement("option");
+        option.value = String(member.id);
+        option.textContent = `${member.name || "Player"} (id ${member.id})`;
+        select.appendChild(option);
+      }
+      select.onchange = () => { if (typeof updateTransferButtons === "function") updateTransferButtons(); };
+    }
+    function transferReleaseId() {
+      const select = document.getElementById("transfer-release-player");
+      if (!select || select.style.display === "none") return null;
+      const id = Number(select.value);
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+    function releaseNote() {
+      const select = document.getElementById("transfer-release-player");
+      const id = transferReleaseId();
+      if (id === null || !select) return "The destination squad has a free slot.";
+      return `The destination squad is full, so ${select.options[select.selectedIndex].textContent} is released as a free agent first.`;
+    }
+    function releaseRequired() {
+      const select = document.getElementById("transfer-release-player");
+      return !!select && select.style.display !== "none" && transferReleaseId() === null;
     }
 
     async function terminateContract() {
@@ -103,6 +141,7 @@
       const club = read("transfer-target-club-id"), yearly = read("transfer-sign-wage"), year = read("transfer-sign-year"), fee = read("transfer-fee");
       const wage = yearly === null ? null : Math.round(yearly / 52);
       const missing = [];
+      if (releaseRequired()) missing.push("player to release (the destination squad is full)");
       if (!(Number.isInteger(club) && club > 0)) missing.push("target club ID");
       if (!(Number.isInteger(yearly) && yearly >= 26 && wage >= 1 && wage <= 2147483647)) missing.push("yearly wage");
       if (!(Number.isInteger(year) && year >= 2000 && year <= 2100)) missing.push("expiry year");
@@ -121,13 +160,18 @@
       const feeText = form.fee === null ? "" : ` The fee of ${form.fee.toLocaleString()} moves from the buying club's balance to the selling club's.`;
       const body = { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year };
       if (form.fee !== null) body.fee_gbp = form.fee;
+      const releaseId = transferReleaseId();
+      if (releaseId !== null) body.release_player_id = releaseId;
       return runTransferAction("/api/transfer/move", body,
-        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. The destination first-team squad needs a spare slot. Keep a backup save.`);
+        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. ${releaseNote()} Keep a backup save.`);
     }
     async function signFreeAgent() {
       const form = transferFormState();
       if (form.missing.length) return refuseMissing(form);
       const name = state.activePlayer?.name || "this player";
-      return runTransferAction("/api/transfer/sign", { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year },
+      const signBody = { target_club_id: form.club, wage_gbp: form.wage, expiry_year: form.year };
+      const signRelease = transferReleaseId();
+      if (signRelease !== null) signBody.release_player_id = signRelease;
+      return runTransferAction("/api/transfer/sign", signBody,
         `Sign ${name} to club ${form.club} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Keep a backup save.`);
     }

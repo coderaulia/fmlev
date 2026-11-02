@@ -55,6 +55,33 @@ impl GameContextManager {
         Ok(res)
     }
 
+    /// Frees a slot in the destination squad by releasing `release_id` (a free agent afterwards) when it is full.
+    /// Does nothing when a slot is already spare; refuses a player who is not in that squad.
+    fn release_for_space(&mut self, team_addr: usize, release_id: Option<i32>) -> Result<()> {
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let squad = crate::native_transfer::SquadVector::read(&session.driver, team_addr)?;
+        if squad.spare_slots() > 0 {
+            return Ok(());
+        }
+        let Some(release_id) = release_id else {
+            return Err(CoreError::InvalidValue(
+                "The destination squad list is full (the game allocates it at exactly its current size). Choose a player of that club to release as a free agent to make room".into(),
+            ));
+        };
+        let victim = self.verified_native_player(release_id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
+        let actual = victim.address() - crate::native_transfer::ACTUAL_PLAYER_OFFSET;
+        if !squad.contains(&session.driver, actual)? {
+            return Err(CoreError::InvalidValue("The player to release is not in the destination first-team squad".into()));
+        }
+        victim.terminate_contract(&session.driver)?;
+        let squad = crate::native_transfer::SquadVector::read(&session.driver, team_addr)?;
+        if squad.spare_slots() == 0 {
+            return Err(CoreError::InvalidValue("Releasing the player did not free a slot in the destination squad".into()));
+        }
+        Ok(())
+    }
+
     /// Moves a contracted player to a target club's first team (or a specific team address).
     pub fn move_player(
         &mut self,
@@ -63,6 +90,7 @@ impl GameContextManager {
         target_team_address: Option<usize>,
         fee_gbp: Option<u32>,
         terms: Option<crate::native_transfer::NewContractTerms>,
+        release_id: Option<i32>,
     ) -> Result<(usize, usize)> {
         let record = self.verified_native_player(id)?;
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
@@ -74,6 +102,8 @@ impl GameContextManager {
             }
             (None, None) => return Err(CoreError::InvalidValue("Either target_club_id or target_team_address must be provided".into())),
         };
+        self.release_for_space(team_addr, release_id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         let res = record.move_player(&session.driver, team_addr, fee_gbp, terms)?;
         let _ = self.sync_live_context();
         Ok(res)
@@ -87,6 +117,7 @@ impl GameContextManager {
         target_team_address: Option<usize>,
         wage_gbp: Option<u32>,
         expiry_year: Option<u32>,
+        release_id: Option<i32>,
     ) -> Result<usize> {
         let record = self.verified_native_player(id)?;
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
@@ -98,6 +129,8 @@ impl GameContextManager {
             }
             (None, None) => return Err(CoreError::InvalidValue("Either target_club_id or target_team_address must be provided".into())),
         };
+        self.release_for_space(team_addr, release_id)?;
+        let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         let res = record.sign_free_agent(&session.driver, team_addr, wage_gbp, expiry_year)?;
         let _ = self.sync_live_context();
         Ok(res)

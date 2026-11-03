@@ -172,6 +172,39 @@ pub async fn select_context(
 }
 
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlayerOpenRequest {}
+
+/// Load the player whose profile FM26 is showing (not the one the editor had selected) and pin it.
+pub async fn open_game_player(State(state): State<ServerState>, Json(_): Json<PlayerOpenRequest>) -> impl IntoResponse {
+    let id = {
+        let mut w = state.inner.write().await;
+        if w.context_mgr.session.is_none() {
+            return api_error(StatusCode::BAD_REQUEST, "Attach to FM26 first");
+        }
+        let _ = w.context_mgr.sync_live_context();
+        w.context_mgr.game_open_person_id()
+    };
+    let Some(id) = id else {
+        return api_error(StatusCode::NOT_FOUND, "No player profile is open in FM26 (open one in the game, then try again)");
+    };
+    super::search::warm(&state, &[super::search::Warm::Player(id)]).await;
+    let mut w = state.inner.write().await;
+    w.context_mgr.allow_native_discovery_retry(id);
+    let selected = w.context_mgr.select_player(id);
+    if selected.is_err() || !w.context_mgr.selected_player_is_native() {
+        return api_error(StatusCode::NOT_FOUND, format!(
+            "The profile open in FM26 (id {id}) has no native player record. If it is a staff member or manager, use Staff > Open in game"));
+    }
+    w.context_mgr.set_sync_mode("pinned");
+    let ctx = w.context_mgr.get_context();
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "success", "source": "game_screen", "is_pinned": true, "sync_mode": ctx.sync_mode,
+        "player": ctx.player, "active_player": ctx.player
+    })))
+}
+
 pub async fn update_player(
     State(state): State<ServerState>,
     Json(payload): Json<PlayerUpdateRequest>,

@@ -524,6 +524,30 @@
       const dirty = kind === "player" ? state.playerDirtyFields.size > 0 : state[`${kind}Dirty`];
       return !dirty || typeof confirm !== "function" || confirm(`Discard unsaved ${kind} edits and change selection?`);
     }
+    // The player profile FM26 is showing (not the editor's selection), loaded natively and pinned.
+    // Returns the player, or null when the game shows no player profile (the reason is shown as a toast).
+    async function openPlayerFromGame(fromSaveBar) {
+      if (!fromSaveBar && !canReplaceDraft("player")) return null;
+      try {
+        const res = await fetch("/api/player/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const data = await readJson(res);
+        if (res.status === 404) { showToast(data.message || "No player profile is open in FM26.", "warning"); return null; }
+        if (!res.ok) throw new Error(data.message || "Open player lookup failed");
+        const player = data.player || data.active_player;
+        dirtyPlayerFields.clear();
+        state.playerDirty = false;
+        SaveBar.clear("player");
+        displayPlayer(player);
+        if (typeof Shell !== "undefined") Shell.syncEntities(state);
+        state.isPinned = true;
+        updateSyncUI();
+        switchTab("tab-player");
+        rememberSearchSelection({ kind: "player", id: player.id, name: player.name });
+        showToast(`Loaded ${player.name || "player"} from the game screen`, "success");
+        return player;
+      } catch (error) { showToast(error.message, "error"); return null; }
+    }
+
     async function selectSearchedPlayer(playerId) {
       if (!canReplaceDraft("player")) return;
       clearSearch();

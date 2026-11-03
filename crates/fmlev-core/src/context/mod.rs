@@ -71,6 +71,8 @@ pub struct GameContextManager {
     /// Polling skips native discovery of a followed id until this time after a failed full scan
     /// (e.g. the game shows a manager or staff profile, which is not a player record).
     pub(crate) native_discovery_retry_at: HashMap<i32, std::time::Instant>,
+    /// Person id of the profile FM26 is showing, from the last live sync (any sync mode).
+    pub(crate) game_open_person_id: Option<i32>,
     pub(crate) auto_discovery_attempted: bool,
     pub registry: OffsetsRegistry,
     pub player_registry: HashMap<i32, Player>,
@@ -148,6 +150,7 @@ impl GameContextManager {
             native_player_records: HashMap::new(),
             failed_native_fingerprints: HashMap::new(),
             native_discovery_retry_at: HashMap::new(),
+            game_open_person_id: None,
             auto_discovery_attempted: false,
             registry,
             player_registry,
@@ -189,6 +192,7 @@ impl GameContextManager {
         self.native_player_records.clear();
         self.failed_native_fingerprints.clear();
         self.native_discovery_retry_at.clear();
+        self.game_open_person_id = None;
         self.auto_discovery_attempted = false;
         self.live_clubs.clear();
         self.live_nations.clear();

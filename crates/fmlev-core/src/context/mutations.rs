@@ -200,6 +200,16 @@ impl GameContextManager {
         self.native_discovery_retry_at.remove(&id);
     }
 
+    /// Person id of the profile FM26 is showing (player, or staff/manager, which have no player record).
+    pub fn game_open_person_id(&self) -> Option<i32> {
+        self.game_open_person_id
+    }
+
+    /// Whether the selected player has a validated native record (the editor can write it).
+    pub fn selected_player_is_native(&self) -> bool {
+        self.native_player_records.contains_key(&self.context.player.id)
+    }
+
     /// Native discovery for selection and polling. A failed attempt is a full process scan (seconds,
     /// under the state lock), so it is not repeated for the same id within `NATIVE_DISCOVERY_RETRY`.
     pub(crate) fn discover_native_player_throttled(&mut self, id: i32) {
@@ -1290,6 +1300,9 @@ impl GameContextManager {
         if active_profile_live_id.is_some() {
             first_live_id = active_profile_live_id;
         }
+
+        // Recorded in every sync mode so a pinned editor can still load what the game shows.
+        self.game_open_person_id = panel_history_person_id.or(detected_player_id.map(|(id, _)| id));
 
         // Apply state updates to self:
         if self.context.sync_mode == "auto_follow" {

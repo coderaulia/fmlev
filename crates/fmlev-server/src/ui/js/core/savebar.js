@@ -196,7 +196,11 @@
         };
         for (const kind of Object.keys(defs)) {
           if (pages[kind]) continue;
-          register(kind, { load: () => reloadEntity(kind), save: defs[kind], discard: () => reloadEntity(kind), changes: () => legacyChanges(kind) });
+          // Player "Load": the profile on the game screen first, else re-read the selected player.
+          const load = kind === "player" && typeof openPlayerFromGame === "function"
+            ? async () => (await openPlayerFromGame(true)) ? true : reloadEntity(kind)
+            : () => reloadEntity(kind);
+          register(kind, { load, save: defs[kind], discard: () => reloadEntity(kind), changes: () => legacyChanges(kind) });
         }
       }
 

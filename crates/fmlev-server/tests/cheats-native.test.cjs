@@ -120,3 +120,16 @@ test('Wonderkid Forge raises PA to 195 through the normal PA edit and never lowe
   assert.equal(await ui.run('applyWonderkid()'), false, 'PA must be writable for this player');
   assert.equal(ui.run('state.activePlayer.potential_ability'), 100);
 });
+
+test('Max Morale (player and squad) are enabled and queue the native preset routes', () => {
+  const html = read('pages/godmode.html');
+  for (const call of ["applyPlayerPreset\\('morale'\\)", "applyClubPreset\\('morale_squad'\\)"]) {
+    assert.match(html, new RegExp(`<button class="btn btn-sm btn-primary" onclick="${call}"`), call);
+    assert.doesNotMatch(html, new RegExp(`disabled[^>]*onclick="${call}"`), `${call} must not be disabled`);
+  }
+  assert.doesNotMatch(read('pages/player.html'), /data-live-unavailable="true" onclick="applyPlayerPreset\('morale'\)"/);
+  const ui = app();
+  ui.run("state.activePlayer = { id: 42, name: 'P' }");
+  assert.equal(ui.run("queuePreset('club', 'morale_squad')"), true);
+  assert.equal(ui.requests.length, 0, 'queued for Save, not sent');
+});

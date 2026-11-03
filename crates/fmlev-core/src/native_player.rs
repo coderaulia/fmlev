@@ -41,6 +41,11 @@ const NO_SQUAD_NUMBER: u8 = 255;
 const CONTRACT_TEAM: usize = 0x10;
 const FAMILIARITY: usize = 0x48; // pointer to the familiarity object lies at record - 0x48
 const FAMILIARITY_MAX: u32 = 10_000;
+/// Morale as the game displays it (1..=20), u8 at record + 0x124 (ACTUAL_PLAYER + 0x26c).
+/// Matched the squad screen's `Morale` binding for 30 players (values 6..19). The next byte
+/// (+0x125, signed) looks like the recent change and is never written.
+const MORALE: usize = 0x124;
+pub const MORALE_MAX: u8 = 20;
 const CHUNK: usize = 16 << 20;
 
 pub struct NativeAttribute {
@@ -158,6 +163,9 @@ pub(crate) fn expiry_with_year(raw: u32, year: i32) -> Result<u32> {
     let new_day = days[..month].iter().sum::<u32>() + day;
     Ok(((year as u32) << 16) | (raw & 0xfe00) | new_day)
 }
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct SquadMoraleReport { pub changed: usize, pub unchanged: usize, pub skipped: usize }
 
 #[derive(Debug, Clone)]
 pub struct NativePlayerRecord {
@@ -737,6 +745,38 @@ impl NativePlayerRecord {
         Ok(())
     }
 
+    /// Native morale (1..=20). Any other byte is reported as unreadable, never clamped.
+    pub fn read_morale(&self, driver: &LinuxMemoryDriver) -> Result<u8> {
+        self.validate(driver)?;
+        let morale = driver.read::<u8>(self.address + MORALE)?;
+        if !(1..=MORALE_MAX).contains(&morale) { return Err(invalid(&format!("Native morale byte {morale} is outside 1..=20"))); }
+        Ok(morale)
+    }
+
+    /// Set morale (1..=20) in one checked transaction. Returns the old value, or None when unchanged.
+    pub fn write_morale(&self, driver: &LinuxMemoryDriver, morale: u8) -> Result<Option<u8>> {
+        if !(1..=MORALE_MAX).contains(&morale) { return Err(invalid("Morale must be between 1 and 20")); }
+        let old = self.read_morale(driver)?;
+        if old == morale { return Ok(None); }
+        self.apply_edits(driver, &[NativeEdit { address: self.address + MORALE, old: vec![old], next: vec![morale] }], None)?;
+        Ok(Some(old))
+    }
+
+    /// Raise every teammate (same contract team as this player, this player included) to the
+    /// maximum morale. Each player is its own transaction; unreadable morale bytes are skipped.
+    pub fn max_squad_morale(&self, driver: &LinuxMemoryDriver) -> Result<SquadMoraleReport> {
+        let mut report = SquadMoraleReport::default();
+        for mate in self.teammates(driver)? {
+            match mate.write_morale(driver, MORALE_MAX) {
+                Ok(Some(_)) => report.changed += 1,
+                Ok(None) => report.unchanged += 1,
+                Err(_) => report.skipped += 1,
+            }
+        }
+        if report.changed + report.unchanged == 0 { return Err(invalid("No squad player had a readable native morale")); }
+        Ok(report)
+    }
+
     /// Read-only preferred-moves bitset (record + 0x200). Only bits with screen evidence are
     /// named. Never written: the bit-to-move table is incomplete and unverified for writes.
     pub fn read_preferred_moves(&self, driver: &LinuxMemoryDriver) -> Result<PreferredMoves> {
@@ -749,6 +789,10 @@ impl NativePlayerRecord {
         self.refresh_attributes(driver, &mut player.attributes)?;
         self.refresh_abilities(driver, player)?;
         player.preferred_moves = self.read_preferred_moves(driver).ok();
+        if let Ok(morale) = self.read_morale(driver) {
+            player.morale = morale * 5;
+            player.morale_label = format!("{morale}/20");
+        }
         if let Ok(contract) = self.contract(driver) {
             let wage = driver.read::<u32>(contract.address + 0x20)?;
             player.contract.wage_per_week = i32::try_from(wage).unwrap_or(0);

@@ -487,3 +487,22 @@ fn generated_players_may_hold_minus_one_or_zero_in_one_uid_word() {
     assert_eq!(uid(0, 0), None);
     assert_eq!(uid(u32::MAX, 0), None);
 }
+
+#[test]
+fn morale_reads_display_scale_writes_one_byte_and_refuses_bad_values() {
+    let (_data, r) = fixture();
+    let d = LinuxMemoryDriver::new(std::process::id() as i32);
+    d.write(r.address + MORALE, &[17u8, 0xf9]).unwrap();
+    assert_eq!(r.read_morale(&d).unwrap(), 17);
+    assert_eq!(r.write_morale(&d, 20).unwrap(), Some(17));
+    assert_eq!(r.write_morale(&d, 20).unwrap(), None);
+    // The trend byte after morale is never touched.
+    assert_eq!(d.read::<[u8; 2]>(r.address + MORALE).unwrap(), [20, 0xf9]);
+    assert!(r.write_morale(&d, 0).is_err());
+    assert!(r.write_morale(&d, 21).is_err());
+    // Out-of-range bytes are reported as unreadable, never clamped or rewritten.
+    d.write(r.address + MORALE, &0u8).unwrap();
+    assert!(r.read_morale(&d).is_err());
+    assert!(r.write_morale(&d, 20).is_err());
+    assert_eq!(d.read::<u8>(r.address + MORALE).unwrap(), 0);
+}

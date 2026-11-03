@@ -207,6 +207,18 @@ impl GameContextManager {
         }
     }
 
+    /// Driver and native record of the open player, used as the squad anchor for squad-wide
+    /// native actions run outside the state lock. The player must belong to `club_id`.
+    pub fn live_squad_anchor(&mut self, club_id: i32) -> Result<(fmlev_mem::LinuxMemoryDriver, crate::native_player::NativePlayerRecord)> {
+        let driver = self.session.as_ref().filter(|s| s.bases.game_assembly_base.is_some())
+            .map(|s| s.driver).ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
+        let id = self.context.player.id;
+        if id <= 0 || (club_id > 0 && self.context.player.club_id != club_id) {
+            return Err(CoreError::InvalidValue("Open a player from this club's squad first (the squad is found through that player's contract team)".into()));
+        }
+        Ok((driver, self.verified_native_player(id)?))
+    }
+
     pub(crate) fn verified_native_player(&mut self, id: i32) -> Result<crate::native_player::NativePlayerRecord> {
         if let Some(mut record) = self.native_player_records.get(&id).cloned() {
             if !record.attributes_verified() {
@@ -518,6 +530,24 @@ impl GameContextManager {
                 }
             }
             info!("Applied live quick action: heal_squad (Club ID: {})", target_club_id);
+            return Ok(());
+        }
+        if self.session.as_ref().is_some_and(|session|
+            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
+            && matches!(normalized.as_str(), "max_morale" | "morale" | "boost_morale")
+        {
+            // Native morale byte only (record + 0x124); happiness has no native field and is untouched.
+            let id = self.context.player.id;
+            let record = self.verified_native_player(id)?;
+            let driver = self.session.as_ref().unwrap().driver;
+            record.write_morale(&driver, crate::native_player::MORALE_MAX)?;
+            self.context.player.morale = crate::native_player::MORALE_MAX * 5;
+            self.context.player.morale_label = format!("{}/20", crate::native_player::MORALE_MAX);
+            if let Some(player) = self.player_registry.get_mut(&id) {
+                player.morale = self.context.player.morale;
+                player.morale_label = self.context.player.morale_label.clone();
+            }
+            info!("Applied live quick action: max_morale (Player ID: {})", id);
             return Ok(());
         }
         self.ensure_record_writes_supported()?;

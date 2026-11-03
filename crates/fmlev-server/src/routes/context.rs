@@ -378,11 +378,32 @@ pub async fn apply_club_preset(
     }
 
     match payload.preset.as_str() {
-        "morale_squad" => {
-            if w.context_mgr.session.is_some() {
-                return api_error(StatusCode::NOT_IMPLEMENTED,
-                    "Squad writes require verified native player bindings and are unavailable for this live session");
+        "morale_squad" if w.context_mgr.session.is_some() => {
+            // Native squad morale: anchor on the open player, then find teammates and write
+            // with no lock held (the teammate search scans process memory).
+            let club_id = w.context_mgr.context.club.club_id;
+            let club_name = w.context_mgr.context.club.club_name.clone();
+            let (driver, anchor) = match w.context_mgr.live_squad_anchor(club_id) {
+                Ok(found) => found,
+                Err(error) => return api_error(core_status(&error), error),
+            };
+            drop(w);
+            let result = tokio::task::spawn_blocking(move || anchor.max_squad_morale(&driver)).await;
+            match result {
+                Ok(Ok(report)) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "status": "success",
+                        "message": format!("Squad morale set to 20/20 for {}: {} changed, {} already max, {} skipped (unreadable morale).",
+                            club_name, report.changed, report.unchanged, report.skipped),
+                        "report": report,
+                    })),
+                ),
+                Ok(Err(error)) => api_error(core_status(&error), error),
+                Err(error) => api_error(StatusCode::INTERNAL_SERVER_ERROR, error),
             }
+        }
+        "morale_squad" => {
             let target_club_id = w.context_mgr.context.club.club_id;
             w.context_mgr.context.player.morale = 100;
             w.context_mgr.context.player.morale_label = "Superb".to_string();

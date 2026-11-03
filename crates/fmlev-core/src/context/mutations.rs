@@ -193,6 +193,13 @@ impl GameContextManager {
         Ok(())
     }
 
+    /// An explicit selection (search, Load from game) must retry native discovery even if a poll
+    /// failed moments ago, otherwise one transient failure leaves the editor read-only for the
+    /// whole retry window. The route warms the locator cache off the lock first, so the retry is cheap.
+    pub fn allow_native_discovery_retry(&mut self, id: i32) {
+        self.native_discovery_retry_at.remove(&id);
+    }
+
     /// Native discovery for selection and polling. A failed attempt is a full process scan (seconds,
     /// under the state lock), so it is not repeated for the same id within `NATIVE_DISCOVERY_RETRY`.
     pub(crate) fn discover_native_player_throttled(&mut self, id: i32) {

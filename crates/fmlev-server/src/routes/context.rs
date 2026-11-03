@@ -125,6 +125,7 @@ pub async fn select_context(
         w.context_mgr.set_sync_mode("auto_follow");
     } else {
         if let Some(pid) = payload.player_id {
+            w.context_mgr.allow_native_discovery_retry(pid);
             if let Err(error) = w.context_mgr.select_player(pid) {
                 super::search::drop_stale(&state, EntityKind::Player, pid);
                 return api_error(StatusCode::BAD_REQUEST, error);

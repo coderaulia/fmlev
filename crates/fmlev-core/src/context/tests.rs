@@ -681,3 +681,12 @@ use crate::session::LiveSession;
         manager.discover_native_player_throttled(110396);
         assert!(manager.native_discovery_retry_at[&110396] > first, "a due retry runs again and pushes the time");
     }
+
+    #[test]
+    fn explicit_selection_clears_the_discovery_retry_window() {
+        let mut manager = GameContextManager::new_offline();
+        manager.discover_native_player_throttled(42259);
+        assert!(manager.native_discovery_retry_at.contains_key(&42259));
+        manager.allow_native_discovery_retry(42259);
+        assert!(!manager.native_discovery_retry_at.contains_key(&42259), "Load from game must not wait for the window");
+    }

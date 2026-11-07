@@ -256,20 +256,24 @@
       if (document.activeElement !== input) input.value = dobToInput(player.date_of_birth);
     }
 
+    // The browser fires change on every keystroke while a year is typed (0002, 0020, 0201, 2011), so an
+    // invalid value here is usually unfinished typing: ignore it and validate once the input loses focus.
     function handleDobChange(value) {
       if (!state.activePlayer) return;
-      const input = document.getElementById("input-dob");
       const dob = inputToDob(value);
-      if (!dob) {
-        if (input) input.value = dobToInput(state.activePlayer.date_of_birth);
-        showToast("Enter a real date between 1900 and 2200", "warning");
-        return;
-      }
+      if (!dob) return;
       state.activePlayer.date_of_birth = dob;
       const base = playerBaseline()?.date_of_birth;
       if (base && base.year === dob.year && base.day === dob.day) dirtyPlayerFields.delete("date_of_birth");
       else dirtyPlayerFields.add("date_of_birth");
       markUnsaved();
+    }
+
+    // On blur an invalid or unfinished date is reverted to the staged value, with one warning.
+    function handleDobBlur(input) {
+      if (!state.activePlayer || !input || inputToDob(input.value)) return;
+      input.value = dobToInput(state.activePlayer.date_of_birth);
+      showToast("Enter a real date between 1900 and 2200", "warning");
     }
 
     function renderPlayerFacts(player) {

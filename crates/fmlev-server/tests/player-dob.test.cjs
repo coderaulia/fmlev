@@ -13,6 +13,7 @@ function app() {
 test("player page has a date of birth input wired to handleDobChange", () => {
   assert.match(read("pages/player.html"), /id="input-dob"[^>]*type="date"/);
   assert.match(read("pages/player.html"), /onchange="handleDobChange\(this.value\)"/);
+  assert.match(read("pages/player.html"), /onblur="handleDobBlur\(this\)"/);
 });
 
 test("day of year converts to and from the date input, including leap years", () => {
@@ -47,5 +48,29 @@ test("a change stages the field as dirty and reverting clears it", () => {
   assert.equal(ui.run("state.playerDirtyFields.has('date_of_birth')"), false);
   ui.run("handleDobChange('not a date')");
   assert.deepEqual(ui.run("state.activePlayer.date_of_birth"), { year: 1998, day: 91 }, "invalid input changes nothing");
+  assert.equal(ui.run("toasts.length"), 0, "no warning while typing");
+});
+
+test("typing a year keystroke by keystroke never resets the input or warns", () => {
+  const ui = app();
+  ui.run("state.activePlayer = { id: 9, date_of_birth: { year: 2010, day: 161 } }; state.caEstimateBaseline = { id: 9, date_of_birth: { year: 2010, day: 161 } };");
+  for (const partial of ["0002-06-10", "0020-06-10", "0201-06-10", "2011-06-10"]) {
+    ui.els["input-dob"].value = partial;
+    ui.run(`handleDobChange('${partial}')`);
+    assert.equal(ui.els["input-dob"].value, partial, "the typed value stays in the input");
+  }
+  assert.deepEqual(ui.run("state.activePlayer.date_of_birth"), { year: 2011, day: 161 });
+  assert.equal(ui.run("state.playerDirtyFields.has('date_of_birth')"), true);
+  assert.equal(ui.run("toasts.length"), 0);
+});
+
+test("blur reverts an unfinished date to the staged value with one warning", () => {
+  const ui = app();
+  ui.run("state.activePlayer = { id: 9, date_of_birth: { year: 2010, day: 161 } };");
+  ui.els["input-dob"].value = "0201-06-10";
+  ui.run("handleDobBlur(document.getElementById('input-dob'))");
+  assert.equal(ui.els["input-dob"].value, "2010-06-10");
   assert.equal(ui.run("toasts.length"), 1);
+  ui.run("handleDobBlur(document.getElementById('input-dob'))");
+  assert.equal(ui.run("toasts.length"), 1, "a valid date on blur does not warn");
 });

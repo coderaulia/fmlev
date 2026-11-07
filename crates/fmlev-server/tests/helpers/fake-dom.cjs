@@ -18,6 +18,8 @@ function element(id) {
     addEventListener(name, fn) { (listeners[name] ||= []).push(fn); },
     click() { (listeners.click || []).forEach(fn => fn({ target: el })); },
     closest: () => null,
+    appendChild(child) { el.children.push(child); return child; },
+    get options() { return el.children; },
   };
   return el;
 }
@@ -35,6 +37,7 @@ function createUi({ fetch, ids = [], tabs = [], extra = {} } = {}) {
     getElementById: id => els[id] || null,
     querySelectorAll: selector => (selector === '.tab-view' ? tabs.map(id => els[id]) : []),
     querySelector: () => null,
+    createElement: () => element(''),
   };
   const winHandlers = {};
   const sandbox = {

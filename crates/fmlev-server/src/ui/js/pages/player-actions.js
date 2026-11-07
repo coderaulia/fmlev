@@ -14,7 +14,7 @@
         el.title = blocked ? `Unavailable: ${blocked}` : "Asks for confirmation";
       }
       // Mark empty or invalid required fields and say which are missing.
-      const fields = [["transfer-target-club-id", "target club ID"], ["transfer-sign-wage", "yearly wage"], ["transfer-sign-year", "expiry year"]];
+      const fields = [["transfer-target-club-id", "target club"], ["transfer-target-club-search", "target club"], ["transfer-sign-wage", "yearly wage"], ["transfer-sign-year", "expiry year"]];
       for (const [id, label] of fields) {
         const input = document.getElementById(id);
         if (input && input.classList) input.classList.toggle("field-missing", form.missing.includes(label));

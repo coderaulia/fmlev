@@ -69,6 +69,89 @@
       return String(raw ?? "").trim() !== "" && Number.isInteger(id) && id > 0 ? id : null;
     }
 
+    // Target club picker: the user types a club name, the search index lists matching clubs, and picking one
+    // stores the native club index in the hidden #transfer-target-club-id. Typing again clears the pick, so a
+    // stale id is never sent. A bare number is still accepted as a club index.
+    let transferClubSearchSeq = 0;
+    let transferClubSearchTimer = null;
+    function setTransferClub(id, label) {
+      const hidden = document.getElementById("transfer-target-club-id");
+      if (hidden) hidden.value = id ? String(id) : "";
+      const search = document.getElementById("transfer-target-club-search");
+      if (search && label !== undefined) search.value = label;
+      updateTransferButtons();
+      loadTransferSpace();
+    }
+    function hideTransferClubResults() {
+      const list = document.getElementById("transfer-target-club-results");
+      if (list) list.style.display = "none";
+    }
+    function clubLabel(club) {
+      const name = club.club_name || club.name || `Club ${club.club_id}`;
+      return club.league_name ? `${name} (${club.league_name})` : name;
+    }
+    function searchTransferClubs(text) {
+      const query = String(text ?? "").trim();
+      const typedId = /^\d+$/.test(query) ? Number(query) : null;
+      setTransferClub(typedId && typedId > 0 ? typedId : null);
+      clearTimeout(transferClubSearchTimer);
+      const seq = ++transferClubSearchSeq;
+      if (query.length < 2 || typedId !== null) { hideTransferClubResults(); return Promise.resolve([]); }
+      return new Promise(resolve => {
+        transferClubSearchTimer = setTimeout(async () => {
+          try {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&kind=clubs&limit=12`);
+            const data = await readJson(res);
+            if (seq !== transferClubSearchSeq) return resolve([]);
+            resolve(showTransferClubResults(res.ok ? (data.clubs || []) : []));
+          } catch (error) { if (seq === transferClubSearchSeq) hideTransferClubResults(); resolve([]); }
+        }, 200);
+      });
+    }
+    function showTransferClubResults(clubs) {
+      const list = document.getElementById("transfer-target-club-results");
+      if (!list) return clubs;
+      list.innerHTML = "";
+      const usable = clubs.filter(club => Number.isInteger(club.club_id) && club.club_id > 0);
+      for (const club of usable) {
+        const option = document.createElement("option");
+        option.value = String(club.club_id);
+        option.textContent = clubLabel(club);
+        list.appendChild(option);
+      }
+      if (!usable.length) {
+        const none = document.createElement("option");
+        none.value = ""; none.disabled = true; none.textContent = "No club found (rebuild the index if it was just created)";
+        list.appendChild(none);
+      }
+      list.style.display = "";
+      return usable;
+    }
+    function pickTransferClub(value) {
+      const id = Number(value);
+      if (!Number.isInteger(id) || id <= 0) return;
+      const list = document.getElementById("transfer-target-club-results");
+      const option = list ? Array.from(list.options || []).find(o => o.value === String(id)) : null;
+      hideTransferClubResults();
+      setTransferClub(id, option ? option.textContent : String(id));
+    }
+    // Arrow down moves into the list, Enter picks the first match, Escape closes the list.
+    function transferClubKey(event) {
+      const list = document.getElementById("transfer-target-club-results");
+      if (!list || list.style.display === "none") return;
+      if (event.key === "Escape") { hideTransferClubResults(); return; }
+      if (event.key === "ArrowDown" && typeof list.focus === "function") { event.preventDefault(); list.selectedIndex = 0; list.focus(); }
+      if (event.key === "Enter") {
+        const first = Array.from(list.options || []).find(o => o.value);
+        if (first) { event.preventDefault(); pickTransferClub(first.value); }
+      }
+    }
+    function transferClubName() {
+      const search = document.getElementById("transfer-target-club-search")?.value;
+      const club = transferTargetClubId();
+      return search && club !== null && search.trim() !== String(club) ? search.trim() : `club ${club}`;
+    }
+
     // Read-only: shows the target club's first-team squad space (a transfer needs at least one spare slot).
     async function loadTransferSpace() {
       const note = document.getElementById("transfer-space-note");
@@ -142,7 +225,7 @@
       const wage = yearly === null ? null : Math.round(yearly / 52);
       const missing = [];
       if (releaseRequired()) missing.push("player to release (the destination squad is full)");
-      if (!(Number.isInteger(club) && club > 0)) missing.push("target club ID");
+      if (!(Number.isInteger(club) && club > 0)) missing.push("target club");
       if (!(Number.isInteger(yearly) && yearly >= 26 && wage >= 1 && wage <= 2147483647)) missing.push("yearly wage");
       if (!(Number.isInteger(year) && year >= 2000 && year <= 2100)) missing.push("expiry year");
       const feeValid = fee === null || (Number.isInteger(fee) && fee >= 1 && fee <= 2147483647);
@@ -163,7 +246,7 @@
       const releaseId = transferReleaseId();
       if (releaseId !== null) body.release_player_id = releaseId;
       return runTransferAction("/api/transfer/move", body,
-        `Move ${name} to club ${form.club} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. ${releaseNote()} Keep a backup save.`);
+        `Move ${name} to ${transferClubName()} on ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}?${feeText} His current wage and expiry are replaced. ${releaseNote()} Keep a backup save.`);
     }
     async function signFreeAgent() {
       const form = transferFormState();
@@ -173,5 +256,5 @@
       const signRelease = transferReleaseId();
       if (signRelease !== null) signBody.release_player_id = signRelease;
       return runTransferAction("/api/transfer/sign", signBody,
-        `Sign ${name} to club ${form.club} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Keep a backup save.`);
+        `Sign ${name} to ${transferClubName()} at ${form.yearly.toLocaleString()} per year (${form.wage.toLocaleString()} per week) until ${form.year}? The player must be a free agent and the squad needs a spare slot. Keep a backup save.`);
     }

@@ -4,7 +4,7 @@ const { createUi } = require('./helpers/fake-dom.cjs');
 const ok = data => ({ ok: true, json: async () => data });
 
 const IDS = ['transfer-fee', 'transfer-missing-note', 'btn-terminate-contract', 'btn-terminate-loan', 'btn-move-player', 'btn-sign-free-agent',
-  'transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year', 'savebar', 'savebar-status', 'savebar-error'];
+  'transfer-target-club-id', 'transfer-target-club-search', 'transfer-target-club-results', 'transfer-sign-wage', 'transfer-sign-year', 'savebar', 'savebar-status', 'savebar-error'];
 
 function app(fetch = async () => ok({ message: 'done' }), { confirmAnswer = true } = {}) {
   const ui = createUi({ fetch, ids: IDS, tabs: ['tab-contract'], extra: { confirm: () => confirmAnswer } });
@@ -76,8 +76,8 @@ test('Move and Sign stay disabled until the target club, yearly wage and expiry 
   const ui = app();
   opt(ui);
   assert.deepEqual(ENABLED(ui), [true, false, false], 'terminate needs no fields; Move and Sign need the form');
-  assert.match(ui.els['btn-move-player'].title, /Fill the required fields: target club ID, yearly wage, expiry year/);
-  assert.match(ui.els['transfer-missing-note'].innerText, /Required before Move or Sign: target club ID, yearly wage, expiry year/);
+  assert.match(ui.els['btn-move-player'].title, /Fill the required fields: target club, yearly wage, expiry year/);
+  assert.match(ui.els['transfer-missing-note'].innerText, /Required before Move or Sign: target club, yearly wage, expiry year/);
   for (const [id, value] of [['transfer-target-club-id', '1094'], ['transfer-sign-wage', '260000']]) {
     ui.els[id].value = value; ui.run('updateTransferButtons()');
     assert.deepEqual(ENABLED(ui), [true, false, false], `still incomplete after ${id}`);
@@ -113,7 +113,7 @@ test('Move and Sign refuse an incomplete form and list what is missing', async (
   ui.run('displayPlayer = () => {}');
   for (const action of ['movePlayer', 'signFreeAgent']) {
     assert.equal(await ui.run(`${action}()`), false, action);
-    assert.match(ui.run('messages.at(-1).message'), /Required: target club ID, yearly wage, expiry year/);
+    assert.match(ui.run('messages.at(-1).message'), /Required: target club, yearly wage, expiry year/);
   }
   fill(ui, { year: '' });
   assert.equal(await ui.run('movePlayer()'), false);
@@ -165,4 +165,45 @@ test('the confirm text names the contract terms that will be written', async () 
   await ui.run('movePlayer()');
   assert.match(asked, /260,000 per year \(5,000 per week\) until 2028/);
   assert.match(asked, /current wage and expiry are replaced/);
+});
+
+test('target club is picked by name from the search index and stores the club index', async () => {
+  const clubs = [{ club_id: 2313, club_name: 'Persib Bandung', league_name: 'Indonesian Super League' }, { club_id: 7256, club_name: 'Persiba Balikpapan', league_name: '' }];
+  const ui = createUi({
+    ids: IDS, tabs: ['tab-contract'],
+    fetch: async url => (url.startsWith('/api/search') ? ok({ clubs }) : url === '/api/club/squad-space' ? ok({ status: 'success', club_id: 2313, players: 32, capacity: 48, spare_slots: 16 }) : ok({})),
+    extra: { setTimeout: fn => { fn(); return 1; }, confirm: () => true },
+  });
+  ui.run("state.connected = true; state.activePlayer = { id: 42, name: 'Test Player' }; Shell.init();");
+  ui.els['transfer-target-club-search'].value = 'persib';
+  const shown = await ui.run("searchTransferClubs('persib')");
+  assert.equal(shown.length, 2);
+  assert.ok(ui.requests.some(r => r.url === '/api/search?q=persib&kind=clubs&limit=12'));
+  assert.equal(ui.els['transfer-target-club-results'].style.display, '');
+  assert.equal(ui.els['transfer-target-club-results'].options[0].textContent, 'Persib Bandung (Indonesian Super League)');
+  assert.equal(ui.els['transfer-target-club-id'].value, '', 'typing alone picks nothing');
+  ui.run("pickTransferClub('2313')");
+  assert.equal(ui.els['transfer-target-club-id'].value, '2313');
+  assert.equal(ui.els['transfer-target-club-search'].value, 'Persib Bandung (Indonesian Super League)');
+  assert.equal(ui.els['transfer-target-club-results'].style.display, 'none');
+  fill(ui, { club: '2313' });
+  opt(ui);
+  assert.equal(ui.els['btn-move-player'].disabled, false);
+  await ui.run('movePlayer()');
+  const move = ui.requests.find(r => r.url === '/api/transfer/move');
+  assert.equal(move.body.target_club_id, 2313);
+  ui.run("searchTransferClubs('pers')");
+  assert.equal(ui.els['transfer-target-club-id'].value, '', 'editing the name clears the previous pick');
+  ui.run("searchTransferClubs('2313')");
+  assert.equal(ui.els['transfer-target-club-id'].value, '2313', 'a bare number is still a club index');
+});
+
+test('the confirmation names the picked club', async () => {
+  let asked = '';
+  const ui = createUi({ ids: IDS, tabs: ['tab-contract'], fetch: async () => ok({ message: 'done' }), extra: { confirm: m => { asked = m; return false; } } });
+  ui.run("state.connected = true; state.activePlayer = { id: 42, name: 'Test Player' }; Shell.init();");
+  fill(ui, { club: '2313' });
+  ui.els['transfer-target-club-search'].value = 'Persib Bandung (Indonesian Super League)';
+  await ui.run('signFreeAgent()');
+  assert.match(asked, /Sign Test Player to Persib Bandung \(Indonesian Super League\) at/);
 });

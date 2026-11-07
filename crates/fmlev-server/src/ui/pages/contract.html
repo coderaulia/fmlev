@@ -85,7 +85,7 @@
             save. Loan recall has no in-game test yet and stays disabled.
           </p>
           <div class="transfer-required" role="note">
-            <b>Required for Move and Sign:</b> target club ID *, yearly wage *, expiry year *. Fill all three, or the
+            <b>Required for Move and Sign:</b> target club * (pick it by name), yearly wage *, expiry year *. Fill all three, or the
             action stays disabled (a contract with missing terms is never created). <b>Optional:</b> fee (Move only).
             Terminate needs no fields.
           </div>
@@ -95,7 +95,11 @@
               <button id="btn-terminate-loan" disabled data-unverified="true" class="btn" onclick="terminateLoan()">Recall from loan</button>
             </div>
             <div class="transfer-group">
-              <input id="transfer-target-club-id" type="number" min="1" required aria-required="true" class="form-control" placeholder="Target club ID *" style="width: 150px;" aria-label="Target club ID (required)" onchange="loadTransferSpace()" oninput="updateTransferButtons()">
+              <span class="club-picker" style="position: relative; display: inline-block;">
+                <input id="transfer-target-club-search" type="text" autocomplete="off" required aria-required="true" class="form-control" placeholder="Target club * (type a name)" style="width: 240px;" aria-label="Target club (required): type a club name" aria-controls="transfer-target-club-results" oninput="searchTransferClubs(this.value)" onkeydown="transferClubKey(event)">
+                <select id="transfer-target-club-results" size="6" class="form-control" style="display:none; position: absolute; left: 0; top: 100%; z-index: 20; width: 320px;" aria-label="Matching clubs" onchange="pickTransferClub(this.value)" onclick="pickTransferClub(this.value)"></select>
+              </span>
+              <input id="transfer-target-club-id" type="hidden">
               <span id="transfer-space-note" class="unverified-note"></span>
               <select id="transfer-release-player" class="form-control" style="display:none; width: 260px;" aria-label="Player to release to make room"></select>
             </div>

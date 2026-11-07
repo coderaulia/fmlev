@@ -232,11 +232,14 @@ pub struct ScoutQuery {
     pub ca_max: Option<u8>,
     pub pa_min: Option<u8>,
     pub pa_max: Option<u8>,
+    /// Age range in whole years on the game date the index was built at.
+    pub age_min: Option<u8>,
+    pub age_max: Option<u8>,
     /// Position key (gk, dl, dc, dr, dm, ml, mc, mr, aml, amc, amr, st, wbl, wbr).
     pub position: Option<String>,
     /// Minimum rating for `position` (1..=20, default 15).
     pub pos_min: Option<u8>,
-    /// name (default) | ca | pa
+    /// name (default) | ca | pa | age (youngest first)
     pub sort: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,

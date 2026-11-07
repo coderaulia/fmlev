@@ -22,6 +22,7 @@ pub(crate) fn unsupported_live_player_changes(previous: &Player, requested: &Pla
     comparable.user_modified = previous.user_modified;
     comparable.current_ability = previous.current_ability;
     comparable.potential_ability = previous.potential_ability;
+    comparable.date_of_birth = previous.date_of_birth;
     comparable.contract.wage_per_week = previous.contract.wage_per_week;
     comparable.contract.expiry_year = previous.contract.expiry_year;
     comparable.contract.squad_status = previous.contract.squad_status.clone();
@@ -170,6 +171,7 @@ pub(crate) fn build_template_live_player(id: i32, name: String, position: String
         attributes: PlayerAttributes::default(),
         user_modified: false,
         preferred_moves: None,
+        date_of_birth: None,
     }
 }
 

@@ -58,11 +58,19 @@
             </div>
           </div>
           <div class="form-group scout-player-only">
+            <label class="form-label" for="scout-age-min">Age min / max</label>
+            <div class="scout-range">
+              <input id="scout-age-min" type="number" min="10" max="60" class="form-control" placeholder="min">
+              <input id="scout-age-max" type="number" min="10" max="60" class="form-control" placeholder="max">
+            </div>
+          </div>
+          <div class="form-group scout-player-only">
             <label class="form-label" for="scout-sort">Sort by</label>
             <select id="scout-sort" class="form-control">
               <option value="name">Name</option>
               <option value="ca">Current ability</option>
               <option value="pa">Potential ability</option>
+              <option value="age">Age (youngest first)</option>
             </select>
           </div>
         </div>
@@ -73,7 +81,7 @@
         </div>
         <p class="unverified-note">
           Browses the search index of the loaded save. CA, PA and position ratings are a snapshot from the last index build
-          (Rebuild index refreshes them); opening a player reads live values. Nationality is the first nationality. "Generated" is a heuristic (unique id 2,000,000,000 or above): it includes regens and also players the game created at the start of the save. Staff can be filtered by name and club only.
+          (Rebuild index refreshes them); opening a player reads live values. Nationality is the first nationality. Age is counted from the native date of birth on the game date of the last index build. "Generated" is a heuristic (unique id 2,000,000,000 or above): it includes regens and also players the game created at the start of the save. Staff can be filtered by name and club only.
         </p>
         <div id="scout-results" class="scout-results"></div>
         <div class="scout-pager">

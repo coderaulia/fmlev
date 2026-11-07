@@ -294,6 +294,9 @@ pub struct Player {
     /// Read-only PPM bitset (bit table incomplete). `None` when not natively readable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_moves: Option<crate::preferred_moves::PreferredMoves>,
+    /// Native date of birth (record + 0x1c8 day of year, + 0x1ca year). `None` when not natively readable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_of_birth: Option<crate::search_index::GameDay>,
 }
 
 impl Player {
@@ -351,6 +354,7 @@ impl Player {
             contract: PlayerContract::default(),
             user_modified: false,
             preferred_moves: None,
+            date_of_birth: None,
         })
     }
 

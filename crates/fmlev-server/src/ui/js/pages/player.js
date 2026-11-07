@@ -16,6 +16,8 @@
             state.activePlayer[k] = v;
           }
         }
+        // An unreadable date of birth is omitted by the server: drop a stale one unless it is being edited.
+        if (!("date_of_birth" in player) && !state.playerDirtyFields.has("date_of_birth")) delete state.activePlayer.date_of_birth;
       }
 
       // Live Badge & Sync Indicator
@@ -229,12 +231,54 @@
       el.title = "Read-only. Bit-to-move table is incomplete, so unidentified moves are not named. Raw bitset " + ppm.bitset;
     }
 
+    // Native date of birth {year, day of year} <-> the date input's YYYY-MM-DD.
+    function dobToInput(dob) {
+      if (!dob || !(dob.year > 0) || !(dob.day > 0)) return "";
+      return new Date(Date.UTC(dob.year, 0, dob.day)).toISOString().slice(0, 10);
+    }
+
+    function inputToDob(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+      if (!match) return null;
+      const [year, month, day] = match.slice(1).map(Number);
+      const date = Date.UTC(year, month - 1, day);
+      if (new Date(date).getUTCDate() !== day || year < 1900 || year > 2200) return null;
+      return { year, day: Math.round((date - Date.UTC(year, 0, 1)) / 86400000) + 1 };
+    }
+
+    function renderDob(player) {
+      const input = document.getElementById("input-dob");
+      if (!input) return;
+      const writable = !!player.date_of_birth && playerFieldWritable("date_of_birth");
+      input.disabled = !writable;
+      input.title = writable ? "Native date of birth. Edits are written when you click Save."
+        : player.date_of_birth ? "No verified write path for this player." : "Date of birth unavailable (not read from the game).";
+      if (document.activeElement !== input) input.value = dobToInput(player.date_of_birth);
+    }
+
+    function handleDobChange(value) {
+      if (!state.activePlayer) return;
+      const input = document.getElementById("input-dob");
+      const dob = inputToDob(value);
+      if (!dob) {
+        if (input) input.value = dobToInput(state.activePlayer.date_of_birth);
+        showToast("Enter a real date between 1900 and 2200", "warning");
+        return;
+      }
+      state.activePlayer.date_of_birth = dob;
+      const base = playerBaseline()?.date_of_birth;
+      if (base && base.year === dob.year && base.day === dob.day) dirtyPlayerFields.delete("date_of_birth");
+      else dirtyPlayerFields.add("date_of_birth");
+      markUnsaved();
+    }
+
     function renderPlayerFacts(player) {
       const text = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value || "Unavailable"; };
       const name = String(player.name || "").trim();
       text("player-avatar", name ? name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase() : "?");
       text("player-sub", [player.position, player.club_name].filter(Boolean).join(" · "));
       text("fact-age", player.age > 0 ? `${player.age} years` : null);
+      renderDob(player);
       text("fact-nat", player.nationality);
       text("fact-club", player.club_name);
       const contract = player.contract;

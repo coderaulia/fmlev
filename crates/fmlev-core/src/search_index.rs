@@ -102,6 +102,54 @@ pub struct PlayerProfile {
     /// HEURISTIC: uid >= 2,000,000,000. Covers regens and also fictional players generated at game start;
     /// the game's own `isRegenerated` flag is not located yet.
     pub generated: bool,
+    /// Date of birth (u16 day of year at record + 0x1c8, u16 year at record + 0x1ca); `None` when out of range.
+    pub born: Option<GameDay>,
+}
+
+/// A calendar day as the game stores it: year and 1-based day of the year.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, serde::Deserialize)]
+pub struct GameDay {
+    pub year: u16,
+    pub day: u16,
+}
+
+impl GameDay {
+    /// `None` unless the year is 1900..=2200 and the day 1..=366 (366 only in a leap year).
+    pub fn new(year: u16, day: u16) -> Option<Self> {
+        let max = if is_leap(year) { 366 } else { 365 };
+        ((1900..=2200).contains(&year) && (1..=max).contains(&day)).then_some(Self { year, day })
+    }
+
+    /// The game's `GameReference.CurrentGameDate` binding: `(year << 17) | (day_of_year << 8) | flags`
+    /// (3 Jul 2026 = 0x0fd4b80a, 14 Jan 2026 = 0x0fd40e35).
+    pub fn from_binding(raw: i64) -> Option<Self> {
+        let raw = u32::try_from(raw).ok()?;
+        Self::new((raw >> 17) as u16, ((raw >> 8) & 0x1ff) as u16)
+    }
+
+    /// Whole years from `self` (a birth date) to `today`; the birthday counts once its calendar day is reached.
+    pub fn age_on(self, today: GameDay) -> Option<u8> {
+        let years = i32::from(today.year) - i32::from(self.year);
+        let before_birthday = month_day(today) < month_day(self);
+        u8::try_from(years - i32::from(before_birthday)).ok()
+    }
+}
+
+pub fn is_leap(year: u16) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+/// Day of the year as (month, day), so 1 March compares equal in leap and non-leap years.
+fn month_day(date: GameDay) -> (u8, u16) {
+    let lengths = [31, if is_leap(date.year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut day = date.day;
+    for (month, length) in lengths.iter().enumerate() {
+        if day <= *length {
+            return (month as u8, day);
+        }
+        day -= length;
+    }
+    (11, 31)
 }
 
 /// Filters of a scouting search. Every set field must match; ability and position filters only match
@@ -121,6 +169,11 @@ pub struct ScoutFilter {
     pub ca_max: Option<u8>,
     pub pa_min: Option<u8>,
     pub pa_max: Option<u8>,
+    /// Age range in whole years on `today` (players whose birth date is unreadable never match).
+    pub age_min: Option<u8>,
+    pub age_max: Option<u8>,
+    /// Reference date for ages (the game date); required for an age filter or age sort.
+    pub today: Option<GameDay>,
     /// Index into `POSITION_KEYS`-style native positions plus the minimum rating.
     pub position: Option<(usize, u8)>,
     pub sort: ScoutSort,
@@ -132,6 +185,8 @@ pub enum ScoutSort {
     Name,
     Ca,
     Pa,
+    /// Youngest first.
+    Age,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -224,7 +279,8 @@ impl SearchIndex {
         let number = filter.text.trim().parse::<i64>().ok();
         let needs_profile = filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some()
             || filter.pa_max.is_some() || filter.position.is_some() || filter.sort != ScoutSort::Name
-            || !nation.is_empty() || filter.generated.is_some();
+            || !nation.is_empty() || filter.generated.is_some() || filter.age_min.is_some() || filter.age_max.is_some();
+        let age = |entry: &IndexEntry| Some(entry.profile?.born?.age_on(filter.today?)?);
         let in_range = |value: Option<u8>, min: Option<u8>, max: Option<u8>| match (value, min, max) {
             (_, None, None) => true,
             (Some(v), min, max) => min.is_none_or(|m| v >= m) && max.is_none_or(|m| v <= m),
@@ -252,6 +308,7 @@ impl SearchIndex {
                 }
                 in_range(profile.and_then(|p| p.ca), filter.ca_min, filter.ca_max)
                     && in_range(profile.and_then(|p| p.pa), filter.pa_min, filter.pa_max)
+                    && in_range(age(entry), filter.age_min, filter.age_max)
                     && filter.position.is_none_or(|(slot, min)| profile.is_some_and(|p| p.positions.get(slot).is_some_and(|r| *r >= min)))
             })
             .collect();
@@ -259,6 +316,8 @@ impl SearchIndex {
             ScoutSort::Name => {}
             ScoutSort::Ca => hits.sort_by_key(|e| std::cmp::Reverse(e.profile.and_then(|p| p.ca).unwrap_or(0))),
             ScoutSort::Pa => hits.sort_by_key(|e| std::cmp::Reverse(e.profile.and_then(|p| p.pa).unwrap_or(0))),
+            // Youngest first: latest birth date first; unknown birth dates last.
+            ScoutSort::Age => hits.sort_by_key(|e| std::cmp::Reverse(e.profile.and_then(|p| p.born))),
         }
         let total = hits.len();
         (hits.into_iter().skip(offset).take(limit.clamp(1, MAX_LIMIT)).cloned().collect(), total)
@@ -488,7 +547,7 @@ mod tests {
     }
 
     fn scouted() -> SearchIndex {
-        let profile = |ca, pa, st, gk| Some(PlayerProfile { ca, pa, positions: { let mut p = [1u8; 15]; p[12] = st; p[0] = gk; p }, generated: false });
+        let profile = |ca, pa, st, gk| Some(PlayerProfile { ca, pa, positions: { let mut p = [1u8; 15]; p[12] = st; p[0] = gk; p }, generated: false, born: None });
         SearchIndex::new(
             1,
             vec![
@@ -531,7 +590,7 @@ mod tests {
 
     #[test]
     fn scout_filters_by_nationality_and_generated_flag() {
-        let profile = |generated| Some(PlayerProfile { ca: Some(100), pa: Some(120), positions: [1; 15], generated });
+        let profile = |generated| Some(PlayerProfile { ca: Some(100), pa: Some(120), positions: [1; 15], generated, born: None });
         let index = SearchIndex::new(
             1,
             vec![
@@ -548,5 +607,41 @@ mod tests {
         assert_eq!(ids(&ScoutFilter { generated: Some(true), ..Default::default() }), [2]);
         assert_eq!(ids(&ScoutFilter { generated: Some(false), ..Default::default() }), [3, 1]);
         assert!(ids(&ScoutFilter { nation: "france".into(), ..Default::default() }).is_empty());
+    }
+
+    #[test]
+    fn game_day_decodes_the_binding_and_ages_by_calendar_day() {
+        assert_eq!(GameDay::from_binding(0x0fd4b80a), GameDay::new(2026, 184), "3 Jul 2026");
+        assert_eq!(GameDay::from_binding(0x0fd40e35), GameDay::new(2026, 14), "14 Jan 2026");
+        assert_eq!(GameDay::new(2025, 366), None, "2025 is not a leap year");
+        let today = GameDay::new(2026, 184).unwrap();
+        let born = |year, day| GameDay::new(year, day).unwrap();
+        assert_eq!(born(1998, 91).age_on(today), Some(28), "1 Apr 1998");
+        assert_eq!(born(2007, 194).age_on(today), Some(18), "13 Jul 2007, birthday not reached");
+        assert_eq!(born(2000, 185).age_on(today), Some(26), "3 Jul 2000 (leap year day 185) is the same calendar day");
+        assert_eq!(born(2027, 1).age_on(today), None, "born after today");
+    }
+
+    #[test]
+    fn scout_filters_and_sorts_by_age() {
+        let profile = |year, day| Some(PlayerProfile { ca: Some(100), pa: Some(120), positions: [1; 15], generated: false, born: GameDay::new(year, day) });
+        let index = SearchIndex::new(
+            1,
+            vec![
+                IndexEntry::new(EntityKind::Player, 1, 11, "Old Hand".into(), None, 0).with_profile(profile(1990, 10)),
+                IndexEntry::new(EntityKind::Player, 2, 12, "Wonder Kid".into(), None, 0).with_profile(profile(2008, 300)),
+                IndexEntry::new(EntityKind::Player, 3, 13, "Mid Career".into(), None, 0).with_profile(profile(2001, 50)),
+                IndexEntry::new(EntityKind::Player, 4, 14, "No Birth".into(), None, 0).with_profile(profile(0, 0)),
+            ],
+            0,
+            1,
+        );
+        let today = GameDay::new(2026, 184);
+        let ids = |filter: ScoutFilter| index.scout(&ScoutFilter { today, ..filter }, 50, 0).0.into_iter().map(|e| e.id).collect::<Vec<_>>();
+        assert_eq!(ids(ScoutFilter { age_max: Some(21), ..Default::default() }), [2], "17 years old");
+        assert_eq!(ids(ScoutFilter { age_min: Some(25), age_max: Some(30), ..Default::default() }), [3]);
+        assert_eq!(ids(ScoutFilter { sort: ScoutSort::Age, ..Default::default() }), [2, 3, 1, 4], "youngest first, unknown last");
+        let no_date = ScoutFilter { age_max: Some(40), ..Default::default() };
+        assert_eq!(index.scout(&no_date, 50, 0).1, 0, "no reference date: nobody has a known age");
     }
 }

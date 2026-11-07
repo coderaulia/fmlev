@@ -1,7 +1,7 @@
     // Scout page: GET /api/scout filters the search index; a name opens the Player or Staff tab.
     const SCOUT_PAGE_SIZE = 50;
     const scoutState = { offset: 0, total: 0, kind: "players", token: 0 };
-    const SCOUT_FIELDS = ["q", "club", "nation", "generated", "position", "pos-min", "ca-min", "ca-max", "pa-min", "pa-max", "sort"];
+    const SCOUT_FIELDS = ["q", "club", "nation", "generated", "position", "pos-min", "ca-min", "ca-max", "pa-min", "pa-max", "age-min", "age-max", "sort"];
 
     const scoutValue = id => (document.getElementById(`scout-${id}`)?.value || "").trim();
 
@@ -17,6 +17,7 @@
         add("position", "position");
         if (scoutValue("position")) add("pos_min", "pos-min");
         add("ca_min", "ca-min"); add("ca_max", "ca-max"); add("pa_min", "pa-min"); add("pa_max", "pa-max");
+        add("age_min", "age-min"); add("age_max", "age-max");
         if (scoutValue("sort") !== "name") add("sort", "sort");
       }
       return { kind, params };
@@ -57,7 +58,7 @@
       const staff = data.kind === "staff";
       const head = staff
         ? "<tr><th>Name</th><th>Club</th></tr>"
-        : "<tr><th>Name</th><th>Club</th><th>Nationality</th><th>CA</th><th>PA</th><th>Positions</th></tr>";
+        : "<tr><th>Name</th><th>Club</th><th>Nationality</th><th>Age</th><th>CA</th><th>PA</th><th>Positions</th></tr>";
       const rows = items.map(item => {
         const club = item.club_name ? escapeHtml(item.club_name) : "—";
         if (staff) {
@@ -66,7 +67,7 @@
         const num = value => (Number.isFinite(Number(value)) && value !== null ? Number(value) : "—");
         return `<tr><td><button class="scout-link" onclick="openScoutPlayer(${Number(item.id)})">${escapeHtml(item.name)}</button></td><td>${club}</td>` +
           `<td>${item.nation ? escapeHtml(item.nation) : "—"}${item.generated ? ' <span class="scout-tag" title="Unique id 2,000,000,000 or above (heuristic)">gen</span>' : ""}</td>` +
-          `<td>${num(item.ca)}</td><td>${num(item.pa)}</td><td>${scoutPositions(item)}</td></tr>`;
+          `<td>${num(item.age)}</td><td>${num(item.ca)}</td><td>${num(item.pa)}</td><td>${scoutPositions(item)}</td></tr>`;
       }).join("");
       box.innerHTML = `<table class="fm-table scout-table"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
     }

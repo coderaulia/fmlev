@@ -49,7 +49,9 @@
           </div>
 
           <dl class="profile-facts">
-            <div class="fact"><dt>Age / date of birth</dt><dd id="fact-age" class="muted">Unavailable</dd></div>
+            <div class="fact"><dt>Age</dt><dd id="fact-age" class="muted">Unavailable</dd></div>
+            <div class="fact"><dt>Date of birth</dt><dd><input id="input-dob" type="date" class="form-control form-control-sm" min="1900-01-01" max="2200-12-31"
+                     onchange="handleDobChange(this.value)" disabled title="Native date of birth. Edits are written when you click Save."></dd></div>
             <div class="fact"><dt>Nationality</dt><dd id="fact-nat" class="muted">Unavailable</dd></div>
             <div class="fact"><dt>Club</dt><dd id="fact-club" class="muted">Unavailable</dd></div>
             <div class="fact"><dt>Reputation</dt><dd id="fact-rep" class="muted">Unavailable</dd></div>
@@ -69,7 +71,7 @@
               <div class="metric-bar-bg"><div id="fill-sharpness" class="metric-bar-fill sharpness" style="width: 0%;"></div></div>
             </div>
           </div>
-          <p class="unverified-note profile-note">Name, age, nationality and club are read-only here: there is no verified write path for them.</p>
+          <p class="unverified-note profile-note">Name, nationality and club are read-only here: there is no verified write path for them. Date of birth is the native value (age is the game's own figure and follows the next day tick); the edit is not yet confirmed on the game's screens.</p>
         </aside>
 
         <!-- Right column: attributes and quick actions -->

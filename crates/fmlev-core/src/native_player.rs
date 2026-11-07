@@ -6,6 +6,7 @@ use crate::{
     preferred_moves::{PreferredMoves, PPM_BITSET_OFFSET},
 };
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
+use crate::search_index::GameDay;
 
 const POSITIONS: usize = 8;
 const LEFT_FOOT: usize = 0x2f;
@@ -45,6 +46,9 @@ const FAMILIARITY_MAX: u32 = 10_000;
 /// Matched the squad screen's `Morale` binding for 30 players (values 6..19). The next byte
 /// (+0x125, signed) looks like the recent change and is never written.
 const MORALE: usize = 0x124;
+/// Date of birth: u16 day of year (1-based) then u16 year. Matched to the real birth dates of Loba,
+/// Mbappe, Yamal, Haaland and Bellingham (live read, PID 79716).
+const BIRTH_DATE: usize = 0x1c8;
 pub const MORALE_MAX: u8 = 20;
 const CHUNK: usize = 16 << 20;
 
@@ -777,6 +781,13 @@ impl NativePlayerRecord {
         Ok(report)
     }
 
+    /// Native date of birth; out-of-range bytes are reported as unreadable, never clamped.
+    pub fn read_date_of_birth(&self, driver: &LinuxMemoryDriver) -> Result<GameDay> {
+        self.validate(driver)?;
+        let [day, year] = driver.read::<[u16; 2]>(self.address + BIRTH_DATE)?;
+        GameDay::new(year, day).ok_or_else(|| invalid(&format!("Native date of birth (year {year}, day {day}) is out of range")))
+    }
+
     /// Read-only preferred-moves bitset (record + 0x200). Only bits with screen evidence are
     /// named. Never written: the bit-to-move table is incomplete and unverified for writes.
     pub fn read_preferred_moves(&self, driver: &LinuxMemoryDriver) -> Result<PreferredMoves> {
@@ -789,6 +800,7 @@ impl NativePlayerRecord {
         self.refresh_attributes(driver, &mut player.attributes)?;
         self.refresh_abilities(driver, player)?;
         player.preferred_moves = self.read_preferred_moves(driver).ok();
+        player.date_of_birth = self.read_date_of_birth(driver).ok();
         if let Ok(morale) = self.read_morale(driver) {
             player.morale = morale * 5;
             player.morale_label = format!("{morale}/20");
@@ -952,6 +964,15 @@ impl NativePlayerRecord {
                 { return Err(invalid(&format!("{name} requires a verified native player and values between 1 and 200"))); }
                 patches.push(NativeEdit::capture(driver, self.address + offset, (next as u16).to_le_bytes().to_vec())?);
             }
+        }
+        if previous.date_of_birth != requested.date_of_birth {
+            let born = requested.date_of_birth.ok_or_else(|| invalid("Date of birth cannot be cleared"))?;
+            let born = GameDay::new(born.year, born.day).ok_or_else(|| invalid("Date of birth must be a real day between 1900 and 2200"))?;
+            if !self.attributes_verified { return Err(invalid("Native player layout has not been calibrated")); }
+            self.read_date_of_birth(driver)?;
+            let mut bytes = born.day.to_le_bytes().to_vec();
+            bytes.extend_from_slice(&born.year.to_le_bytes());
+            patches.push(NativeEdit::capture(driver, self.address + BIRTH_DATE, bytes)?);
         }
         let terms_changed = previous.contract.squad_status != requested.contract.squad_status
             || previous.contract.release_clause != requested.contract.release_clause;

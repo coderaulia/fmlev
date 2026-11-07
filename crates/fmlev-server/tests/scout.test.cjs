@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createUi } = require('./helpers/fake-dom.cjs');
 const { read, manifest } = require('./helpers/ui.cjs');
 
-const IDS = ['scout-kind', 'scout-q', 'scout-club', 'scout-nation', 'scout-generated', 'scout-position', 'scout-pos-min', 'scout-ca-min', 'scout-ca-max', 'scout-pa-min', 'scout-pa-max',
+const IDS = ['scout-kind', 'scout-q', 'scout-club', 'scout-nation', 'scout-generated', 'scout-position', 'scout-pos-min', 'scout-ca-min', 'scout-ca-max', 'scout-pa-min', 'scout-pa-max', 'scout-age-min', 'scout-age-max',
   'scout-sort', 'scout-summary', 'scout-results', 'scout-prev', 'scout-next', 'tab-scout'];
 const ok = body => ({ ok: true, status: 200, json: async () => body, text: async () => '' });
 
@@ -27,7 +27,7 @@ test('player filters become query parameters and results link to the Player tab'
   const urls = [];
   const app = scoutUi(url => {
     urls.push(url);
-    return ok({ kind: 'players', total: 1, offset: 0, limit: 50, items: [{ id: 7, uid: 70, name: 'A <b>Striker', club_name: 'Getafe', nation: 'Spain', generated: true, ca: 130, pa: null, positions: [{ position: 'st', rating: 20 }] }] });
+    return ok({ kind: 'players', total: 1, offset: 0, limit: 50, items: [{ id: 7, uid: 70, name: 'A <b>Striker', club_name: 'Getafe', nation: 'Spain', generated: true, age: 19, ca: 130, pa: null, positions: [{ position: 'st', rating: 20 }] }] });
   });
   Object.assign(app.els['scout-q'], { value: 'strik' });
   app.els['scout-position'].value = 'st';
@@ -35,6 +35,8 @@ test('player filters become query parameters and results link to the Player tab'
   app.els['scout-nation'].value = 'spain';
   app.els['scout-generated'].value = 'false';
   app.els['scout-sort'].value = 'ca';
+  app.els['scout-age-min'].value = '16';
+  app.els['scout-age-max'].value = '21';
   await app.run('runScout()');
   const query = new URL(urls[0], 'http://x').searchParams;
   assert.equal(query.get('kind'), 'players');
@@ -45,12 +47,16 @@ test('player filters become query parameters and results link to the Player tab'
   assert.equal(query.get('nation'), 'spain');
   assert.equal(query.get('generated'), 'false');
   assert.equal(query.get('sort'), 'ca');
+  assert.equal(query.get('age_min'), '16');
+  assert.equal(query.get('age_max'), '21');
   assert.equal(query.has('pa_min'), false);
   const html = app.els['scout-results'].innerHTML;
   assert.match(html, /openScoutPlayer\(7\)/);
   assert.doesNotMatch(html, /<b>/, 'names are escaped');
   assert.match(html, /ST 20/);
   assert.match(html, /Spain/);
+  assert.match(html, /<th>Age<\/th>/);
+  assert.match(html, /<td>19<\/td>/);
   assert.match(html, /scout-tag/);
   assert.equal(app.els['scout-summary'].textContent, '1-1 of 1');
 });
@@ -63,6 +69,7 @@ test('staff search sends only name and club and opens the Staff tab', async () =
   });
   app.els['scout-kind'].value = 'staff';
   app.els['scout-ca-min'].value = '100';
+  app.els['scout-age-max'].value = '21';
   app.els['scout-nation'].value = 'spain';
   app.els['scout-generated'].value = 'true';
   app.els['scout-club'].value = 'madrid';
@@ -70,7 +77,7 @@ test('staff search sends only name and club and opens the Staff tab', async () =
   const query = new URL(urls[0], 'http://x').searchParams;
   assert.equal(query.get('kind'), 'staff');
   assert.equal(query.get('club'), 'madrid');
-  assert.equal(query.has('ca_min'), false);
+  assert.equal(query.has('ca_min') || query.has('age_max'), false);
   assert.equal(query.has('nation') || query.has('generated'), false);
   assert.match(app.els['scout-results'].innerHTML, /openScoutStaff\(5, 99\)/);
 });

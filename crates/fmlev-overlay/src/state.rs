@@ -250,6 +250,7 @@ impl OverlayState {
             },
             user_modified: false,
             preferred_moves: None,
+            date_of_birth: None,
         }
     }
 

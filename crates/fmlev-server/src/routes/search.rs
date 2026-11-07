@@ -15,7 +15,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use fmlev_core::native_staff::NativeStaffRecord;
-use fmlev_core::search_index::{EntityKind, IndexEntry, ScoutFilter, ScoutSort, SearchIndex, DEFAULT_LIMIT, MAX_LIMIT, POSITION_KEYS};
+use fmlev_core::search_index::{EntityKind, GameDay, IndexEntry, ScoutFilter, ScoutSort, SearchIndex, DEFAULT_LIMIT, MAX_LIMIT, POSITION_KEYS};
 use fmlev_core::{GameContextManager, SearchResults};
 use fmlev_mem::LinuxMemoryDriver;
 
@@ -398,6 +398,15 @@ fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
         Some(v) if !(1..=200).contains(&v) => Err(format!("{name} must be 1..200")),
         _ => Ok(value),
     };
+    let age = |name: &str, value: Option<u8>| match value {
+        Some(v) if !(10..=60).contains(&v) => Err(format!("{name} must be 10..60")),
+        _ => Ok(value),
+    };
+    if let (Some(min), Some(max)) = (query.age_min, query.age_max) {
+        if min > max {
+            return Err("age_min must not be above age_max".into());
+        }
+    }
     let position = match query.position.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
         None => None,
         Some(key) => {
@@ -414,7 +423,8 @@ fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
         None | Some("") | Some("name") => ScoutSort::Name,
         Some("ca") => ScoutSort::Ca,
         Some("pa") => ScoutSort::Pa,
-        Some(other) => return Err(format!("Unknown sort '{other}'; use name, ca or pa")),
+        Some("age") => ScoutSort::Age,
+        Some(other) => return Err(format!("Unknown sort '{other}'; use name, ca, pa or age")),
     };
     let filter = ScoutFilter {
         kind: Some(kind),
@@ -426,16 +436,19 @@ fn scout_filter(query: &ScoutQuery) -> Result<ScoutFilter, String> {
         ca_max: ability("ca_max", query.ca_max)?,
         pa_min: ability("pa_min", query.pa_min)?,
         pa_max: ability("pa_max", query.pa_max)?,
+        age_min: age("age_min", query.age_min)?,
+        age_max: age("age_max", query.age_max)?,
+        today: None,
         position,
         sort,
     };
-    if kind == EntityKind::Staff && (!filter.nation.trim().is_empty() || filter.generated.is_some() || filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some() || filter.pa_max.is_some() || position.is_some() || sort != ScoutSort::Name) {
+    if kind == EntityKind::Staff && (!filter.nation.trim().is_empty() || filter.generated.is_some() || filter.ca_min.is_some() || filter.ca_max.is_some() || filter.pa_min.is_some() || filter.pa_max.is_some() || filter.age_min.is_some() || filter.age_max.is_some() || position.is_some() || sort != ScoutSort::Name) {
         return Err("Staff can be filtered by name and club only; ability and position data is player-only".into());
     }
     Ok(filter)
 }
 
-fn scout_item(entry: &IndexEntry) -> Value {
+fn scout_item(entry: &IndexEntry, today: Option<GameDay>) -> Value {
     if entry.kind == EntityKind::Staff {
         return json!({ "index": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail });
     }
@@ -451,12 +464,14 @@ fn scout_item(entry: &IndexEntry) -> Value {
         None => (Value::Null, Value::Null, json!([])),
     };
     json!({ "id": entry.id, "uid": entry.uid, "name": entry.name, "club_name": entry.detail, "ca": ca, "pa": pa, "positions": positions,
-        "nation": entry.nation, "generated": entry.profile.map(|p| p.generated) })
+        "nation": entry.nation, "generated": entry.profile.map(|p| p.generated),
+        "born": entry.profile.and_then(|p| p.born),
+        "age": entry.profile.and_then(|p| p.born).zip(today).and_then(|(born, today)| born.age_on(today)) })
 }
 
 /// `GET /api/scout`: filtered, sorted, paged listing of indexed players or staff. Never scans memory.
 pub async fn scout_entities(State(state): State<ServerState>, Query(query): Query<ScoutQuery>) -> impl IntoResponse {
-    let filter = match scout_filter(&query) {
+    let mut filter = match scout_filter(&query) {
         Ok(filter) => filter,
         Err(error) => return api_error(StatusCode::BAD_REQUEST, error).into_response(),
     };
@@ -469,13 +484,20 @@ pub async fn scout_entities(State(state): State<ServerState>, Query(query): Quer
     let Some(index) = search.index.as_ref().filter(|index| driver.is_some_and(|driver| driver.pid() == index.pid)) else {
         return api_error(StatusCode::CONFLICT, "The search index is not ready; attach to FM26 with a save loaded and wait for the index").into_response();
     };
+    // Ages are counted on the game date recorded with the index build.
+    filter.today = search.built_game_date.and_then(GameDay::from_binding);
+    if filter.today.is_none() && (filter.age_min.is_some() || filter.age_max.is_some() || filter.sort == ScoutSort::Age) {
+        return api_error(StatusCode::CONFLICT, "The game date is not known yet, so ages cannot be computed; wait for the next sync or rebuild the index").into_response();
+    }
+    let today = filter.today;
     let (hits, total) = index.scout(&filter, limit, offset);
     Json(json!({
+        "game_date": today,
         "kind": filter.kind.map(EntityKind::plural),
         "total": total,
         "offset": offset,
         "limit": limit,
-        "items": hits.iter().map(scout_item).collect::<Vec<_>>(),
+        "items": hits.iter().map(|entry| scout_item(entry, today)).collect::<Vec<_>>(),
         "index": status,
     })).into_response()
 }
@@ -508,6 +530,11 @@ mod tests {
         assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), ca_min: Some(10), ..Default::default() }).is_err());
         assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), nation: "spain".into(), ..Default::default() }).is_err());
         assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), club: "madrid".into(), ..Default::default() }).is_ok());
+        let ages = scout_filter(&ScoutQuery { age_min: Some(16), age_max: Some(21), sort: Some("age".into()), ..Default::default() }).unwrap();
+        assert_eq!((ages.age_min, ages.age_max, ages.sort), (Some(16), Some(21), ScoutSort::Age));
+        assert!(scout_filter(&ScoutQuery { age_min: Some(22), age_max: Some(21), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { age_max: Some(9), ..Default::default() }).is_err());
+        assert!(scout_filter(&ScoutQuery { kind: Some("staff".into()), age_max: Some(30), ..Default::default() }).is_err());
     }
 
     #[test]

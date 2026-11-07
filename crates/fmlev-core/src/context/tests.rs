@@ -33,7 +33,8 @@ use crate::session::LiveSession;
         // Squad status and the release clause reach the native writer, which validates them itself.
         requested.contract.release_clause = 123;
         requested.contract.squad_status = "Star Player".into();
-        assert!(unsupported_live_player_changes(&previous, &requested).is_empty());
+        requested.date_of_birth = crate::search_index::GameDay::new(2001, 15);
+        assert!(unsupported_live_player_changes(&previous, &requested).is_empty(), "date of birth reaches the native writer");
         // Happiness is derived by the game and has no native write path.
         requested.contract.happiness = "Delighted".into();
         requested.name = "Another name".into();

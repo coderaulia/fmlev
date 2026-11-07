@@ -67,6 +67,7 @@ impl GameContextManager {
             if record.attributes_verified() {
                 fields.extend(crate::native_player::native_attributes().map(|field| format!("attributes.{}", field.name)));
                 fields.extend(["current_ability", "potential_ability"].map(str::to_string));
+                if self.context.player.date_of_birth.is_some() { fields.push("date_of_birth".to_string()); }
                 if record.has_contract(&session.driver) { fields.extend(["contract.wage_per_week", "contract.expiry_year"].map(str::to_string)); }
                 // Read from the native contract on load; present only when that read succeeded for this player.
                 let contract = &self.context.player.contract;
@@ -296,7 +297,7 @@ impl GameContextManager {
         let unsupported = unsupported_live_player_changes(&previous, &player);
         if !unsupported.is_empty() {
             return Err(CoreError::InvalidValue(format!(
-                "No verified native write path for: {}. No fields were written. Native player attributes, positions, feet, CA/PA and validated wage/expiry fields can be saved.", unsupported.join(", ")
+                "No verified native write path for: {}. No fields were written. Native player attributes, positions, feet, CA/PA, date of birth and validated wage/expiry fields can be saved.", unsupported.join(", ")
             )));
         }
         let record = self.verified_native_player(player.id)?;

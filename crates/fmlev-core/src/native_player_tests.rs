@@ -126,6 +126,7 @@ fn mixed_attributes_abilities_and_owned_contract_round_trip() {
     d.write(r.address + 0x1e8, &c).unwrap();
     d.write(r.address + 0x11c, &80u16).unwrap();
     d.write(r.address + 0x11e, &104u16).unwrap();
+    d.write(r.address + 0x1c8, &[91u16, 1998u16]).unwrap(); // 1 Apr 1998
     let mut observed = PlayerAttributes::default();
     for field in native_attributes() {
         d.write(r.address + field.offset, &(10u8 * field.scale)).unwrap();
@@ -143,6 +144,12 @@ fn mixed_attributes_abilities_and_owned_contract_round_trip() {
     requested.potential_ability = 105;
     requested.contract.wage_per_week = 543;
     requested.contract.expiry_year = 2029;
+    assert_eq!(previous.date_of_birth, crate::search_index::GameDay::new(1998, 91), "date of birth read at record + 0x1c8");
+    requested.date_of_birth = crate::search_index::GameDay::new(2000, 60);
+    let mut impossible = requested.clone();
+    impossible.date_of_birth = Some(crate::search_index::GameDay { year: 2001, day: 366 });
+    assert!(r.write_player_edits(&d, &previous, &impossible).is_err(), "2001 has no day 366");
+    assert_eq!(data, original);
     r.write_player_edits(&d, &previous, &requested).unwrap();
     let mut actual = previous.clone();
     r.refresh_player_fields(&d, &mut actual).unwrap();

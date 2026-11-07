@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use fmlev_mem::{parse_process_maps, LinuxMemoryDriver, MemoryMapping};
 
 use crate::error::{CoreError, Result};
-use crate::search_index::{drop_duplicate_ids, EntityKind, IndexEntry, PlayerProfile};
+use crate::search_index::{drop_duplicate_ids, EntityKind, GameDay, IndexEntry, PlayerProfile};
 
 const CHUNK: usize = 16 << 20;
 const MAX_STRING: usize = 512;
@@ -262,14 +262,17 @@ impl Pass<'_> {
         Some((record, id, uid, pooled_name(driver, record + 0x190)?))
     }
 
-    /// CA/PA (u16 at record + 0x11c / 0x11e) and the 15 position ratings; abilities outside 1..=200 read as `None`.
+    /// CA/PA (u16 at record + 0x11c / 0x11e), the 15 position ratings and the date of birth (u16 day of
+    /// year at record + 0x1c8, u16 year at + 0x1ca; matched to real birth dates of Loba, Mbappe, Yamal,
+    /// Haaland and Bellingham). Values out of range read as `None`.
     fn player_profile(&self, record: usize, uid: u32) -> Option<PlayerProfile> {
         let positions = self.driver.read::<[u8; 15]>(record + 8).ok()?;
         let ability = |offset: usize| {
             let value = self.driver.read::<u16>(record + offset).ok()?;
             (1..=200).contains(&value).then_some(value as u8)
         };
-        Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions, generated: uid >= 2_000_000_000 })
+        let born = self.driver.read::<[u16; 2]>(record + 0x1c8).ok().and_then(|[day, year]| GameDay::new(year, day));
+        Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions, generated: uid >= 2_000_000_000, born })
     }
 
     /// First nationality: NATION pointer at record + 0x1a8 (ACTUAL_PLAYER + 0x2f0). Only a pointer to a
@@ -555,6 +558,7 @@ mod tests {
         let contract = a.at(0xc00);
         a.ptr(0x1000 + PLAYER_RECORD + 0x1e8, contract);
         a.ptr(0x1000 + PLAYER_RECORD + 0x1a8, nation);
+        a.put(0x1000 + PLAYER_RECORD + 0x1c8, &[0x62u8, 0x01, 0xce, 0x07]); // 20 Dec 1998: day 354, year 1998
         // Staff sub-object at 0x3100 (record 0x3000).
         a.ptr(0x3100, STAFF_VT);
         a.ptr(0x3128, STAFF_SECOND_VT);
@@ -587,6 +591,7 @@ mod tests {
         assert_eq!(player.detail.as_deref(), Some("ASEC Mimosas"));
         assert_eq!(player.nation.as_deref(), Some("Côte d'Ivoire"), "nation comes from the validated pointer at record + 0x1a8");
         assert!(!player.profile.unwrap().generated, "uid 9077 is not in the generated range");
+        assert_eq!(player.profile.unwrap().born, GameDay::new(1998, 354), "date of birth at record + 0x1c8/0x1ca");
         let club = find(EntityKind::Club).unwrap();
         assert_eq!((club.id, club.detail.as_deref()), (70, Some("Côte d'Ivoire")));
         let comp = find(EntityKind::Competition).unwrap();

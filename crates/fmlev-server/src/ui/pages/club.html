@@ -60,6 +60,45 @@
         <p class="unverified-note">Use Load from game and Save in the bottom bar. Only edited amounts are sent.</p>
       </div>
 
+      <!-- Transfer embargo (read + experimental edit) and financial statements (read only) -->
+      <div class="card" id="club-embargo-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Transfer embargo (experimental)</div>
+        <p class="unverified-note">Unverified in game. Dates are year plus day of year. Flag bit names come from a community tool and are not confirmed; 0x04 is the common one (global transfer ban).</p>
+        <p id="ce-summary" style="font-size: 12px; margin: 8px 0;">Not loaded</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;">
+          <label class="form-group"><span class="form-label">Start year</span><input id="ce-start-year" type="number" min="1900" max="2200" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Start day</span><input id="ce-start-day" type="number" min="1" max="366" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">End year</span><input id="ce-end-year" type="number" min="1900" max="2200" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">End day</span><input id="ce-end-day" type="number" min="1" max="366" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Appeal year</span><input id="ce-appeal-year" type="number" min="1900" max="2200" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Appeal day</span><input id="ce-appeal-day" type="number" min="1" max="366" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Age restriction</span><input id="ce-age" type="number" min="0" max="40" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Flags (0-255)</span><input id="ce-flags" type="number" min="0" max="255" disabled class="form-control"></label>
+        </div>
+        <p class="unverified-note">Leave a field empty to keep it. Lifting an embargo clears all three dates, the age restriction and the flags.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <label style="font-size: 12px;"><input id="ce-experimental" type="checkbox" onchange="updateClubEmbargoButtons()"> Enable experimental embargo editing</label>
+          <button id="ce-apply" class="btn btn-sm" disabled onclick="applyClubEmbargo()">Write embargo fields</button>
+          <button id="ce-lift" class="btn btn-sm btn-danger" disabled onclick="liftClubEmbargo()">Lift embargo</button>
+          <button class="btn btn-sm btn-ghost" onclick="readClubFinanceExtras()">Read embargo and statements</button>
+          <span id="ce-status" class="unverified-note"></span>
+        </div>
+      </div>
+
+      <div class="card" id="club-statements-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Financial statements (read only)</div>
+        <p class="unverified-note">Offsets and cumulative behaviour were checked on a live save, but the labels are not compared with the Finances screen. Raw GBP; only nonzero values are listed.</p>
+        <label class="form-group" style="max-width: 220px;"><span class="form-label">Period</span>
+          <select id="cs-period" class="form-control" onchange="selectClubStatementPeriod(this.value)">
+            <option value="this_month">This month</option>
+            <option value="last_month">Last month</option>
+            <option value="this_season" selected>This season</option>
+            <option value="last_season">Last season</option>
+          </select>
+        </label>
+        <div id="cs-body"><p class="unverified-note">Not loaded</p></div>
+      </div>
+
       <!-- Left: Financial Budgets & Stadium (Unverified in live session; use Live Club Money card below) -->
       <div class="card" id="club-finances-card" style="margin: 16px 0;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">

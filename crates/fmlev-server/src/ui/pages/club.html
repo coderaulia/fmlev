@@ -387,13 +387,13 @@
           <span id="club-deals-status" class="unverified-note">Not loaded</span>
         </div>
         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 10px; cursor: pointer;">
-          <input id="club-deals-experimental" type="checkbox" onchange="updateClubDealControls()"> Enable experimental deal editing (fee and join date only; unverified in game)
+          <input id="club-deals-experimental" type="checkbox" onchange="updateClubDealControls()"> Enable headline fee editing (throwaway save only)
         </label>
         <table class="fm-table">
           <thead><tr><th>Player</th><th>Direction</th><th>From → To</th><th>Status</th><th class="num">Fee</th><th>Join date</th><th>Edit (raw GBP / date)</th></tr></thead>
           <tbody id="club-deals-rows"><tr><td colspan="7" class="unavailable">No deals loaded</td></tr></tbody>
         </table>
-        <p class="unverified-note">Edits change the deal's headline fee or join date in memory only; status, teams and clauses are never written. Check Transfer Activity after the next day tick. Keep a backup save.</p>
+        <p class="unverified-note">The headline fee was verified in Transfer Activity and after save/reload. Join-date scheduling, status, teams and clauses are read-only.</p>
       </div>
 
       <!-- Dedicated Squad God Mode & Cheats Callout Banner -->

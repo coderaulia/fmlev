@@ -507,6 +507,8 @@ fn morale_reads_display_scale_writes_one_byte_and_refuses_bad_values() {
     assert_eq!(d.read::<[u8; 2]>(r.address + MORALE).unwrap(), [20, 0xf9]);
     assert!(r.write_morale(&d, 0).is_err());
     assert!(r.write_morale(&d, 21).is_err());
+    assert!(r.write_morale_from(&d, 19, Some(11)).is_err());
+    assert_eq!(r.read_morale(&d).unwrap(), 20);
     // Out-of-range bytes are reported as unreadable, never clamped or rewritten.
     d.write(r.address + MORALE, &0u8).unwrap();
     assert!(r.read_morale(&d).is_err());

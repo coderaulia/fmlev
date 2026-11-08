@@ -1,4 +1,4 @@
-//! Transfer Activity: read-only deal lists by club or player, and experimental fee / join-date edits.
+//! Transfer Activity: read-only deal lists by club or player, and opt-in fee edits.
 //! Reads scan on a worker thread (no state lock held); the edit re-reads the deal at its address first.
 
 use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
@@ -36,10 +36,12 @@ pub struct DealUpdateRequest {
     /// Address of the deal object, as returned by the read routes.
     pub deal_address: u64,
     pub player_id: i32,
+    pub player_uid: Option<u32>,
+    pub expected_fee_gbp: Option<i32>,
     /// Raw GBP headline fee (+0x58).
     pub fee_gbp: Option<i64>,
     pub join_date: Option<DealJoinDate>,
-    /// Unverified in game; callers must opt in explicitly.
+    /// Use a throwaway save and opt in explicitly.
     #[serde(default)]
     pub experimental: bool,
 }
@@ -118,25 +120,40 @@ pub async fn deals_for_player(State(state): State<ServerState>, Json(req): Json<
     .into_response()
 }
 
-/// EXPERIMENTAL (unverified in game): changes the headline fee and/or join date of an existing deal. Status,
-/// teams and clauses are never written.
+/// Changes the headline fee of an existing deal. The join date is diagnostic until scheduling is proven.
 pub async fn update_deal(State(state): State<ServerState>, Json(req): Json<DealUpdateRequest>) -> impl IntoResponse {
-    if !req.experimental {
-        return api_error(StatusCode::NOT_IMPLEMENTED, "Editing transfer deals is experimental and unverified in game: send experimental: true to opt in").into_response();
+    if req.join_date.is_some() {
+        return api_error(StatusCode::NOT_IMPLEMENTED, "Join-date editing is unavailable. FM26 scheduling has not been verified.").into_response();
     }
-    let driver = match session_driver(&state).await {
-        Ok(driver) => driver,
-        Err(response) => return response,
-    };
+    if !req.experimental {
+        return api_error(StatusCode::NOT_IMPLEMENTED, "Set experimental: true to edit the headline fee on a throwaway save").into_response();
+    }
     let Ok(address) = usize::try_from(req.deal_address) else {
         return api_error(StatusCode::BAD_REQUEST, "deal_address is out of range").into_response();
     };
-    let update = DealUpdate { fee_gbp: req.fee_gbp, join_date: req.join_date.map(|d| (d.year, d.day)) };
-    let player_id = req.player_id;
-    match tokio::task::spawn_blocking(move || native_deals::update_deal(&driver, address, player_id, update)).await {
+    if req.player_id <= 0 || req.player_uid.is_some_and(|uid| uid == 0) || req.expected_fee_gbp.is_some_and(|fee| fee < 0)
+        || !req.fee_gbp.is_some_and(|fee| (0..=i64::from(i32::MAX)).contains(&fee))
+    {
+        return api_error(StatusCode::BAD_REQUEST, "A valid player and a whole headline fee from 0 to 2,147,483,647 are required").into_response();
+    }
+    let writes = state.inner.write_owned().await;
+    let Some(driver) = writes.context_mgr.session.as_ref().map(|session| session.driver) else {
+        return api_error(StatusCode::BAD_REQUEST, "Attach to FM26 with a save loaded first").into_response();
+    };
+    let update = DealUpdate {
+        player_uid: req.player_uid,
+        expected_fee_gbp: req.expected_fee_gbp,
+        fee_gbp: req.fee_gbp,
+        join_date: None,
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        let _writes = writes;
+        native_deals::update_deal(&driver, address, req.player_id, update)
+    }).await;
+    match result {
         Ok(Ok(deal)) => Json(serde_json::json!({
             "status": "ok", "experimental": true, "deal": deal,
-            "message": "Deal updated in memory. Unverified in game: check Transfer Activity after the next day tick.",
+            "message": "Headline fee saved. Reopen Transfer Activity in FM26.",
         }))
         .into_response(),
         Ok(Err(error)) => api_error(core_status(&error), error).into_response(),

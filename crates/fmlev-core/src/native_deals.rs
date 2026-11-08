@@ -493,6 +493,8 @@ impl NativeDeal {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DealUpdate {
+    pub player_uid: Option<u32>,
+    pub expected_fee_gbp: Option<i32>,
     pub fee_gbp: Option<i64>,
     /// `(year, day of year)`.
     pub join_date: Option<(u16, u16)>,
@@ -505,8 +507,13 @@ pub fn update_deal_with(driver: &LinuxMemoryDriver, types: &DealTypes, address: 
         return Err(invalid("Give a fee and/or a join date to change"));
     }
     let deal = read_deal(driver, types, address)?;
-    if deal.player.id != Some(player_id) {
+    if deal.player.id != Some(player_id) || update.player_uid.is_some_and(|uid| deal.player.uid != Some(uid)) {
         return Err(invalid("This deal no longer belongs to that player; reload the deal list"));
+    }
+    if update.expected_fee_gbp.is_some_and(|fee| fee != deal.fee_gbp)
+        && update.fee_gbp != Some(i64::from(deal.fee_gbp))
+    {
+        return Err(invalid("The deal fee changed. Reload the deal list"));
     }
     let mut edits = Vec::new();
     if let Some(fee) = update.fee_gbp {

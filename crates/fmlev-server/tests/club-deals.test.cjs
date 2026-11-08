@@ -8,7 +8,7 @@ const deal = (extra = {}) => ({
   direction: 'out',
   deal: {
     address: 9807949248, deal_type: 1, deal_type_label: 'transfer',
-    player: { kind: 'player', id: 25145, name: 'Kylian Mbappé', unavailable_reason: null },
+    player: { kind: 'player', id: 25145, uid: 28123456, name: 'Kylian Mbappé', unavailable_reason: null },
     buying_team: { kind: 'team', club_id: 369, club_name: 'Manchester City' },
     selling_team: { kind: 'team', club_id: 1089, club_name: 'R. Madrid' },
     fee_gbp: 92818912, join_date: { iso: '2026-01-04', year: 2026, day: 4 },
@@ -17,7 +17,7 @@ const deal = (extra = {}) => ({
     ...extra,
   },
 });
-const IDS = ['club-deals-rows', 'club-deals-status', 'club-deals-experimental', 'club-deal-fee-0', 'club-deal-date-0'];
+const IDS = ['club-deals-rows', 'club-deals-status', 'club-deals-experimental', 'club-deal-fee-0', 'player-deals-rows', 'player-deals-status', 'player-deals-experimental', 'player-deal-fee-0'];
 
 function app(fetch, { confirmAnswer = true } = {}) {
   const ui = createUi({ fetch, ids: IDS, tabs: ['tab-club'], extra: { confirm: () => confirmAnswer } });
@@ -85,24 +85,18 @@ test('editing is disabled until the experimental box is ticked', async () => {
   assert.doesNotMatch(ui.els['club-deals-rows'].innerHTML, /<button[^>]*disabled/);
 });
 
-test('Apply sends only the changed fields with experimental true, then reloads', async () => {
+test('Apply sends the fee and baseline identity, then reloads', async () => {
   const ui = app(reader());
   await ui.run('loadClubDeals()');
   ui.els['club-deals-experimental'].checked = true;
   ui.els['club-deal-fee-0'].value = '50000000';
-  ui.els['club-deal-date-0'].value = '2026-02-10';
   assert.equal(await ui.run('applyClubDeal(0)'), true);
   const call = ui.requests.find(r => r.url === '/api/deals/update');
-  assert.deepEqual(call.body, { deal_address: 9807949248, player_id: 25145, experimental: true, fee_gbp: 50000000, join_date: { year: 2026, day: 41 } });
-  assert.equal(ui.requests.filter(r => r.url === '/api/deals/club').length, 2, 'the list is reloaded after an edit');
-
-  const feeOnly = app(reader());
-  await feeOnly.run('loadClubDeals()');
-  feeOnly.els['club-deals-experimental'].checked = true;
-  feeOnly.els['club-deal-fee-0'].value = '1';
-  feeOnly.els['club-deal-date-0'].value = '2026-01-04';
-  await feeOnly.run('applyClubDeal(0)');
-  assert.deepEqual(feeOnly.requests.find(r => r.url === '/api/deals/update').body, { deal_address: 9807949248, player_id: 25145, experimental: true, fee_gbp: 1 });
+  assert.deepEqual(call.body, { deal_address: 9807949248, player_id: 25145, player_uid: 28123456,
+    expected_fee_gbp: 92818912, experimental: true, fee_gbp: 50000000 });
+  assert.equal(ui.requests.filter(r => r.url === '/api/deals/club').length, 2);
+  assert.match(ui.els['club-deals-rows'].innerHTML, /Scheduling edit unavailable/);
+  assert.doesNotMatch(ui.els['club-deals-rows'].innerHTML, /type="date"/);
 });
 
 test('unchanged, invalid and declined edits send nothing', async () => {
@@ -110,15 +104,10 @@ test('unchanged, invalid and declined edits send nothing', async () => {
   await ui.run('loadClubDeals()');
   ui.els['club-deals-experimental'].checked = true;
   ui.els['club-deal-fee-0'].value = '92818912';
-  ui.els['club-deal-date-0'].value = '2026-01-04';
   assert.equal(await ui.run('applyClubDeal(0)'), false);
   assert.match(ui.run('messages.at(-1).message'), /Nothing changed/);
   ui.els['club-deal-fee-0'].value = '-5';
   assert.equal(await ui.run('applyClubDeal(0)'), false);
-  ui.els['club-deal-fee-0'].value = '92818912';
-  ui.els['club-deal-date-0'].value = '2026-02-30';
-  assert.equal(await ui.run('applyClubDeal(0)'), false);
-  assert.match(ui.run('messages.at(-1).message'), /valid join date/);
   const declined = app(reader(), { confirmAnswer: false });
   await declined.run('loadClubDeals()');
   declined.els['club-deals-experimental'].checked = true;
@@ -139,11 +128,22 @@ test('staff deals have no player id and cannot be edited', async () => {
   assert.equal(ui.requests.some(r => r.url === '/api/deals/update'), false);
 });
 
-test('date parts: day of year, leap years and impossible dates', () => {
-  const ui = app(reader());
-  assert.deepEqual(ui.run("dealDateParts('2026-01-04')"), { year: 2026, day: 4 });
-  assert.deepEqual(ui.run("dealDateParts('2028-12-31')"), { year: 2028, day: 366 });
-  assert.deepEqual(ui.run("dealDateParts('2026-12-31')"), { year: 2026, day: 365 });
-  assert.equal(ui.run("dealDateParts('2026-02-29')"), null);
-  assert.equal(ui.run("dealDateParts('')"), null);
+test('Contract lists and edits only the selected player’s deals', async () => {
+  const ui = app(async url => url === '/api/deals/player'
+    ? ok({ deals: [deal().deal] })
+    : ok({ message: 'Saved' }));
+  ui.run("state.activePlayer = { id: 25145 };");
+  await ui.run("loadClubDeals('player')");
+  assert.match(html, /id="player-deals-card"/);
+  assert.deepEqual(ui.requests[0].body, { player_id: 25145 });
+  assert.match(ui.els['player-deals-rows'].innerHTML, /Manchester City/);
+  ui.els['player-deals-experimental'].checked = true;
+  ui.els['player-deal-fee-0'].value = '1';
+  ui.run("state.activePlayer = { id: 99 };");
+  assert.equal(await ui.run("applyClubDeal(0, 'player')"), false);
+  assert.equal(ui.requests.length, 1);
+  ui.run("state.activePlayer = { id: 25145 };");
+  assert.equal(await ui.run("applyClubDeal(0, 'player')"), true);
+  assert.equal(ui.requests[1].body.expected_fee_gbp, 92818912);
+  assert.equal(ui.requests[1].body.fee_gbp, 1);
 });

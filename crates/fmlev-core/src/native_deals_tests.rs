@@ -201,7 +201,7 @@ fn staff_and_hybrid_deals_report_no_player_id() {
     let deal = read_deal(&driver(), &types(), a.at(DEAL)).unwrap();
     assert_eq!((deal.player.kind, deal.player.id), ("player_and_staff", None));
     assert!(deal.player.unavailable_reason.is_some());
-    assert!(update_deal_with(&driver(), &types(), a.at(DEAL), 25145, DealUpdate { fee_gbp: Some(1), join_date: None }).is_err());
+    assert!(update_deal_with(&driver(), &types(), a.at(DEAL), 25145, DealUpdate { fee_gbp: Some(1), join_date: None, ..DealUpdate::default() }).is_err());
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn update_changes_only_fee_and_join_date_and_keeps_date_flags() {
     let a = world();
     let d = driver();
     let before = d.read::<[u8; 0xd0]>(a.at(DEAL)).unwrap();
-    let deal = update_deal_with(&d, &types(), a.at(DEAL), 25145, DealUpdate { fee_gbp: Some(50_000_000), join_date: Some((2026, 40)) }).unwrap();
+    let deal = update_deal_with(&d, &types(), a.at(DEAL), 25145, DealUpdate { fee_gbp: Some(50_000_000), join_date: Some((2026, 40)), ..DealUpdate::default() }).unwrap();
     assert_eq!(deal.fee_gbp, 50_000_000);
     let join = deal.join_date.unwrap();
     assert_eq!((join.year, join.day, join.raw), (2026, 40, 0x07ea_1a28), "flag bits 0x1a00 are kept");
@@ -241,21 +241,21 @@ fn update_refuses_bad_input_and_foreign_players_without_writing() {
     let at = a.at(DEAL);
     let snapshot = || d.read::<[u8; 0xd0]>(at).unwrap();
     let before = snapshot();
-    let fee = |f| DealUpdate { fee_gbp: Some(f), join_date: None };
+    let fee = |f| DealUpdate { fee_gbp: Some(f), join_date: None, ..DealUpdate::default() };
     for bad in [
         update_deal_with(&d, &t, at, 25145, DealUpdate::default()),
         update_deal_with(&d, &t, at, 999, fee(1)),
         update_deal_with(&d, &t, at, 25145, fee(-1)),
         update_deal_with(&d, &t, at, 25145, fee(i64::from(i32::MAX) + 1)),
-        update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((2026, 366)) }),
-        update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((1800, 1)) }),
+        update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((2026, 366)), ..DealUpdate::default() }),
+        update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((1800, 1)), ..DealUpdate::default() }),
     ] {
         assert!(bad.is_err());
     }
     assert_eq!(snapshot(), before);
     // A deal without a join date never gets one invented.
     a.word(DEAL + 0x70, 0x076c_0001);
-    let err = update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((2026, 5)) }).unwrap_err();
+    let err = update_deal_with(&d, &t, at, 25145, DealUpdate { fee_gbp: None, join_date: Some((2026, 5)), ..DealUpdate::default() }).unwrap_err();
     assert!(err.to_string().contains("no join date"));
 }
 
@@ -266,4 +266,19 @@ fn dates_decode_and_format() {
     assert!(decode_date(0x076c_0001).unwrap().is_none());
     assert!(decode_date(0x07ea_0000 | 400).is_err());
     assert_eq!(date_with(0x07ea_1a04, 2027, 365), 0x07eb_1b6d);
+}
+
+#[test]
+fn fee_edit_refuses_stale_fee_and_wrong_player_uid() {
+    let a = world();
+    let d = driver();
+    let t = types();
+    let at = a.at(DEAL);
+    let original = read_deal(&d, &t, at).unwrap();
+    let update = DealUpdate { fee_gbp: Some(1), expected_fee_gbp: Some(2), ..DealUpdate::default() };
+    assert!(update_deal_with(&d, &t, at, 25145, update).is_err());
+    let wrong_uid = original.player.uid.unwrap() + 1;
+    let update = DealUpdate { expected_fee_gbp: Some(original.fee_gbp), player_uid: Some(wrong_uid), ..update };
+    assert!(update_deal_with(&d, &t, at, 25145, update).is_err());
+    assert_eq!(read_deal(&d, &t, at).unwrap().fee_gbp, original.fee_gbp);
 }

@@ -6,12 +6,11 @@
       const form = transferFormState();
       const terminate = document.getElementById("btn-terminate-contract");
       if (terminate) { terminate.disabled = !ready; terminate.title = ready ? "Asks for confirmation" : `Unavailable: ${why}`; }
-      for (const [id, needsFee] of [["btn-move-player", true], ["btn-sign-free-agent", false]]) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        const blocked = !ready ? why : form.missing.length ? `Fill the required fields: ${form.missing.join(", ")}` : (needsFee && !form.feeValid ? "The fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty)" : "");
-        el.disabled = !!blocked;
-        el.title = blocked ? `Unavailable: ${blocked}` : "Asks for confirmation";
+      const move = document.getElementById("btn-move-player");
+      if (move) {
+        const blocked = !ready ? why : form.missing.length ? `Fill the required fields: ${form.missing.join(", ")}` : form.full ? "The destination first team is full" : (!form.feeValid ? "The fee must be a whole number of raw GBP from 1 to 2,147,483,647 (or empty)" : "");
+        move.disabled = !!blocked;
+        move.title = blocked ? `Unavailable: ${blocked}` : "Asks for confirmation";
       }
       // Mark empty or invalid required fields and say which are missing.
       const fields = [["transfer-target-club-id", "target club"], ["transfer-target-club-search", "target club"], ["transfer-sign-wage", "yearly wage"], ["transfer-sign-year", "expiry year"]];
@@ -22,7 +21,7 @@
       const fee = document.getElementById("transfer-fee");
       if (fee && fee.classList) fee.classList.toggle("field-missing", !form.feeValid);
       const note = document.getElementById("transfer-missing-note");
-      if (note) note.innerText = ready && form.missing.length ? `Required before Move or Sign: ${form.missing.join(", ")}.` : "";
+      if (note) note.innerText = ready && form.missing.length ? `Required before Move: ${form.missing.join(", ")}.` : "";
       const loan = document.getElementById("btn-terminate-loan");
       if (loan) { loan.disabled = true; loan.title = "Unavailable: loan recall has no in-game test yet"; }
     }
@@ -94,3 +93,78 @@
       return map[nat] || "🌐";
     }
 
+
+
+    let playerMoraleRead = null;
+    let playerMoraleBusy = false;
+
+    function renderPlayerMorale() {
+      const current = playerMoraleRead?.player_id === state.activePlayer?.id ? playerMoraleRead : null;
+      const input = document.getElementById("player-morale-value");
+      const apply = document.getElementById("player-morale-apply");
+      const status = document.getElementById("player-morale-status");
+      const available = state.connected && current && !playerMoraleBusy;
+      if (input) { input.disabled = !available; input.value = current?.value ?? ""; }
+      if (apply) apply.disabled = !available;
+      if (status) status.innerText = current ? `Live morale: ${current.value}/20` : "Read morale from FM26 to edit.";
+    }
+
+    function clearPlayerMorale() {
+      playerMoraleRead = null;
+      renderPlayerMorale();
+    }
+
+    async function requestPlayerMorale(method, body) {
+      const res = await fetch("/api/player/morale", {
+        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.message || "Morale request failed.");
+      if (data.player_id !== body.player_id || !(data.player_uid > 0) || !Number.isInteger(data.value)
+          || data.value < 1 || data.value > 20) throw new Error("Native morale response was invalid.");
+      return data;
+    }
+
+    async function loadPlayerMorale() {
+      const id = state.activePlayer?.id;
+      if (playerMoraleBusy || !state.connected || !id) return false;
+      playerMoraleBusy = true;
+      clearPlayerMorale();
+      try {
+        const data = await requestPlayerMorale("POST", { player_id: id });
+        if (!state.connected || state.activePlayer?.id !== id) return false;
+        playerMoraleRead = data;
+        return true;
+      } catch (error) {
+        showToast(error.message, "error");
+        return false;
+      } finally {
+        playerMoraleBusy = false;
+        renderPlayerMorale();
+      }
+    }
+
+    async function applyPlayerMorale() {
+      const current = playerMoraleRead;
+      if (playerMoraleBusy || !state.connected || !current || current.player_id !== state.activePlayer?.id) return false;
+      const value = Number(document.getElementById("player-morale-value")?.value);
+      if (!Number.isInteger(value) || value < 1 || value > 20) { showToast("Enter morale from 1 to 20.", "warning"); return false; }
+      if (value === current.value) return false;
+      if (typeof confirm === "function" && !confirm(`Set ${state.activePlayer.name || "this player's"} morale to ${value}/20 now?`)) return false;
+      playerMoraleBusy = true;
+      try {
+        const data = await requestPlayerMorale("PUT", {
+          player_id: current.player_id, player_uid: current.player_uid, expected: current.value, value
+        });
+        if (state.connected && state.activePlayer?.id === current.player_id) playerMoraleRead = data;
+        showToast("Player morale saved.", "success");
+        return true;
+      } catch (error) {
+        if (state.activePlayer?.id === current.player_id) playerMoraleRead = null;
+        showToast(error.message, "error");
+        return false;
+      } finally {
+        playerMoraleBusy = false;
+        renderPlayerMorale();
+      }
+    }

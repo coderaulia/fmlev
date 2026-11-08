@@ -1,3 +1,4 @@
+mod player_morale;
 pub mod club_finance;
 pub mod club_debts;
 pub mod board;
@@ -58,6 +59,7 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/players/discover", post(discover_players))
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
+        .route("/api/player/morale", post(player_morale::read).put(player_morale::update))
         .route("/api/player/eligibility", post(player_eligibility))
         .route("/api/player/homegrown", post(read_homegrown))
         .route("/api/player/homegrown/set", post(set_homegrown))

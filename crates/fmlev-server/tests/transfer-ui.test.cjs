@@ -69,31 +69,44 @@ test('target club squad space is read-only and shown next to the club id', async
   assert.equal(ui.requests.length, 1, 'an invalid id makes no request');
 });
 
-const FIELDS = ['transfer-target-club-id', 'transfer-sign-wage', 'transfer-sign-year'];
-const ENABLED = ui => ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent'].map(id => !ui.els[id].disabled);
+test('Move stays unavailable when the destination squad is full', async () => {
+  const ui = createUi({
+    fetch: async () => ok({ club_id: 1094, players: 20, spare_slots: 0 }),
+    ids: [...IDS, 'transfer-space-note'], tabs: ['tab-contract'],
+  });
+  ui.run('state.connected = true; state.activePlayer = { id: 42 };');
+  fill(ui);
+  await ui.run('loadTransferSpace()');
+  assert.equal(ui.els['btn-move-player'].disabled, true);
+  assert.match(ui.els['btn-move-player'].title, /first team is full/);
+  assert.equal(await ui.run('movePlayer()'), false);
+  assert.deepEqual(ui.requests.map(r => r.url), ['/api/club/squad-space']);
+});
 
-test('Move and Sign stay disabled until the target club, yearly wage and expiry year are all filled; loan recall never', () => {
+const ENABLED = ui => ['btn-terminate-contract', 'btn-move-player'].map(id => !ui.els[id].disabled);
+
+test('Move stays disabled until the target club, yearly wage and expiry year are all filled', () => {
   const ui = app();
   opt(ui);
-  assert.deepEqual(ENABLED(ui), [true, false, false], 'terminate needs no fields; Move and Sign need the form');
+  assert.deepEqual(ENABLED(ui), [true, false], 'terminate needs no fields; Move needs the form');
   assert.match(ui.els['btn-move-player'].title, /Fill the required fields: target club, yearly wage, expiry year/);
-  assert.match(ui.els['transfer-missing-note'].innerText, /Required before Move or Sign: target club, yearly wage, expiry year/);
+  assert.match(ui.els['transfer-missing-note'].innerText, /Required before Move: target club, yearly wage, expiry year/);
   for (const [id, value] of [['transfer-target-club-id', '1094'], ['transfer-sign-wage', '260000']]) {
     ui.els[id].value = value; ui.run('updateTransferButtons()');
-    assert.deepEqual(ENABLED(ui), [true, false, false], `still incomplete after ${id}`);
+    assert.deepEqual(ENABLED(ui), [true, false], `still incomplete after ${id}`);
   }
   assert.match(ui.els['transfer-missing-note'].innerText, /expiry year/);
   ui.els['transfer-sign-year'].value = '2028'; ui.run('updateTransferButtons()');
-  assert.deepEqual(ENABLED(ui), [true, true, true]);
+  assert.deepEqual(ENABLED(ui), [true, true]);
   assert.equal(ui.els['transfer-missing-note'].innerText, '');
   assert.equal(ui.els['btn-terminate-loan'].disabled, true);
   ui.run('state.connected = false; updateTransferButtons()');
   assert.match(ui.els['btn-move-player'].title, /Attach to a game/);
   ui.run('state.connected = true; state.activePlayer = null; updateTransferButtons()');
-  assert.match(ui.els['btn-sign-free-agent'].title, /Open a player/);
+  assert.match(ui.els['btn-move-player'].title, /Open a player/);
 });
 
-test('an invalid fee also disables Move but not Sign', () => {
+test('an invalid fee disables Move', () => {
   const ui = app();
   opt(ui);
   fill(ui);
@@ -101,26 +114,23 @@ test('an invalid fee also disables Move but not Sign', () => {
   ui.run('updateTransferButtons()');
   assert.equal(ui.els['btn-move-player'].disabled, true);
   assert.match(ui.els['btn-move-player'].title, /fee must be a whole number/);
-  assert.equal(ui.els['btn-sign-free-agent'].disabled, false);
   ui.els['transfer-fee'].value = '';
   ui.run('updateTransferButtons()');
   assert.equal(ui.els['btn-move-player'].disabled, false);
 });
 
-test('Move and Sign refuse an incomplete form and list what is missing', async () => {
+test('Move refuses an incomplete form and list what is missing', async () => {
   const ui = app();
   opt(ui);
   ui.run('displayPlayer = () => {}');
-  for (const action of ['movePlayer', 'signFreeAgent']) {
-    assert.equal(await ui.run(`${action}()`), false, action);
-    assert.match(ui.run('messages.at(-1).message'), /Required: target club, yearly wage, expiry year/);
-  }
+  assert.equal(await ui.run('movePlayer()'), false);
+  assert.match(ui.run('messages.at(-1).message'), /Required: target club, yearly wage, expiry year/);
   fill(ui, { year: '' });
   assert.equal(await ui.run('movePlayer()'), false);
   assert.match(ui.run('messages.at(-1).message'), /Required: expiry year\./);
   for (const [field, bad] of [['transfer-target-club-id', '0'], ['transfer-target-club-id', '1.5'], ['transfer-sign-wage', '20'], ['transfer-sign-wage', 'abc'], ['transfer-sign-year', '1999'], ['transfer-sign-year', '2101']]) {
     fill(ui); ui.els[field].value = bad;
-    assert.equal(await ui.run('signFreeAgent()'), false, `${field}=${bad}`);
+    assert.equal(await ui.run('movePlayer()'), false, `${field}=${bad}`);
   }
   assert.equal(ui.requests.length, 0, 'an incomplete form never reaches the server');
 });
@@ -144,16 +154,6 @@ test('Move sends the new wage (yearly / 52) and expiry with the club, plus the f
     assert.equal(await ui.run('movePlayer()'), false, `fee ${bad}`);
   }
   assert.equal(ui.requests.length, 0);
-});
-
-test('Sign sends the stored weekly wage (yearly / 52, rounded), the expiry year and the club', async () => {
-  const ui = app();
-  opt(ui);
-  ui.run('displayPlayer = () => {}');
-  fill(ui, { wage: '245000' }); // 4711.5 per week rounds to 4712
-  assert.equal(await ui.run('signFreeAgent()'), true);
-  assert.deepEqual(ui.requests.find(r => r.url === '/api/transfer/sign').body,
-    { player_id: 42, target_club_id: 1094, wage_gbp: 4712, expiry_year: 2028 });
 });
 
 test('the confirm text names the contract terms that will be written', async () => {
@@ -204,6 +204,6 @@ test('the confirmation names the picked club', async () => {
   ui.run("state.connected = true; state.activePlayer = { id: 42, name: 'Test Player' }; Shell.init();");
   fill(ui, { club: '2313' });
   ui.els['transfer-target-club-search'].value = 'Persib Bandung (Indonesian Super League)';
-  await ui.run('signFreeAgent()');
-  assert.match(asked, /Sign Test Player to Persib Bandung \(Indonesian Super League\) at/);
+  await ui.run('movePlayer()');
+  assert.match(asked, /Move Test Player to Persib Bandung \(Indonesian Super League\) on/);
 });

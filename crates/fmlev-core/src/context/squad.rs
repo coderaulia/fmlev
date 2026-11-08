@@ -1,5 +1,7 @@
 //! Live squad-number edits (native contract + 0x5d; the game shows the change at the next day).
 use crate::error::{CoreError, Result};
+use crate::native_rtti::ModuleImage;
+use crate::native_transfer::ACTUAL_PLAYER_OFFSET;
 use super::GameContextManager;
 
 impl GameContextManager {
@@ -10,6 +12,36 @@ impl GameContextManager {
         let session = self.session.as_ref().ok_or_else(|| CoreError::InvalidValue("No live session".into()))?;
         record.write_squad_number(&session.driver, number)
     }
+    /// Reads the selected native morale byte and optionally writes a change against a fresh baseline.
+    pub fn player_morale(
+        &mut self, id: i32, edit: Option<(u32, u8, u8)>,
+    ) -> Result<(u32, u8)> {
+        let driver = self.session.as_ref().filter(|s| s.bases.game_assembly_base.is_some())
+            .map(|s| s.driver).ok_or_else(|| CoreError::InvalidValue("Attach to FM26 first".into()))?;
+        let image = ModuleImage::discover(&driver)?.ok_or_else(|| CoreError::InvalidValue("game_plugin.dll is not mapped".into()))?;
+        let record = self.verified_native_player(id)?;
+        let actual = record.address().checked_sub(ACTUAL_PLAYER_OFFSET).ok_or_else(|| CoreError::InvalidValue("Invalid player record".into()))?;
+        if !image.is_type(&driver, actual, ".?AVACTUAL_PLAYER@db@@") {
+            return Err(CoreError::InvalidValue("Morale is unavailable for this native player type".into()));
+        }
+        let value = if let Some((uid, expected, value)) = edit {
+            if uid != record.uid {
+                return Err(CoreError::InvalidValue("Player identity changed. Read morale again".into()));
+            }
+            record.write_morale_from(&driver, value, Some(expected))?;
+            for player in self.player_registry.get_mut(&id).into_iter()
+                .chain((self.context.player.id == id).then_some(&mut self.context.player))
+            {
+                player.morale = value * 5;
+                player.morale_label = format!("{value}/20");
+            }
+            value
+        } else {
+            record.read_morale(&driver)?
+        };
+        Ok((record.uid, value))
+    }
+
 }
 
 impl GameContextManager {

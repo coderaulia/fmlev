@@ -53,22 +53,21 @@ test('every live editor endpoint the UI calls exists in the router', () => {
     '/api/competition/registration',
     '/api/player/contract/terminate',
     '/api/transfer/move',
-    '/api/transfer/sign',
   ]) {
     assert.ok(html.includes(`"${route}"`), `UI calls ${route}`);
     assert.ok(router.includes(`"${route}"`), `router serves ${route}`);
   }
-  // Terminate, move and sign start disabled and are enabled by script (attached game, open player, filled form); loan recall stays off.
-  for (const id of ['btn-terminate-contract', 'btn-move-player', 'btn-sign-free-agent'])
+  // Terminate and Move start disabled and are enabled by the live form.
+  for (const id of ['btn-terminate-contract', 'btn-move-player'])
     assert.match(html, new RegExp(`id="${id}" disabled class=`), `${id} starts disabled`);
   assert.match(html, /id="btn-terminate-loan" disabled data-unverified="true"/, 'Loan recall stays unavailable');
+  assert.match(html, /id="btn-sign-free-agent" disabled data-unverified="true"/, 'Free-agent signing stays unavailable');
 });
 
 test('live editor actions and shared save adapters call functions that exist', () => {
   for (const fn of [
     'saveSquadNumber',
     'extendContract',
-    'signFreeAgent',
     'terminateContract',
     'terminateLoan',
     'movePlayer',
@@ -85,7 +84,7 @@ test('live editor actions and shared save adapters call functions that exist', (
     assert.match(html, new RegExp(`function ${fn}\\(`), `${fn} is defined`);
   }
   // Player actions are staged; Club writes run through its single shared Save pair.
-  for (const fn of ['signFreeAgent', 'terminateContract', 'terminateLoan', 'movePlayer', 'stageCompetitionRegistration']) {
+  for (const fn of ['terminateContract', 'terminateLoan', 'movePlayer', 'stageCompetitionRegistration']) {
     assert.match(html, new RegExp(`onclick="${fn}\\(`), `${fn} is wired to a button`);
   }
   assert.match(html, /onchange="stageSquadNumber\(/);

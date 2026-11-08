@@ -321,6 +321,9 @@ pub async fn apply_player_preset(
             )
         }
         "free_release" => {
+            if w.context_mgr.is_live_session() {
+                return api_error(StatusCode::NOT_IMPLEMENTED, "FM26 only supports editing an existing release clause to a positive amount");
+            }
             let mut p = w.context_mgr.context.player.clone();
             p.contract.release_clause = 0;
             if let Err(error) = w.context_mgr.update_player(p) {
@@ -995,25 +998,9 @@ pub async fn terminate_contract(
     }
 }
 
-/// Terminates an active loan, returning the player from the loan club to their parent club.
-pub async fn terminate_loan(
-    State(state): State<ServerState>,
-    Json(payload): Json<crate::state::LoanTerminateRequest>,
-) -> impl IntoResponse {
-    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
-    let mut w = state.inner.write().await;
-    match w.context_mgr.terminate_loan(payload.player_id) {
-        Ok((loan_team, parent_team)) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "status": "success",
-                "message": "Loan terminated. Player returned to parent club squad.",
-                "loan_team": format!("0x{:x}", loan_team),
-                "parent_team": format!("0x{:x}", parent_team),
-            })),
-        ),
-        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
-    }
+/// Loan recall needs an in-game test of the relationship and squad updates.
+pub async fn terminate_loan(Json(_): Json<crate::state::LoanTerminateRequest>) -> impl IntoResponse {
+    api_error(StatusCode::NOT_IMPLEMENTED, "Loan recall is unavailable pending in-game verification")
 }
 
 /// Moves a contracted player to a destination club or team.
@@ -1021,12 +1008,15 @@ pub async fn move_player(
     State(state): State<ServerState>,
     Json(payload): Json<crate::state::PlayerMoveRequest>,
 ) -> impl IntoResponse {
+    if payload.release_player_id.is_some() {
+        return api_error(StatusCode::NOT_IMPLEMENTED, "Moving and releasing another player together is unavailable. The destination squad must already have a spare slot");
+    }
     super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
     let mut w = state.inner.write().await;
     let Some(terms) = payload.wage_gbp.zip(payload.expiry_year).map(|(wage_gbp, expiry_year)| fmlev_core::native_transfer::NewContractTerms { wage_gbp, expiry_year }) else {
         return api_error(StatusCode::BAD_REQUEST, "A move needs the new weekly wage (wage_gbp) and the new expiry year (expiry_year): the contract at the new club must be filled in");
     };
-    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp, Some(terms), payload.release_player_id) {
+    match w.context_mgr.move_player(payload.player_id, payload.target_club_id, payload.target_team_address, payload.fee_gbp, Some(terms), None) {
         Ok((from_team, to_team)) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -1040,77 +1030,21 @@ pub async fn move_player(
     }
 }
 
-/// Signs an unemployed free agent to a target club squad.
-pub async fn sign_player(
-    State(state): State<ServerState>,
-    Json(payload): Json<crate::state::PlayerSignRequest>,
-) -> impl IntoResponse {
-    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
-    if payload.wage_gbp.is_none() || payload.expiry_year.is_none() || (payload.target_club_id.is_none() && payload.target_team_address.is_none()) {
-        return api_error(StatusCode::BAD_REQUEST, "Signing needs the target club (target_club_id), the weekly wage (wage_gbp) and the expiry year (expiry_year): a contract with missing terms is not created");
-    }
-    let mut w = state.inner.write().await;
-    match w.context_mgr.sign_free_agent(
-        payload.player_id,
-        payload.target_club_id,
-        payload.target_team_address,
-        payload.wage_gbp,
-        payload.expiry_year,
-        payload.release_player_id,
-    ) {
-        Ok(team_ptr) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "status": "success",
-                "message": "Player signed successfully to target club squad.",
-                "target_team": format!("0x{:x}", team_ptr),
-            })),
-        ),
-        Err(error) => api_error(StatusCode::BAD_REQUEST, error),
-    }
+/// Signing requires a contract allocated and linked by the game.
+pub async fn sign_player(Json(_): Json<crate::state::PlayerSignRequest>) -> impl IntoResponse {
+    api_error(StatusCode::NOT_IMPLEMENTED, "Free-agent signing requires FM26 to create the contract")
 }
 
-/// Accelerates the scheduled join date of an arranged pending transfer or completes it instantly.
-pub async fn accelerate_transfer(
-    State(state): State<ServerState>,
-    Json(payload): Json<crate::state::TransferAccelerateRequest>,
-) -> impl IntoResponse {
-    super::search::warm(&state, &[super::search::Warm::Player(payload.player_id)]).await;
-    let mut w = state.inner.write().await;
-    if payload.instant {
-        match w.context_mgr.complete_pending_transfer(payload.player_id) {
-            Ok((from_team, to_team)) => (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "success",
-                    "message": "Pending transfer completed immediately. Player moved to destination squad.",
-                    "from_team": format!("0x{:x}", from_team),
-                    "to_team": format!("0x{:x}", to_team),
-                })),
-            ),
-            Err(error) => api_error(StatusCode::BAD_REQUEST, error),
-        }
-    } else {
-        match w.context_mgr.accelerate_pending_transfer(payload.player_id, payload.new_join_date) {
-            Ok((old_date, new_date)) => (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "status": "success",
-                    "message": "Pending transfer join date accelerated.",
-                    "old_join_date": format!("0x{:x}", old_date),
-                    "new_join_date": format!("0x{:x}", new_date),
-                })),
-            ),
-            Err(error) => api_error(StatusCode::BAD_REQUEST, error),
-        }
-    }
+/// Pending-transfer scheduling and instant completion require separate in-game verification.
+pub async fn accelerate_transfer(Json(_): Json<crate::state::TransferAccelerateRequest>) -> impl IntoResponse {
+    api_error(StatusCode::NOT_IMPLEMENTED, "Pending-transfer scheduling and completion are unavailable pending in-game verification")
 }
 
 /// Loan agreement creation is not implemented: loans require complex multi-club loan contract nodes.
 pub async fn transfer_not_implemented() -> impl IntoResponse {
     api_error(
         StatusCode::NOT_IMPLEMENTED,
-        fmlev_core::CoreError::InvalidValue("Creating new loan agreements via raw memory writes is not supported. Use Move Player or Sign Player instead.".into()),
+        fmlev_core::CoreError::InvalidValue("New loans require FM26 to create and link the loan agreement.".into()),
     )
 }
 

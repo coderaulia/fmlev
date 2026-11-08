@@ -653,21 +653,18 @@ async fn test_contract_and_transfer_routes() {
     let app_state = offline_app_state();
     let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(app_state))));
 
-    // 1. Sign free agent with offline state should fail gracefully (no live session)
-    let body = serde_json::json!({ "player_id": 1, "target_club_id": 1, "experimental": true });
-    let response = app
-        .clone()
-        .oneshot(
-            Request::post("/api/transfer/sign")
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Signing needs a game-created contract, even with the old opt-in.
+    for body in [
+        r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#,
+        r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027,"experimental":true}"#,
+    ] {
+        let response = app.clone().oneshot(json_post("/api/transfer/sign", body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+    let unknown = app.clone().oneshot(json_post("/api/transfer/sign", r#"{"player_id":5,"extra":1}"#)).await.unwrap();
+    assert!(unknown.status().is_client_error());
 
-    // 1b. Accelerate transfer with offline state should fail gracefully
+    // 1b. Pending transfer acceleration stays unavailable until verified
     let accelerate_body = serde_json::json!({ "player_id": 1, "instant": true, "experimental": true });
     let response = app
         .clone()
@@ -679,7 +676,7 @@ async fn test_contract_and_transfer_routes() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
 
     // 2. Terminate contract with offline state should fail gracefully (no live session)
     let body = serde_json::json!({ "player_id": 1, "experimental": true });
@@ -999,10 +996,7 @@ async fn transfer_routes_need_a_game_and_reject_unknown_fields_without_any_opt_i
     let app = create_router(state);
     let bodies = [
         ("/api/player/contract/terminate", r#"{"player_id":5}"#),
-        ("/api/player/loan/terminate", r#"{"player_id":5}"#),
         ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028}"#),
-        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"wage_gbp":1000,"expiry_year":2027}"#),
-        ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true}"#),
     ];
     for (uri, body) in bodies {
         // No `experimental` field is needed any more: the request reaches the game check (400 when detached).
@@ -1018,6 +1012,38 @@ async fn transfer_routes_need_a_game_and_reject_unknown_fields_without_any_opt_i
 }
 
 #[tokio::test]
+async fn player_morale_requires_a_live_player_and_strict_identity_and_value() {
+    let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(offline_app_state()))));
+    let url = "/api/player/morale";
+    let read = app.clone().oneshot(json_post(url, r#"{"player_id":5}"#)).await.unwrap();
+    assert_eq!(read.status(), StatusCode::BAD_REQUEST);
+    for (body, expected) in [
+        (r#"{"player_id":5,"player_uid":500,"expected":12,"value":20}"#, StatusCode::BAD_REQUEST),
+        (r#"{"player_id":5,"player_uid":500,"expected":12,"value":21}"#, StatusCode::BAD_REQUEST),
+        (r#"{"player_id":5,"expected":12,"value":20}"#, StatusCode::UNPROCESSABLE_ENTITY),
+        (r#"{"player_id":5,"player_uid":500,"expected":12,"value":20,"extra":1}"#, StatusCode::UNPROCESSABLE_ENTITY),
+    ] {
+        let mut request = json_post(url, body);
+        *request.method_mut() = axum::http::Method::PUT;
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), expected);
+    }
+}
+
+#[tokio::test]
+async fn unverified_transfer_writes_stay_unavailable_even_with_opt_in() {
+    let app = create_router(ServerState::from_inner(Arc::new(RwLock::new(offline_app_state()))));
+    for (uri, body) in [
+        ("/api/player/loan/terminate", r#"{"player_id":5,"experimental":true}"#),
+        ("/api/transfer/accelerate", r#"{"player_id":5,"instant":true,"experimental":true}"#),
+        ("/api/deals/update", r#"{"deal_address":4096,"player_id":5,"fee_gbp":1000,"join_date":{"year":2026,"day":5},"experimental":true}"#),
+    ] {
+        let response = app.clone().oneshot(json_post(uri, body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED, "{uri}");
+    }
+}
+
+#[tokio::test]
 async fn club_squad_space_is_read_only_strict_and_needs_a_game() {
     let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
@@ -1028,14 +1054,14 @@ async fn club_squad_space_is_read_only_strict_and_needs_a_game() {
 }
 
 #[tokio::test]
-async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
+async fn move_refuses_missing_contract_terms_with_a_clear_message() {
     let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
+    let combined = app.clone().oneshot(json_post("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"expiry_year":2028,"release_player_id":7}"#)).await.unwrap();
+    assert_eq!(combined.status(), StatusCode::NOT_IMPLEMENTED);
     for (uri, body) in [
         ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
         ("/api/transfer/move", r#"{"player_id":5,"target_club_id":9,"wage_gbp":5000,"experimental":true}"#),
-        ("/api/transfer/sign", r#"{"player_id":5,"target_club_id":9,"experimental":true}"#),
-        ("/api/transfer/sign", r#"{"player_id":5,"wage_gbp":5000,"expiry_year":2028,"experimental":true}"#),
     ] {
         let response = app.clone().oneshot(json_post(uri, body)).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri} {body}");

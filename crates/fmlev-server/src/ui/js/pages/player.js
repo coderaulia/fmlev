@@ -20,6 +20,10 @@
         if (!("date_of_birth" in player) && !state.playerDirtyFields.has("date_of_birth")) delete state.activePlayer.date_of_birth;
       }
 
+      if (!isSamePlayer) {
+        clearPlayerMorale();
+        if (typeof clearPlayerDeals === "function") clearPlayerDeals();
+      }
       // Homegrown (trained at club / nation) is read once per player; failures leave it unavailable.
       if (typeof refreshHomegrown === "function" && (!isSamePlayer || homegrownState.loadedFor !== player.id)) refreshHomegrown();
 

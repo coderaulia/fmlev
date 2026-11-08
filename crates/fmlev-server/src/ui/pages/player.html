@@ -130,6 +130,13 @@
                   <button class="preset-btn" onclick="applyPlayerPreset('boost_all_2')">+2 attributes</button>
                 </div>
               </div>
+              <div class="quick-action-group" id="player-morale-editor">
+                <h3><label for="player-morale-value">Player morale</label></h3>
+                <input id="player-morale-value" type="number" min="1" max="20" step="1" class="form-control" disabled>
+                <button class="btn btn-sm" onclick="loadPlayerMorale()">Read</button>
+                <button id="player-morale-apply" class="btn btn-sm" onclick="applyPlayerMorale()" disabled>Apply now</button>
+                <p id="player-morale-status" class="unverified-note" aria-live="polite">Read morale from FM26 to edit.</p>
+              </div>
               <div class="quick-action-group">
                 <h3><label for="squad-number-input">Squad number</label></h3>
                 <input id="squad-number-input" type="number" min="0" max="99" class="form-control" placeholder="0–99" onchange="stageSquadNumber()" title="1–99; 0 clears the number">

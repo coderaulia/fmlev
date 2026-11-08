@@ -65,7 +65,7 @@
           <div class="presets-bar">
             <span class="presets-label">Staged presets</span>
             <button class="preset-btn" onclick="applyPlayerPreset('extend_contract')">+5 years extension</button>
-            <button class="preset-btn" data-money-tpl onclick="applyPlayerPreset('free_release')">{m:0} release clause</button>
+            <button id="contract-free-release-preset" class="preset-btn" data-money-tpl onclick="applyPlayerPreset('free_release')">{m:0} release clause</button>
             <button class="preset-btn" onclick="applyPlayerPreset('morale')">Max morale</button>
           </div>
         </div>
@@ -79,14 +79,13 @@
         </div>
         <div class="panel-body">
           <p class="hint">
-            Release a player as a free agent, move a contracted player to another club, or sign a free agent
-            (the destination first-team squad needs a spare slot). These redirect objects the game also references
-            elsewhere: terminate, sign and move have been tried in the game and worked. Each action asks for confirmation; keep a backup
-            save. Loan recall has no in-game test yet and stays disabled.
+            Release a player as a free agent or move a contracted player to another club. The destination first team
+            needs a spare slot. Each action asks for confirmation. Keep a backup save.
+            Free-agent signing, loan recall, new loans and pending-transfer scheduling are unavailable.
           </p>
           <div class="transfer-required" role="note">
-            <b>Required for Move and Sign:</b> target club * (pick it by name), yearly wage *, expiry year *. Fill all three, or the
-            action stays disabled (a contract with missing terms is never created). <b>Optional:</b> fee (Move only).
+            <b>Required for Move</b> — target club * (pick it by name), yearly wage *, expiry year *.
+            <b>Optional</b> — transfer fee.
             Terminate needs no fields.
           </div>
           <div class="transfer-row">
@@ -101,7 +100,6 @@
               </span>
               <input id="transfer-target-club-id" type="hidden">
               <span id="transfer-space-note" class="unverified-note"></span>
-              <select id="transfer-release-player" class="form-control" style="display:none; width: 260px;" aria-label="Player to release to make room"></select>
             </div>
             <div class="transfer-group">
               <input id="transfer-sign-wage" type="number" min="26" required aria-required="true" class="form-control" placeholder="Yearly wage (raw GBP) *" style="width: 190px;" aria-label="Yearly wage in raw GBP (required)" oninput="updateTransferButtons()">
@@ -110,11 +108,11 @@
             </div>
             <div class="transfer-group">
               <button id="btn-move-player" disabled class="btn" onclick="movePlayer()">Move player</button>
-              <button id="btn-sign-free-agent" disabled class="btn" onclick="signFreeAgent()">Sign free agent</button>
+              <button id="btn-sign-free-agent" disabled data-unverified="true" class="btn" title="Unavailable. FM26 must create the contract.">Sign free agent</button>
             </div>
           </div>
           <p id="transfer-missing-note" class="unverified-note"></p>
-          <p class="unverified-note">Move and Sign use the target club's first team. The wage is per year in raw GBP (stored per week as the yearly amount divided by 52); Move also replaces the player's current wage and expiry with these. A move fee is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
+          <p class="unverified-note">Move uses the target club's first team and replaces the player's current wage and expiry. Enter the yearly wage in raw GBP. The game stores it as a weekly amount. A move fee debits the buying club's balance and credits the selling club's balance.</p>
         </div>
       </div>
 
@@ -138,6 +136,20 @@
             <button id="btn-homegrown-nation" disabled class="btn" onclick="trainedAtNation()">Trained at Nation (HGN)</button>
           </div>
           <p class="unverified-note">Adds the player's current club or the nation of that club as a training record. Existing records are never changed. When the player's list is full, a new list is allocated inside the game process and swapped in; the game may later free or reuse it, which can crash the game. Buttons stay disabled until the club or nation can be resolved.</p>
+        </div>
+      </div>
+      <div id="player-deals-card" class="panel">
+        <div class="panel-head"><span>Player transfer deals</span></div>
+        <div class="panel-body">
+          <button class="btn btn-sm" onclick="loadClubDeals('player')">Read player deals</button>
+          <label><input id="player-deals-experimental" type="checkbox" onchange="updateClubDealControls('player')"> Enable headline fee editing (throwaway save only)</label>
+          <p id="player-deals-status" aria-live="polite">Read the selected player's deals.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Player</th><th>Direction</th><th>Teams</th><th>Status</th><th>Fee</th><th>Recorded join date</th><th>Edit fee</th></tr></thead>
+              <tbody id="player-deals-rows"><tr><td colspan="7">No deals loaded</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

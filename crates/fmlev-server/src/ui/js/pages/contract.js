@@ -81,6 +81,11 @@
       return "Unavailable: no verified native write path";
     }
     function applyContractGates() {
+      const freeRelease = document.getElementById("contract-free-release-preset");
+      if (freeRelease) {
+        freeRelease.disabled = !!state.connected;
+        freeRelease.title = state.connected ? "FM26 requires an existing release clause and a positive amount" : "";
+      }
       for (const [id, field, note] of CONTRACT_GATES) {
         const input = document.getElementById(id), allowed = playerFieldWritable("contract." + field);
         const reason = contractGateReason(field);

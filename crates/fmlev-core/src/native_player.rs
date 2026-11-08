@@ -759,9 +759,16 @@ impl NativePlayerRecord {
 
     /// Set morale (1..=20) in one checked transaction. Returns the old value, or None when unchanged.
     pub fn write_morale(&self, driver: &LinuxMemoryDriver, morale: u8) -> Result<Option<u8>> {
+        self.write_morale_from(driver, morale, None)
+    }
+
+    pub(crate) fn write_morale_from(&self, driver: &LinuxMemoryDriver, morale: u8, expected: Option<u8>) -> Result<Option<u8>> {
         if !(1..=MORALE_MAX).contains(&morale) { return Err(invalid("Morale must be between 1 and 20")); }
         let old = self.read_morale(driver)?;
         if old == morale { return Ok(None); }
+        if expected.is_some_and(|value| value != old) {
+            return Err(invalid("Morale changed in FM26. Read it again before editing"));
+        }
         self.apply_edits(driver, &[NativeEdit { address: self.address + MORALE, old: vec![old], next: vec![morale] }], None)?;
         Ok(Some(old))
     }

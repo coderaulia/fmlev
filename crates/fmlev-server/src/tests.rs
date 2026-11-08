@@ -1070,6 +1070,9 @@ async fn club_embargo_and_statement_routes_validate_and_gate_the_experimental_wr
         let response = app.clone().oneshot(json_post("/api/club/embargo/update", body)).await.unwrap();
         assert!(response.status().is_client_error() && response.status() != StatusCode::NOT_IMPLEMENTED, "{body}");
     }
+}
+
+#[tokio::test]
 async fn club_loan_and_sponsor_routes_are_strict_gated_and_need_a_game() {
     let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);
@@ -1098,6 +1101,9 @@ async fn club_loan_and_sponsor_routes_are_strict_gated_and_need_a_game() {
     // Removing a loan is not an operation: there is no delete route.
     let removed = app.oneshot(json_post("/api/club/loans/remove", r#"{"club_id":1074,"loan_index":0}"#)).await.unwrap();
     assert!(removed.status() == StatusCode::NOT_FOUND || removed.status() == StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
 async fn deal_routes_are_strict_read_only_and_the_edit_is_experimental() {
     let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
     let app = create_router(state);

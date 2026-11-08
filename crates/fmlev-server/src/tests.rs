@@ -1044,3 +1044,31 @@ async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
         assert!(text.contains("wage") || text.contains("target club"), "{text}");
     }
 }
+
+#[tokio::test]
+async fn deal_routes_are_strict_read_only_and_the_edit_is_experimental() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    // Reads need a game (400 when detached) and reject unknown fields.
+    for (uri, ok_body, bad_body) in [
+        ("/api/deals/club", r#"{"club_id":1089}"#, r#"{"club_id":1089,"extra":1}"#),
+        ("/api/deals/player", r#"{"player_id":25145}"#, r#"{"player_id":25145,"extra":1}"#),
+    ] {
+        let detached = app.clone().oneshot(json_post(uri, ok_body)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri}");
+        let unknown = app.clone().oneshot(json_post(uri, bad_body)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{uri}");
+    }
+    // The edit returns 501 without the explicit opt-in, 400 without a game, and rejects unknown fields.
+    let gated = app.clone().oneshot(json_post("/api/deals/update", r#"{"deal_address":4096,"player_id":1,"fee_gbp":5}"#)).await.unwrap();
+    assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED);
+    let detached = app.clone().oneshot(json_post("/api/deals/update", r#"{"deal_address":4096,"player_id":1,"fee_gbp":5,"experimental":true}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+    for body in [
+        r#"{"deal_address":4096,"player_id":1,"status":1793,"experimental":true}"#,
+        r#"{"deal_address":4096,"player_id":1,"join_date":{"year":2026,"day":5,"flags":1},"experimental":true}"#,
+    ] {
+        let unknown = app.clone().oneshot(json_post("/api/deals/update", body)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{body}");
+    }
+}

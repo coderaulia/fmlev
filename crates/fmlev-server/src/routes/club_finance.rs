@@ -44,7 +44,7 @@ async fn driver_and_record(state: &ServerState, club_id: i32) -> Result<(LinuxMe
 }
 
 /// Read-only: transfer embargo dates, age restriction and flags of a club.
-pub async fn read_club_embargo(State(state): State<ServerState>, Json(req): Json<ClubFinanceReadRequest>) -> impl IntoResponse {
+pub async fn read_club_embargo_native(State(state): State<ServerState>, Json(req): Json<ClubFinanceReadRequest>) -> impl IntoResponse {
     let (driver, record) = match driver_and_record(&state, req.club_id).await {
         Ok(found) => found,
         Err(response) => return response,

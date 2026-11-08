@@ -146,22 +146,25 @@
       el.title = `Last polled context from FM26 at ${new Date(state.lastContextSyncTime).toLocaleTimeString()}`;
     }
 
+    // Same order as FM26's player attribute screen: Technical, then the Set Pieces group (sub-heading below).
     const techAttrs = [
-      ["marking", "Marking"],
-      ["long_throws", "Long Throws"],
-      ["corners", "Corners"],
       ["crossing", "Crossing"],
       ["dribbling", "Dribbling"],
       ["finishing", "Finishing"],
       ["first_touch", "First Touch"],
-      ["free_kicks", "Free Kicks"],
       ["heading", "Heading"],
       ["long_shots", "Long Shots"],
+      ["marking", "Marking"],
       ["passing", "Passing"],
-      ["penalty_taking", "Penalty Taking"],
       ["tackling", "Tackling"],
-      ["technique", "Technique"]
+      ["technique", "Technique"],
+      ["corners", "Corners"],
+      ["free_kicks", "Free Kick Taking"],
+      ["long_throws", "Long Throws"],
+      ["penalty_taking", "Penalty Taking"]
     ];
+    // Sub-headings drawn above an attribute row, as on FM26's screen.
+    const attrSubheads = { corners: "Set Pieces" };
 
     const mentalAttrs = [
       ["aggression", "Aggression"],
@@ -207,8 +210,8 @@
       ["temperament", "Temperament"]
     ];
 
+    // FM26 lists goalkeeping attributes alphabetically; Punching and Rushing Out are tendencies there.
     const gkAttrs = [
-      ["punching", "Punching"],
       ["aerial_reach", "Aerial Reach"],
       ["command_of_area", "Command Of Area"],
       ["communication", "Communication"],
@@ -216,8 +219,9 @@
       ["handling", "Handling"],
       ["kicking", "Kicking"],
       ["one_on_ones", "One On Ones"],
+      ["punching", "Punching (Tendency)"],
       ["reflexes", "Reflexes"],
-      ["rushing_out", "Rushing Out"],
+      ["rushing_out", "Rushing Out (Tendency)"],
       ["throwing", "Throwing"]
     ];
 

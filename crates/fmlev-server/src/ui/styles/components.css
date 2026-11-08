@@ -406,6 +406,9 @@ input:checked + .slider:before {
   background: var(--bg-card-alt);
   border-bottom: 1px solid var(--border-color);
 }
+.attr-subhead {
+  margin-top: var(--space-2);
+}
 .attr-line {
   display: flex;
   align-items: center;

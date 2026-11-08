@@ -38,7 +38,8 @@
     function renderAttrGroup(containerId, list) {
       const container = document.getElementById(containerId);
       if (!container) return;
-      container.innerHTML = list.map(([key, name]) => `
+      container.innerHTML = list.map(([key, name]) => (attrSubheads[key] ? `
+        <div class="attr-col-head attr-subhead">${attrSubheads[key]}</div>` : "") + `
         <div class="attr-line unavailable" id="attr-line-${key}" data-key="${key}">
           <span class="attr-line-name">${name}</span>
           <span class="attr-edit">

@@ -1,3 +1,4 @@
+pub mod board;
 pub mod context;
 pub mod eligibility;
 pub mod memory;
@@ -6,6 +7,7 @@ pub mod search;
 pub mod settings;
 pub mod staff;
 
+pub use board::*;
 pub use context::*;
 pub use eligibility::*;
 pub use memory::*;
@@ -74,6 +76,10 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/club/money", post(update_club_money))
         .route("/api/club/native", post(read_club_native))
         .route("/api/club/squad-space", post(club_squad_space))
+        .route("/api/club/board", post(read_club_board))
+        .route("/api/club/board/update", post(update_club_board))
+        .route("/api/club/status", post(read_club_status))
+        .route("/api/club/status/update", post(update_club_status))
         .route("/api/nation/native", post(read_nation_native))
         .route("/api/competition/native", post(read_competition_native))
         .route("/api/club/preset", post(apply_club_preset))

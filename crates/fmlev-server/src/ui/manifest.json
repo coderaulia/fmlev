@@ -50,6 +50,7 @@
     "js/pages/positions.js",
     "js/pages/club-edit.js",
     "js/pages/club-money.js",
+    "js/pages/club-board.js",
     "js/pages/nation.js",
     "js/pages/competition.js",
     "js/pages/competition-prizes.js",

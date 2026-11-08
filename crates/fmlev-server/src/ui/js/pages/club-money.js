@@ -93,6 +93,7 @@
       // displayClub may start a read-only native refresh. Explicit Load also waits for its own read.
       nativeClubSyncedId = null;
       if (state.connected && !await syncClubNative(id)) return false;
+      if (state.connected && typeof loadClubFinanceExtras === "function") loadClubFinanceExtras(id).catch(error => showToast(error.message, "warning"));
       return loadClubMoney();
     }
 

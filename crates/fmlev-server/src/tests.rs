@@ -1044,3 +1044,30 @@ async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
         assert!(text.contains("wage") || text.contains("target club"), "{text}");
     }
 }
+
+#[tokio::test]
+async fn club_embargo_and_statement_routes_validate_and_gate_the_experimental_write() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    // Reads need a game and reject unknown fields.
+    for uri in ["/api/club/embargo", "/api/club/finances/statements"] {
+        let detached = app.clone().oneshot(json_post(uri, r#"{"club_id":1089}"#)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri} without a game");
+        let unknown = app.clone().oneshot(json_post(uri, r#"{"club_id":1089,"extra":1}"#)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{uri} rejects unknown fields");
+    }
+    // The write is 501 without the opt-in, even with a valid body.
+    let gated = app.clone().oneshot(json_post("/api/club/embargo/update", r#"{"club_id":1089,"age_restriction":18}"#)).await.unwrap();
+    assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED);
+    // With the opt-in it reaches the game check (400 when detached).
+    let opted = app.clone().oneshot(json_post("/api/club/embargo/update", r#"{"club_id":1089,"age_restriction":18,"experimental":true}"#)).await.unwrap();
+    assert_eq!(opted.status(), StatusCode::BAD_REQUEST);
+    // Unknown fields, also inside a date edit, are rejected.
+    for body in [
+        r#"{"club_id":1089,"surprise":1,"experimental":true}"#,
+        r#"{"club_id":1089,"end":{"year":2027,"day":10,"extra":1},"experimental":true}"#,
+    ] {
+        let response = app.clone().oneshot(json_post("/api/club/embargo/update", body)).await.unwrap();
+        assert!(response.status().is_client_error() && response.status() != StatusCode::NOT_IMPLEMENTED, "{body}");
+    }
+}

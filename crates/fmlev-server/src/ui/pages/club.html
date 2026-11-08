@@ -372,6 +372,24 @@
           </select>
           <button id="board-status-apply" class="btn btn-sm" disabled onclick="applyClubStatus()">Apply status</button>
         </div>
+      <!-- Transfer activity: native FULL_TRANSFER_OFFER deals (read-only list; edits experimental) -->
+      <div class="card" id="club-deals-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Transfer activity</div>
+        <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Deals the game keeps for this club (as buyer or seller), read from memory. Status shows a label only for the combinations checked on the game's Transfer Activity screen; others show the raw status. Clause amounts are the headline fee's instalments and appearance bonuses.
+        </p>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+          <button class="btn btn-sm btn-primary" id="club-deals-load" onclick="loadClubDeals()">Load deals</button>
+          <span id="club-deals-status" class="unverified-note">Not loaded</span>
+        </div>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 10px; cursor: pointer;">
+          <input id="club-deals-experimental" type="checkbox" onchange="updateClubDealControls()"> Enable experimental deal editing (fee and join date only; unverified in game)
+        </label>
+        <table class="fm-table">
+          <thead><tr><th>Player</th><th>Direction</th><th>From → To</th><th>Status</th><th class="num">Fee</th><th>Join date</th><th>Edit (raw GBP / date)</th></tr></thead>
+          <tbody id="club-deals-rows"><tr><td colspan="7" class="unavailable">No deals loaded</td></tr></tbody>
+        </table>
+        <p class="unverified-note">Edits change the deal's headline fee or join date in memory only; status, teams and clauses are never written. Check Transfer Activity after the next day tick. Keep a backup save.</p>
       </div>
 
       <!-- Dedicated Squad God Mode & Cheats Callout Banner -->

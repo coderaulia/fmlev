@@ -2,6 +2,7 @@ pub mod club_finance;
 pub mod club_debts;
 pub mod board;
 pub mod context;
+pub mod deals;
 pub mod eligibility;
 pub mod memory;
 pub mod roles;
@@ -75,6 +76,9 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/transfer/sign", post(sign_player))
         .route("/api/transfer/accelerate", post(accelerate_transfer))
         .route("/api/transfer/loan", post(transfer_not_implemented))
+        .route("/api/deals/club", post(deals::deals_for_club))
+        .route("/api/deals/player", post(deals::deals_for_player))
+        .route("/api/deals/update", post(deals::update_deal))
         .route("/api/player/familiarity", post(maximise_familiarity))
         .route("/api/club/update", post(update_club))
         .route("/api/club/money", post(update_club_money))

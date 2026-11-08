@@ -96,7 +96,7 @@ pub fn is_complete_object_locator(col: &[u32; 6], locator: usize, base: usize) -
 }
 
 /// PE32+ image size from the headers at `base`, or `None` when they are not a valid image.
-fn pe_image_size(driver: &LinuxMemoryDriver, base: usize) -> Option<usize> {
+pub(crate) fn pe_image_size(driver: &LinuxMemoryDriver, base: usize) -> Option<usize> {
     if driver.read::<u16>(base).ok()? != 0x5a4d {
         return None;
     }
@@ -108,7 +108,7 @@ fn pe_image_size(driver: &LinuxMemoryDriver, base: usize) -> Option<usize> {
     (size >= 24).then_some(size)
 }
 
-fn type_name(driver: &LinuxMemoryDriver, descriptor: usize) -> Option<String> {
+pub(crate) fn type_name(driver: &LinuxMemoryDriver, descriptor: usize) -> Option<String> {
     let mut raw = [0u8; 128];
     driver.read_bytes(descriptor + 16, &mut raw).ok()?;
     let end = raw.iter().position(|&b| b == 0)?;
@@ -193,7 +193,7 @@ fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
 }
 
-fn native_string(driver: &LinuxMemoryDriver, ptr: usize) -> Option<String> {
+pub(crate) fn native_string(driver: &LinuxMemoryDriver, ptr: usize) -> Option<String> {
     if ptr <= 0x10000 {
         return None;
     }
@@ -209,7 +209,7 @@ fn native_string(driver: &LinuxMemoryDriver, ptr: usize) -> Option<String> {
 }
 
 /// First + last name from pooled references. `None` when a present reference is broken or both are empty.
-fn pooled_name(driver: &LinuxMemoryDriver, first_ref: usize) -> Option<String> {
+pub(crate) fn pooled_name(driver: &LinuxMemoryDriver, first_ref: usize) -> Option<String> {
     let mut parts = Vec::new();
     for reference in [first_ref, first_ref + 8] {
         let pointer = driver.read_ptr(reference).ok()?;

@@ -117,6 +117,29 @@
           <p class="unverified-note">Move and Sign use the target club's first team. The wage is per year in raw GBP (stored per week as the yearly amount divided by 52); Move also replaces the player's current wage and expiry with these. A move fee is taken from the buying club's balance and added to the selling club's (transfer budgets are not changed).</p>
         </div>
       </div>
+
+      <!-- Homegrown (trained at club / nation): relationship records. Reads are safe; writes are experimental. -->
+      <div id="homegrown-card" class="panel">
+        <div class="panel-head">
+          <span>Homegrown status (trained at club / nation)</span>
+          <span class="pill pill-warn">Experimental</span>
+        </div>
+        <div class="panel-body">
+          <p class="hint">Shows the clubs and nations the game records as "trained at" for this player. Layout read live on two players; no in-game write test yet.</p>
+          <p><b>Trained at club:</b> <span id="homegrown-clubs">Unavailable</span></p>
+          <p><b>Trained at nation:</b> <span id="homegrown-nations">Unavailable</span></p>
+          <p id="homegrown-note" class="unverified-note"></p>
+          <label>
+            <input id="homegrown-experimental" type="checkbox" onchange="updateHomegrownButtons()">
+            Enable experimental homegrown edits (allocates memory in the game; throwaway save only)
+          </label>
+          <div class="transfer-group">
+            <button id="btn-homegrown-club" disabled class="btn" onclick="trainedAtClub()">Trained at Club (HGC)</button>
+            <button id="btn-homegrown-nation" disabled class="btn" onclick="trainedAtNation()">Trained at Nation (HGN)</button>
+          </div>
+          <p class="unverified-note">Adds the player's current club / first nationality as a record. Existing records are never changed. When the player's list is full, a new list is allocated inside the game process and swapped in; the game may later free or reuse it, which can crash the game. Buttons stay disabled until the club or nation can be resolved.</p>
+        </div>
+      </div>
     </section>
 
     <!-- PLAYER > REGISTRATION (read-only Registration Doctor) -->

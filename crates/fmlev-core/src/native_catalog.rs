@@ -149,11 +149,11 @@ impl RttiCatalog {
         Ok(Self { tables })
     }
 
-    fn at(&self, driver: &LinuxMemoryDriver, address: usize) -> Option<NativeType> {
+    pub(crate) fn at(&self, driver: &LinuxMemoryDriver, address: usize) -> Option<NativeType> {
         self.tables.get(&driver.read_ptr(address).ok()?).copied()
     }
 
-    fn is(&self, driver: &LinuxMemoryDriver, address: usize, kind: CatalogKind, subobject_offset: u32) -> bool {
+    pub(crate) fn is(&self, driver: &LinuxMemoryDriver, address: usize, kind: CatalogKind, subobject_offset: u32) -> bool {
         self.at(driver, address) == Some(NativeType { kind, subobject_offset })
     }
 }
@@ -170,7 +170,7 @@ fn invalid(message: &str) -> CoreError {
     CoreError::InvalidValue(message.to_owned())
 }
 
-fn native_string(driver: &LinuxMemoryDriver, ptr: usize) -> Option<String> {
+pub(crate) fn native_string(driver: &LinuxMemoryDriver, ptr: usize) -> Option<String> {
     if ptr <= 0x10000 {
         return None;
     }

@@ -20,6 +20,7 @@ pub mod live_competition;
 pub mod live_dump;
 pub mod models;
 pub mod native_player;
+pub mod native_relationships;
 pub mod preferred_moves;
 pub mod role_presets;
 pub mod search_index;

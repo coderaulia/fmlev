@@ -1044,3 +1044,31 @@ async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
         assert!(text.contains("wage") || text.contains("target club"), "{text}");
     }
 }
+
+#[tokio::test]
+async fn homegrown_routes_gate_validate_and_need_a_game() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    // Read: detached is 400, unknown fields are rejected.
+    let detached = app.clone().oneshot(json_post("/api/player/homegrown", r#"{"player_id":5}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+    let unknown = app.clone().oneshot(json_post("/api/player/homegrown", r#"{"player_id":5,"x":1}"#)).await.unwrap();
+    assert!(unknown.status().is_client_error());
+    // Write: 501 without the experimental flag, whatever else is in the body.
+    let gated = app.clone().oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_id":9}"#)).await.unwrap();
+    assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED);
+    // 400: no target, both id and current flag, non-positive id, unknown field.
+    for body in [
+        r#"{"player_id":5,"experimental":true}"#,
+        r#"{"player_id":5,"club_id":9,"club_current":true,"experimental":true}"#,
+        r#"{"player_id":5,"nation_id":0,"experimental":true}"#,
+    ] {
+        let response = app.clone().oneshot(json_post("/api/player/homegrown/set", body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
+    let unknown = app.clone().oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_id":9,"surprise":1,"experimental":true}"#)).await.unwrap();
+    assert!(unknown.status().is_client_error());
+    // A valid request still needs an attached game (400, no memory touched).
+    let detached = app.oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_current":true,"nation_id":3,"experimental":true}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
+}

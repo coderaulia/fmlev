@@ -239,3 +239,10 @@ body.mode-compact-overlay .entity-page.active { grid-template-columns: minmax(0,
 
 body.mode-compact-overlay #tab-club [style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
 @media (max-width: 700px) { #tab-club [style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; } }
+
+/* Bank loans and sponsors card */
+.debt-body { overflow-x: auto; }
+.debt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.debt-table th, .debt-table td { padding: 6px 8px; text-align: left; border-top: 1px solid var(--border-color); white-space: nowrap; }
+.debt-input { width: 130px; min-width: 0; }
+#club-debts-card .staff-experimental-toggle { margin-left: 0; }

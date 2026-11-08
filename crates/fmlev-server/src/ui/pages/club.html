@@ -60,6 +60,27 @@
         <p class="unverified-note">Use Load from game and Save in the bottom bar. Only edited amounts are sent.</p>
       </div>
 
+      <!-- Bank loans and sponsor deals: native reads; writes are experimental and unverified in game. -->
+      <div class="card" id="club-debts-card" data-live-editor="true" style="margin-top: 16px;">
+        <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Bank loans and sponsors</div>
+        <p class="unverified-note">
+          Read from game memory; not yet compared with the game's Finances screens. Loan type codes and sponsor names are not mapped.
+          Editing is experimental: values are checked by readback but unverified in game. Lists are never shortened.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
+          <button class="btn" onclick="loadClubLoans()">Read loans</button>
+          <button class="btn" onclick="loadClubSponsors()">Read sponsors</button>
+          <label class="staff-experimental-toggle">
+            <input id="club-debts-experimental" type="checkbox" onchange="toggleClubDebtEditing(this.checked)">
+            <span>Enable experimental loan and sponsor editing (throwaway save only)</span>
+          </label>
+        </div>
+        <div style="font-weight: 700; margin: 8px 0 4px;">Bank loans</div>
+        <div id="club-loans-body" class="debt-body"><p class="unverified-note">Press Read loans to read this club's bank loans from the game.</p></div>
+        <div style="font-weight: 700; margin: 12px 0 4px;">Sponsor deals</div>
+        <div id="club-sponsors-body" class="debt-body"><p class="unverified-note">Press Read sponsors to read this club's sponsor deals from the game.</p></div>
+      </div>
+
       <!-- Left: Financial Budgets & Stadium (Unverified in live session; use Live Club Money card below) -->
       <div class="card" id="club-finances-card" style="margin: 16px 0;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">

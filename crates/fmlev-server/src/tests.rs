@@ -1044,3 +1044,34 @@ async fn move_and_sign_refuse_missing_contract_terms_with_a_clear_message() {
         assert!(text.contains("wage") || text.contains("target club"), "{text}");
     }
 }
+
+#[tokio::test]
+async fn club_loan_and_sponsor_routes_are_strict_gated_and_need_a_game() {
+    let state = ServerState::from_inner(Arc::new(RwLock::new(offline_app_state())));
+    let app = create_router(state);
+    // Reads need a game; unknown fields are rejected.
+    for uri in ["/api/club/loans", "/api/club/sponsors"] {
+        let detached = app.clone().oneshot(json_post(uri, r#"{"club_id":1074}"#)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri}");
+        let unknown = app.clone().oneshot(json_post(uri, r#"{"club_id":1074,"x":1}"#)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{uri}");
+    }
+    // Writes are 501 without the opt-in (before any game check), and still strict with it.
+    for (uri, body) in [
+        ("/api/club/loans/update", r#"{"club_id":1074,"loan_index":0,"monthly_repayment":5}"#),
+        ("/api/club/loans/update", r#"{"club_id":1074,"loan_index":0,"clear":true}"#),
+        ("/api/club/sponsors/update", r#"{"club_id":1074,"sponsor_index":0,"annual_value":5}"#),
+    ] {
+        let gated = app.clone().oneshot(json_post(uri, body)).await.unwrap();
+        assert_eq!(gated.status(), StatusCode::NOT_IMPLEMENTED, "{uri} without experimental");
+        let opted = body.replacen('{', r#"{"experimental":true,"#, 1);
+        let detached = app.clone().oneshot(json_post(uri, &opted)).await.unwrap();
+        assert_eq!(detached.status(), StatusCode::BAD_REQUEST, "{uri} with experimental but no game");
+        let unknown = body.replacen('{', r#"{"experimental":true,"surprise":1,"#, 1);
+        let unknown = app.clone().oneshot(json_post(uri, &unknown)).await.unwrap();
+        assert!(unknown.status().is_client_error(), "{uri} rejects unknown fields");
+    }
+    // Removing a loan is not an operation: there is no delete route.
+    let removed = app.oneshot(json_post("/api/club/loans/remove", r#"{"club_id":1074,"loan_index":0}"#)).await.unwrap();
+    assert!(removed.status() == StatusCode::NOT_FOUND || removed.status() == StatusCode::METHOD_NOT_ALLOWED);
+}

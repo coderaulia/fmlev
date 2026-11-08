@@ -1,3 +1,4 @@
+pub mod competition_extra;
 pub mod context;
 pub mod eligibility;
 pub mod memory;
@@ -83,6 +84,14 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/competition/preset", post(apply_competition_preset))
         .route("/api/competition/prizes", post(competition_prizes))
         .route("/api/competition/registration", post(registration_anytime))
+        .route("/api/competition/details", post(competition_extra::read_competition_details))
+        .route("/api/competition/details/update", post(competition_extra::update_competition_details))
+        .route("/api/competition/prizes/native", post(competition_extra::read_native_prizes))
+        .route("/api/competition/prizes/native/update", post(competition_extra::update_native_prizes))
+        .route("/api/competition/table", post(competition_extra::read_competition_table))
+        .route("/api/awards", get(competition_extra::search_awards))
+        .route("/api/awards/get", post(competition_extra::read_award))
+        .route("/api/awards/update", post(competition_extra::update_award))
         .route("/api/club/affiliate/add", post(add_club_affiliate))
         .route("/api/club/affiliate/remove", post(remove_club_affiliate))
         .route("/api/attach", post(attach_process))

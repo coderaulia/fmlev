@@ -70,4 +70,68 @@
         <dl class="club-info-grid"><div><dt>Clubs</dt><dd id="competition-info-teams">Unavailable</dd></div><div><dt>Season</dt><dd id="competition-info-season">Unavailable</dd></div></dl>
         <p id="competition-rule-status" class="unverified-note">Match and squad rule edits are unavailable here. Registration actions are staged above.</p>
       </div>
+      <!-- Competition extras: native details, native prize table, league table, awards (read live; edits experimental) -->
+      <div class="card" id="competition-extras-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">Competition extras · native reads, experimental edits</h3>
+        <p class="unverified-note" style="margin-bottom: 10px;">
+          Reads come straight from game memory (no screen needed). Every edit here is <strong>unverified in game</strong>: use a throwaway save.
+          Each edit button applies immediately with readback and rollback; it is not part of the bottom Save bar.
+        </p>
+        <label class="form-label" style="display: flex; gap: 8px; align-items: center;">
+          <input id="compx-enable" type="checkbox" onchange="compxRenderEnabled()"> Enable experimental competition extras
+        </label>
+        <p id="compx-status" class="unverified-note">Select a competition, open its Rules page in FM26 once so its unique id is known, then load.</p>
+
+        <h4 style="margin: 14px 0 6px;">Details (original reputation, trophy, category, pitch size)</h4>
+        <div class="entity-form-grid">
+          <label class="form-group"><span class="form-label">Original reputation (1-200)</span><input id="compx-orig-rep" type="number" min="1" max="200" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Trophy type</span><input id="compx-trophy" type="number" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Lowest category</span><input id="compx-lowcat" type="number" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Pitch min length</span><input id="compx-min-length" type="number" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Pitch min width</span><input id="compx-min-width" type="number" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Pitch max length</span><input id="compx-max-length" type="number" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Pitch max width</span><input id="compx-max-width" type="number" disabled class="form-control"></label>
+        </div>
+        <p class="unverified-note">Pitch sizes are tenths of a metre (heuristic, for example 1050 x 680). Trophy type and lowest category accept only values seen in the game; their meaning is unknown.</p>
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button class="btn" onclick="compxLoadDetails()">Load details</button>
+          <button id="compx-apply-details" class="btn btn-danger" disabled onclick="compxApplyDetails()">Apply details (experimental)</button>
+        </div>
+
+        <h4 style="margin: 14px 0 6px;">Native prize table (no value search)</h4>
+        <textarea id="compx-prize-list" disabled class="form-control" rows="4" placeholder="One raw-GBP amount per line, position 1 first"></textarea>
+        <p id="compx-prize-note" class="unverified-note">Not loaded. Only leagues with an active league stage have a native table (for example the Premier League, Bundesliga, Serie A).</p>
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button class="btn" onclick="compxLoadPrizes()">Read native prize table</button>
+          <button id="compx-apply-prizes" class="btn btn-danger" disabled onclick="compxApplyPrizes()">Apply prize table (experimental)</button>
+        </div>
+
+        <h4 style="margin: 14px 0 6px;">League table (read-only)</h4>
+        <div style="display: flex; gap: 8px; margin-bottom: 6px;"><button class="btn" onclick="compxLoadTable()">Load league table</button></div>
+        <div style="overflow-x: auto;">
+          <table class="fm-table" id="compx-table"><thead><tr><th>#</th><th>Club</th><th class="num">P</th><th class="num">W</th><th class="num">D</th><th class="num">L</th><th class="num">GF</th><th class="num">GA</th><th class="num">Pts</th></tr></thead><tbody id="compx-table-body"></tbody></table>
+        </div>
+        <p id="compx-table-note" class="unverified-note">Not loaded. Row layout is heuristic; a row whose points do not equal 3 x won + drawn is marked.</p>
+      </div>
+
+      <div class="card" id="awards-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
+        <h3 style="margin-bottom: 6px;">Awards · native reads, experimental edits</h3>
+        <p class="unverified-note" style="margin-bottom: 10px;">
+          Read from game memory. The reputation and type offsets from the community lead did not match this build, so only two
+          reputation <em>candidates</em> (meaning unproven) and in-place name edits (never longer than the current name) can be changed. Unverified in game.
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input id="compx-award-query" class="form-control" style="max-width: 320px;" placeholder="Award name, index or uid" aria-label="Award search">
+          <button class="btn" onclick="compxSearchAwards()">Search awards</button>
+        </div>
+        <ul id="compx-award-results" class="hint" style="margin-top: 8px;"></ul>
+        <p id="compx-award-status" class="unverified-note">No award selected.</p>
+        <div class="entity-form-grid">
+          <label class="form-group"><span class="form-label">Name</span><input id="compx-award-name" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Short name</span><input id="compx-award-short" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Reputation candidate A (0-200)</span><input id="compx-award-rep-a" type="number" min="0" max="200" disabled class="form-control"></label>
+          <label class="form-group"><span class="form-label">Reputation candidate B (0-200)</span><input id="compx-award-rep-b" type="number" min="0" max="200" disabled class="form-control"></label>
+        </div>
+        <button id="compx-apply-award" class="btn btn-danger" style="margin-top: 6px;" disabled onclick="compxApplyAward()">Apply award (experimental)</button>
+      </div>
     </section>

@@ -53,6 +53,7 @@
     "js/pages/nation.js",
     "js/pages/competition.js",
     "js/pages/competition-prizes.js",
+    "js/pages/competition-extra.js",
     "js/pages/settings.js"
   ]
 }

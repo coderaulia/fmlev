@@ -16,6 +16,14 @@
 //!   (`FULL_CONTRACT`, person back-pointer at +8, team at +0x10).
 //! - Staff (`ACTUAL_NON_PLAYER` sub-object `S` at record + 0x100): second sub-object at `S + 0x28`,
 //!   ids at `S + 8`, pooled names at `S + 0x50/0x58`.
+//! - Player/staff hybrid (`ACTUAL_PLAYER_AND_NON_PLAYER` object `H`, 133 people on PID 98701): player view
+//!   `R = H + 0x148` as for players; a 0xf8-byte `NON_PLAYING_DATA` block shifts the person sub-object to
+//!   `S = H + 0x380` (COL 0x380, second at `S + 0x28`, COL 0x3a8). As staff the record is `S - 0x100`, the
+//!   plain staff shape. Person-relative fields (ids +8, names +0x50) were matched live; the shifted contract,
+//!   nation and birth-date fields below are read only through the same validated links and range checks.
+//!
+//! Scan scope: when the build matches, the pass scans only the writable mappings that hold the game's own
+//! entity lists in game_plugin.dll (see `list_mappings`), instead of all writable memory.
 
 use std::collections::HashMap;
 
@@ -30,11 +38,20 @@ const PLAYER_RECORD: usize = 0x148;
 const PLAYER_PERSON_SUBOBJECT: u32 = 0x288;
 const STAFF_SUBOBJECT: u32 = 0x100;
 const STAFF_SECOND_SUBOBJECT: u32 = 0x128;
+const HYBRID_PERSON_SUBOBJECT: u32 = 0x380;
+const HYBRID_SECOND_SUBOBJECT: u32 = 0x3a8;
+/// Person sub-object relative to the player view `R`: plain players and hybrids.
+const PLAYER_PERSON_FROM_RECORD: usize = 0x140;
+const HYBRID_PERSON_FROM_RECORD: usize = HYBRID_PERSON_SUBOBJECT as usize - PLAYER_RECORD;
+/// game_plugin.dll build the list RVAs below were read on.
+const LIST_PE_TIMESTAMP: u32 = 0x6a22_9e8a;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CatalogKind {
     Player,
     Staff,
+    /// A person who is both player and staff.
+    Hybrid,
     Club,
     Team,
     Nation,
@@ -47,6 +64,7 @@ impl CatalogKind {
         Some(match name {
             ".?AVACTUAL_PLAYER@db@@" => Self::Player,
             ".?AVACTUAL_NON_PLAYER@db@@" => Self::Staff,
+            ".?AVACTUAL_PLAYER_AND_NON_PLAYER@db@@" => Self::Hybrid,
             ".?AVCLUB@db@@" => Self::Club,
             ".?AVTEAM@db@@" => Self::Team,
             ".?AVNATION@db@@" => Self::Nation,
@@ -68,6 +86,8 @@ pub struct NativeType {
 #[derive(Debug, Clone, Default)]
 pub struct RttiCatalog {
     pub tables: HashMap<usize, NativeType>,
+    /// `(base, PE timestamp)` of the game_plugin.dll image the tables came from (`None` in tests).
+    pub image: Option<(usize, u32)>,
 }
 
 /// x64 MSVC complete object locator: signature 1, and its self RVA must equal its own image offset.
@@ -98,7 +118,7 @@ fn type_name(driver: &LinuxMemoryDriver, descriptor: usize) -> Option<String> {
 
 impl RttiCatalog {
     pub fn from_tables(tables: HashMap<usize, NativeType>) -> Self {
-        Self { tables }
+        Self { tables, image: None }
     }
 
     /// Resolves the supported database vtables from game_plugin.dll RTTI.
@@ -146,7 +166,8 @@ impl RttiCatalog {
         if tables.is_empty() {
             return Err(invalid("No supported FM26 database RTTI types found in game_plugin.dll"));
         }
-        Ok(Self { tables })
+        let timestamp = driver.read::<u32>(base + 0x3c).ok().and_then(|pe| driver.read::<u32>(base + pe as usize + 8).ok());
+        Ok(Self { tables, image: timestamp.map(|t| (base, t)) })
     }
 
     fn at(&self, driver: &LinuxMemoryDriver, address: usize) -> Option<NativeType> {
@@ -164,6 +185,8 @@ pub struct Enumeration {
     pub entries: Vec<IndexEntry>,
     pub duplicates_dropped: usize,
     pub candidates: usize,
+    /// True when only the mappings holding the game's entity lists were scanned.
+    pub list_scoped: bool,
 }
 
 fn invalid(message: &str) -> CoreError {
@@ -227,6 +250,14 @@ impl Regions {
     }
 }
 
+struct FoundPlayer {
+    record: usize,
+    person: usize,
+    id: i32,
+    uid: u32,
+    name: String,
+}
+
 struct Pass<'a> {
     driver: &'a LinuxMemoryDriver,
     catalog: &'a RttiCatalog,
@@ -240,14 +271,32 @@ impl Pass<'_> {
         Some((id, uid, name))
     }
 
-    /// Player primary object `P`; returns `(record, id, uid, name)`.
-    fn player(&self, address: usize) -> Option<(usize, i32, u32, String)> {
-        let driver = self.driver;
+    /// Player primary object `P`; returns `(record, person, id, uid, name)`.
+    fn player(&self, address: usize) -> Option<FoundPlayer> {
         let record = address + PLAYER_RECORD;
-        let (id, uid) = player_identity(driver, record + 0x148)?;
-        if !self.catalog.is(driver, record + 0x140, CatalogKind::Player, PLAYER_PERSON_SUBOBJECT) {
+        if !self.catalog.is(self.driver, record + PLAYER_PERSON_FROM_RECORD, CatalogKind::Player, PLAYER_PERSON_SUBOBJECT) {
             return None;
         }
+        self.player_view(record, record + PLAYER_PERSON_FROM_RECORD)
+    }
+
+    /// Hybrid person sub-object `S = H + 0x380`: the primary vtable, both sub-object vtables and the
+    /// player view must all carry the hybrid type.
+    fn hybrid_player(&self, person: usize) -> Option<FoundPlayer> {
+        let object = person - HYBRID_PERSON_SUBOBJECT as usize;
+        let driver = self.driver;
+        if !self.catalog.is(driver, object, CatalogKind::Hybrid, 0)
+            || !self.catalog.is(driver, person + 0x28, CatalogKind::Hybrid, HYBRID_SECOND_SUBOBJECT)
+        {
+            return None;
+        }
+        self.player_view(person - HYBRID_PERSON_FROM_RECORD, person)
+    }
+
+    /// Shared player checks on the view `record` with its `person` sub-object.
+    fn player_view(&self, record: usize, person: usize) -> Option<FoundPlayer> {
+        let driver = self.driver;
+        let (id, uid) = player_identity(driver, person + 8)?;
         // The attribute view's vtable sits in read-only memory and its first slot points at code.
         let view_vtable = driver.read_ptr(record).ok()?;
         let function = driver.read_ptr(view_vtable).ok()?;
@@ -259,32 +308,33 @@ impl Pass<'_> {
         if !positions.iter().all(|p| (1..=20).contains(p)) || !feet.iter().all(|f| (1..=100).contains(f)) {
             return None;
         }
-        Some((record, id, uid, pooled_name(driver, record + 0x190)?))
+        Some(FoundPlayer { record, person, id, uid, name: pooled_name(driver, person + 0x50)? })
     }
 
     /// CA/PA (u16 at record + 0x11c / 0x11e), the 15 position ratings and the date of birth (u16 day of
     /// year at record + 0x1c8, u16 year at + 0x1ca; matched to real birth dates of Loba, Mbappe, Yamal,
     /// Haaland and Bellingham). Values out of range read as `None`.
-    fn player_profile(&self, record: usize, uid: u32) -> Option<PlayerProfile> {
+    fn player_profile(&self, record: usize, person: usize, uid: u32) -> Option<PlayerProfile> {
         let positions = self.driver.read::<[u8; 15]>(record + 8).ok()?;
         let ability = |offset: usize| {
             let value = self.driver.read::<u16>(record + offset).ok()?;
             (1..=200).contains(&value).then_some(value as u8)
         };
-        let born = self.driver.read::<[u16; 2]>(record + 0x1c8).ok().and_then(|[day, year]| GameDay::new(year, day));
+        let born = self.driver.read::<[u16; 2]>(person + 0x88).ok().and_then(|[day, year]| GameDay::new(year, day));
         Some(PlayerProfile { ca: ability(0x11c), pa: ability(0x11e), positions, generated: uid >= 2_000_000_000, born })
     }
 
     /// First nationality: NATION pointer at record + 0x1a8 (ACTUAL_PLAYER + 0x2f0). Only a pointer to a
     /// nation validated in the same pass counts. Matched to the game for four players (Mbappe, Yamal,
     /// Haaland, Salampessy).
-    fn player_nation(&self, record: usize, nations: &HashMap<usize, String>) -> Option<String> {
-        nations.get(&self.driver.read_ptr(record + 0x1a8).ok()?).cloned()
+    fn player_nation(&self, person: usize, nations: &HashMap<usize, String>) -> Option<String> {
+        nations.get(&self.driver.read_ptr(person + 0x68).ok()?).cloned()
     }
 
-    fn staff(&self, address: usize) -> Option<(i32, u32, String)> {
-        let second = address + (STAFF_SECOND_SUBOBJECT - STAFF_SUBOBJECT) as usize;
-        if !self.catalog.is(self.driver, second, CatalogKind::Staff, STAFF_SECOND_SUBOBJECT) {
+    /// Staff sub-object `S` (plain staff, or a hybrid's person sub-object); `second` is the expected type
+    /// of the sub-object at `S + 0x28`.
+    fn staff(&self, address: usize, second: NativeType) -> Option<(i32, u32, String)> {
+        if self.catalog.at(self.driver, address + 0x28) != Some(second) {
             return None;
         }
         let (id, uid) = identity(self.driver, address + 8, true)?;
@@ -307,13 +357,13 @@ impl Pass<'_> {
         clubs.get(&driver.read_ptr(team + 0x30).ok()?).cloned()
     }
 
-    /// Club name of a player's parent contract, only when every link validates.
-    fn player_club(&self, record: usize, teams: &HashMap<usize, ()>, clubs: &HashMap<usize, String>) -> Option<String> {
+    /// Club name of a player's parent contract (`person + 0xa8`), only when every link validates.
+    fn player_club(&self, person: usize, teams: &HashMap<usize, ()>, clubs: &HashMap<usize, String>) -> Option<String> {
         let driver = self.driver;
-        let contract = driver.read_ptr(record + 0x1e8).ok()?;
+        let contract = driver.read_ptr(person + 0xa8).ok()?;
         if contract == 0
             || !self.catalog.is(driver, contract, CatalogKind::FullContract, 0)
-            || driver.read_ptr(contract + 8).ok()? != record + 0x140
+            || driver.read_ptr(contract + 8).ok()? != person
         {
             return None;
         }
@@ -325,11 +375,18 @@ impl Pass<'_> {
 
 /// One read-only pass over writable private memory collecting every supported database record.
 pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[MemoryMapping]) -> Enumeration {
+    let scan: Vec<MemoryMapping> = maps.iter().filter(|m| m.is_rw_private()).cloned().collect();
+    enumerate_in(driver, catalog, maps, &scan)
+}
+
+/// Like `enumerate`, but candidates are collected only from `scan`; `maps` (all mappings) is still used
+/// for the read-only/executable checks on vtables.
+pub fn enumerate_in(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[MemoryMapping], scan: &[MemoryMapping]) -> Enumeration {
     let (Some(&low), Some(&high)) = (catalog.tables.keys().min(), catalog.tables.keys().max()) else {
         return Enumeration::default();
     };
     let mut candidates: Vec<(usize, NativeType)> = Vec::new();
-    for map in maps.iter().filter(|m| m.is_rw_private()) {
+    for map in scan {
         let mut start = map.start;
         while start < map.end {
             let len = (map.end - start).min(CHUNK);
@@ -387,8 +444,16 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
                 }
             }
             (CatalogKind::Staff, STAFF_SUBOBJECT) => {
-                if let Some((id, uid, name)) = pass.staff(address) {
+                let second = NativeType { kind: CatalogKind::Staff, subobject_offset: STAFF_SECOND_SUBOBJECT };
+                if let Some((id, uid, name)) = pass.staff(address, second) {
                     staff_found.push((address - STAFF_SUBOBJECT as usize, id, uid, name));
+                }
+            }
+            (CatalogKind::Hybrid, HYBRID_PERSON_SUBOBJECT) => {
+                // One hybrid is indexed twice: as a player (view R) and as staff (record S - 0x100).
+                if let Some(player) = pass.hybrid_player(address) {
+                    staff_found.push((address - STAFF_SUBOBJECT as usize, player.id, player.uid, player.name.clone()));
+                    players.push(player);
                 }
             }
             _ => {}
@@ -399,36 +464,98 @@ pub fn enumerate(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[Memo
         let nation = driver.read_ptr(address + nation_offset).ok().and_then(|p| nations.get(&p).cloned());
         entries.push(IndexEntry::new(kind, id, uid, name, nation, address));
     }
-    for (record, id, uid, name) in players {
-        let club = pass.player_club(record, &teams, &clubs);
-        let profile = pass.player_profile(record, uid);
-        let nation = pass.player_nation(record, &nations);
-        entries.push(IndexEntry::new(EntityKind::Player, id, uid, name, club, record).with_profile(profile).with_nation(nation));
+    for p in players {
+        let club = pass.player_club(p.person, &teams, &clubs);
+        let profile = pass.player_profile(p.record, p.person, p.uid);
+        let nation = pass.player_nation(p.person, &nations);
+        entries.push(IndexEntry::new(EntityKind::Player, p.id, p.uid, p.name, club, p.record).with_profile(profile).with_nation(nation));
     }
     for (record, id, uid, name) in staff_found {
         let club = pass.staff_club(record, &teams, &clubs);
         entries.push(IndexEntry::new(EntityKind::Staff, id, uid, name, club, record));
     }
     let (entries, duplicates_dropped) = drop_duplicate_ids(entries);
-    Enumeration { entries, duplicates_dropped, candidates: candidates.len() }
+    Enumeration { entries, duplicates_dropped, candidates: candidates.len(), list_scoped: false }
 }
 
 /// True while the record at `entry.address` still carries the identity the index stored. A reload
 /// frees or reuses the old objects, so a changed or unreadable identity marks the index stale.
 pub fn entry_still_valid(driver: &LinuxMemoryDriver, entry: &IndexEntry) -> bool {
-    let ids_at = match entry.kind {
-        EntityKind::Player => entry.address + 0x148, // address is the record R = P + 0x148
-        EntityKind::Staff => entry.address + STAFF_SUBOBJECT as usize + 8,
-        _ => entry.address + 8,
+    // A player's address is the view R; its ids sit in the person sub-object (plain or hybrid layout).
+    let ids_at: &[usize] = match entry.kind {
+        EntityKind::Player => &[entry.address + PLAYER_PERSON_FROM_RECORD + 8, entry.address + HYBRID_PERSON_FROM_RECORD + 8],
+        EntityKind::Staff => &[entry.address + STAFF_SUBOBJECT as usize + 8],
+        _ => &[entry.address + 8],
     };
-    driver.read::<[u32; 3]>(ids_at).is_ok_and(|ids| ids[0] as i32 == entry.id && ids[1] == entry.uid && ids[2] == entry.uid)
+    ids_at.iter().any(|&at| driver.read::<[u32; 3]>(at).is_ok_and(|ids| ids[0] as i32 == entry.id && ids[1] == entry.uid && ids[2] == entry.uid))
+}
+
+/// game_plugin.dll RVAs of the game's own `{begin, end, capacity}` entity-pointer vectors (PE timestamp
+/// 0x6a229e8a; lead from FM26 Studio, checked live on PID 98701): players (incl. hybrids), staff, clubs,
+/// the clubs missing from that list (1,586, meaning unknown) and teams (incl. national teams).
+const ENTITY_LISTS: [(&str, usize); 5] =
+    [("players", 0x4e4_9678), ("staff", 0x4e4_96c0), ("clubs", 0x4e4_9830), ("other clubs", 0x4e4_9848), ("teams", 0x4e4_9860)];
+/// Team fields that point at a COMP (+0x50 for 96% of sampled teams); they locate the competition pool.
+const TEAM_COMPETITION_LINKS: [usize; 2] = [0x50, 0x60];
+const CLUB_NATION_LINK: usize = 0xd8;
+const MAX_LIST_ENTRIES: usize = 2_000_000;
+
+/// Entries of a `{begin, end, capacity}` pointer vector, or `None` when its shape is not sane.
+fn read_pointer_vector(driver: &LinuxMemoryDriver, at: usize) -> Option<Vec<usize>> {
+    let [begin, end, cap] = driver.read::<[usize; 3]>(at).ok()?;
+    let len = end.checked_sub(begin)?;
+    if begin <= 0x10000 || cap < end || len == 0 || len % 8 != 0 || len / 8 > MAX_LIST_ENTRIES {
+        return None;
+    }
+    let mut raw = vec![0u8; len];
+    (driver.read_bytes(begin, &mut raw).ok()? == len).then(|| raw.chunks_exact(8).map(|c| usize::from_le_bytes(c.try_into().unwrap())).collect())
+}
+
+/// Writable private mappings holding the game's entity lists' objects plus the nation and competition
+/// pools they link to. `None` (full scan) unless the image is the known build and every list reads sane.
+/// The mappings only bound the scan: each candidate still passes the full vtable and identity checks.
+pub fn list_mappings(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, maps: &[MemoryMapping]) -> Option<Vec<MemoryMapping>> {
+    let (base, timestamp) = catalog.image?;
+    if timestamp != LIST_PE_TIMESTAMP {
+        return None;
+    }
+    let lists: Vec<Vec<usize>> = ENTITY_LISTS.iter().map(|(_, rva)| read_pointer_vector(driver, base + rva)).collect::<Option<_>>()?;
+    let writable: Vec<MemoryMapping> = maps.iter().filter(|m| m.is_rw_private()).cloned().collect();
+    let regions = Regions::new(&writable);
+    let mut keep: Vec<usize> = Vec::new();
+    let mut add = |address: usize| {
+        if let Some(m) = regions.of(address) {
+            if !keep.contains(&m.start) {
+                keep.push(m.start);
+            }
+        }
+    };
+    lists.iter().flatten().for_each(|&p| add(p));
+    for &club in lists[2].iter().chain(&lists[3]) {
+        if let Ok(nation) = driver.read_ptr(club + CLUB_NATION_LINK) {
+            add(nation);
+        }
+    }
+    for &team in &lists[4] {
+        for link in TEAM_COMPETITION_LINKS {
+            if let Ok(comp) = driver.read_ptr(team + link) {
+                if catalog.is(driver, comp, CatalogKind::Competition, 0) {
+                    add(comp);
+                }
+            }
+        }
+    }
+    Some(writable.into_iter().filter(|m| keep.contains(&m.start)).collect())
 }
 
 /// Resolves the catalog and enumerates the attached process. Blocking: call from a worker thread.
 pub fn enumerate_process(driver: &LinuxMemoryDriver) -> Result<Enumeration> {
     let maps = parse_process_maps(driver.pid())?;
     let catalog = RttiCatalog::discover(driver, &maps)?;
-    Ok(enumerate(driver, &catalog, &maps))
+    Ok(match list_mappings(driver, &catalog, &maps) {
+        Some(scan) => Enumeration { list_scoped: true, ..enumerate_in(driver, &catalog, &maps, &scan) },
+        None => enumerate(driver, &catalog, &maps),
+    })
 }
 
 #[cfg(test)]
@@ -448,6 +575,9 @@ mod tests {
     const NATION_VT: usize = 0x5a5a_0000_1030;
     const COMP_VT: usize = 0x5a5a_0000_1038;
     const CONTRACT_VT: usize = 0x5a5a_0000_1040;
+    const HYBRID_VT: usize = 0x5a5a_0000_1048;
+    const HYBRID_PERSON_VT: usize = 0x5a5a_0000_1050;
+    const HYBRID_SECOND_VT: usize = 0x5a5a_0000_1058;
 
     fn catalog() -> RttiCatalog {
         let t = |kind, subobject_offset| NativeType { kind, subobject_offset };
@@ -461,6 +591,9 @@ mod tests {
             (NATION_VT, t(CatalogKind::Nation, 0)),
             (COMP_VT, t(CatalogKind::Competition, 0)),
             (CONTRACT_VT, t(CatalogKind::FullContract, 0)),
+            (HYBRID_VT, t(CatalogKind::Hybrid, 0)),
+            (HYBRID_PERSON_VT, t(CatalogKind::Hybrid, HYBRID_PERSON_SUBOBJECT)),
+            (HYBRID_SECOND_VT, t(CatalogKind::Hybrid, HYBRID_SECOND_SUBOBJECT)),
         ]))
     }
 
@@ -601,6 +734,70 @@ mod tests {
         assert_eq!((staff.id, staff.uid, staff.name.as_str(), staff.address), (799, 107740, "Igor Tolić", a.at(0x3000)));
         assert_eq!(staff.detail.as_deref(), Some("ASEC Mimosas"), "staff club comes from the validated contract chain");
         assert_eq!(mine.len(), 5, "rejected candidates must not be indexed: {mine:?}");
+    }
+
+    /// Hybrid object `H` at `h`: player view at H + 0x148, person sub-object at H + 0x380.
+    fn hybrid(a: &mut Arena, h: usize, index: u32, uid: u32, second_ok: bool) {
+        let r = h + PLAYER_RECORD;
+        let s = h + HYBRID_PERSON_SUBOBJECT as usize;
+        a.ptr(h, HYBRID_VT);
+        a.ptr(r, VIEW_VTABLE.as_ptr() as usize);
+        a.put(r + 8, &[12u8; 15]);
+        a.put(r + 0x2f, &[55, 100]);
+        a.ptr(s, HYBRID_PERSON_VT);
+        a.ptr(s + 0x28, if second_ok { HYBRID_SECOND_VT } else { STAFF_SECOND_VT });
+        a.ids(s + 8, index, uid);
+        a.pooled(s + 0x50, h + 0x600, h + 0x700, "Paul");
+        a.pooled(s + 0x58, h + 0x608, h + 0x800, "Ifill");
+        a.put(s + 0x88, &[0x25u8, 0x01, 0xbb, 0x07]); // day 293, year 1979
+    }
+
+    #[test]
+    fn hybrid_people_are_indexed_as_player_and_staff() {
+        let mut a = Arena::new();
+        hybrid(&mut a, 0x8000, 920, 109160, true);
+        hybrid(&mut a, 0xa000, 921, 109161, false);
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let maps = parse_process_maps(driver.pid()).unwrap();
+        let found = enumerate(&driver, &catalog(), &maps);
+        let mine: Vec<&IndexEntry> = found.entries.iter().filter(|e| e.address >= a.at(0) && e.address < a.at(0x20000)).collect();
+        let player = mine.iter().find(|e| e.kind == EntityKind::Player).expect("hybrid player");
+        assert_eq!((player.id, player.uid, player.name.as_str(), player.address), (920, 109160, "Paul Ifill", a.at(0x8000 + PLAYER_RECORD)));
+        assert_eq!(player.profile.unwrap().born, GameDay::new(1979, 293), "birth date at person + 0x88");
+        let staff = mine.iter().find(|e| e.kind == EntityKind::Staff).expect("hybrid staff");
+        assert_eq!((staff.id, staff.address), (920, a.at(0x8000 + 0x280)), "staff record is the person sub-object - 0x100");
+        assert_eq!(mine.len(), 2, "a hybrid without its second sub-object vtable is rejected: {mine:?}");
+        assert!(entry_still_valid(&driver, player) && entry_still_valid(&driver, staff));
+    }
+
+    #[test]
+    fn pointer_vectors_must_have_a_sane_shape() {
+        let mut a = Arena::new();
+        let (p1, p2) = (a.at(0x100), a.at(0x108));
+        a.ptr(0x100, 0x1111_0000);
+        a.ptr(0x108, 0x2222_0000);
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        a.ptr(0x200, p1);
+        a.ptr(0x208, p1 + 16);
+        a.ptr(0x210, p1 + 16);
+        assert_eq!(read_pointer_vector(&driver, a.at(0x200)), Some(vec![0x1111_0000, 0x2222_0000]));
+        a.ptr(0x210, p1 + 8); // capacity below end
+        assert_eq!(read_pointer_vector(&driver, a.at(0x200)), None);
+        a.ptr(0x208, p2 + 4);
+        a.ptr(0x210, p2 + 8); // length not a multiple of 8
+        assert_eq!(read_pointer_vector(&driver, a.at(0x200)), None);
+        a.ptr(0x208, p1);
+        assert_eq!(read_pointer_vector(&driver, a.at(0x200)), None, "an empty list is not trusted");
+    }
+
+    #[test]
+    fn list_scope_needs_the_known_build() {
+        let driver = LinuxMemoryDriver::new(std::process::id() as i32);
+        let maps = parse_process_maps(driver.pid()).unwrap();
+        let mut catalog = catalog();
+        assert!(list_mappings(&driver, &catalog, &maps).is_none(), "no image: full scan");
+        catalog.image = Some((0x1000_0000, LIST_PE_TIMESTAMP + 1));
+        assert!(list_mappings(&driver, &catalog, &maps).is_none(), "other build: full scan");
     }
 
     #[test]

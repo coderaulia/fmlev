@@ -25,6 +25,12 @@ use crate::native_transfer::{apply_transaction, NativeEdit};
 
 pub const STAFF_VTABLE_RVA: usize = 0x456_5018;
 pub const STAFF_SECOND_VTABLE_RVA: usize = 0x456_4fc8;
+/// A person who is both player and staff (`ACTUAL_PLAYER_AND_NON_PLAYER`, object `H`) carries the same
+/// staff record shape at `R = H + 0x280`, with these sub-object vtables at `R + 0x100` / `R + 0x128`
+/// (COL offsets 0x380 / 0x3a8). Identity, names, attributes and year of birth sit at the staff offsets
+/// (checked live on PID 98701 for indices 920 and 1038); hybrid staff writes are refused until proven.
+pub const HYBRID_STAFF_VTABLE_RVA: usize = 0x478_5848;
+pub const HYBRID_STAFF_SECOND_VTABLE_RVA: usize = 0x478_57f8;
 pub const SUBOBJECT_OFFSET: usize = 0x100;
 pub const SECOND_SUBOBJECT_OFFSET: usize = 0x128;
 const IDENTITY_OFFSET: usize = 0x108;
@@ -141,24 +147,30 @@ fn read_staff_name(driver: &LinuxMemoryDriver, record: usize) -> Option<String> 
     (!parts.is_empty()).then(|| parts.join(" "))
 }
 
-/// Expected vtables: the game_plugin.dll ones, or `None` in a test process without the module.
-fn expected_vtables(driver: &LinuxMemoryDriver) -> Result<Option<(usize, usize)>> {
+/// Accepted `(sub-object, second sub-object)` vtable pairs: plain staff first, then player/staff hybrids.
+type VtablePairs = [(usize, usize); 2];
+
+fn module_base(driver: &LinuxMemoryDriver) -> Result<Option<usize>> {
     let maps = parse_process_maps(driver.pid())?;
-    Ok(maps
-        .iter()
-        .filter(|m| m.pathname.ends_with("game_plugin.dll"))
-        .map(|m| m.start)
-        .min()
-        .map(|base| (base + STAFF_VTABLE_RVA, base + STAFF_SECOND_VTABLE_RVA)))
+    Ok(maps.iter().filter(|m| m.pathname.ends_with("game_plugin.dll")).map(|m| m.start).min())
+}
+
+/// Expected vtables: the game_plugin.dll ones, or `None` in a test process without the module.
+fn expected_vtables(driver: &LinuxMemoryDriver) -> Result<Option<VtablePairs>> {
+    Ok(module_base(driver)?.map(|base| {
+        [
+            (base + STAFF_VTABLE_RVA, base + STAFF_SECOND_VTABLE_RVA),
+            (base + HYBRID_STAFF_VTABLE_RVA, base + HYBRID_STAFF_SECOND_VTABLE_RVA),
+        ]
+    }))
 }
 
 impl NativeStaffRecord {
     /// Validates a candidate sub-object address (`R + 0x100`) and returns the record.
-    fn at_subobject(driver: &LinuxMemoryDriver, sub: usize, vtables: (usize, usize)) -> Option<Self> {
+    fn at_subobject(driver: &LinuxMemoryDriver, sub: usize, vtables: &VtablePairs) -> Option<Self> {
         let record = sub.checked_sub(SUBOBJECT_OFFSET)?;
-        if driver.read_ptr(sub).ok()? != vtables.0
-            || driver.read_ptr(record + SECOND_SUBOBJECT_OFFSET).ok()? != vtables.1
-        {
+        let pair = (driver.read_ptr(sub).ok()?, driver.read_ptr(record + SECOND_SUBOBJECT_OFFSET).ok()?);
+        if !vtables.contains(&pair) {
             return None;
         }
         let index = driver.read::<i32>(record + IDENTITY_OFFSET).ok()?;
@@ -171,9 +183,9 @@ impl NativeStaffRecord {
     }
 
     /// Scans writable private memory for staff sub-objects and keeps those `keep` accepts.
-    fn scan(driver: &LinuxMemoryDriver, vtables: (usize, usize), mut keep: impl FnMut(&Self) -> bool) -> Result<Vec<Self>> {
+    fn scan(driver: &LinuxMemoryDriver, vtables: VtablePairs, mut keep: impl FnMut(&Self) -> bool) -> Result<Vec<Self>> {
         let maps = parse_process_maps(driver.pid())?;
-        let needle = (vtables.0 as u64).to_le_bytes();
+        let needles = vtables.map(|(sub, _)| (sub as u64).to_le_bytes());
         let mut found = Vec::new();
         for map in maps.iter().filter(|m| m.is_rw_private()) {
             let mut start = map.start;
@@ -182,10 +194,10 @@ impl NativeStaffRecord {
                 let mut buf = vec![0u8; len];
                 if driver.read_bytes(start, &mut buf).is_ok() {
                     for i in (0..len.saturating_sub(8)).step_by(8) {
-                        if buf[i..i + 8] != needle {
+                        if !needles.iter().any(|n| buf[i..i + 8] == n[..]) {
                             continue;
                         }
-                        if let Some(staff) = Self::at_subobject(driver, start + i, vtables) {
+                        if let Some(staff) = Self::at_subobject(driver, start + i, &vtables) {
                             if keep(&staff) {
                                 found.push(staff);
                             }
@@ -198,7 +210,7 @@ impl NativeStaffRecord {
         Ok(found)
     }
 
-    fn live_vtables(driver: &LinuxMemoryDriver) -> Result<(usize, usize)> {
+    fn live_vtables(driver: &LinuxMemoryDriver) -> Result<VtablePairs> {
         expected_vtables(driver)?.ok_or_else(|| invalid("game_plugin.dll is not mapped; attach to FM26 first"))
     }
 
@@ -259,6 +271,20 @@ impl NativeStaffRecord {
         if ok { Ok(()) } else { Err(invalid("Staff record identity changed; search again")) }
     }
 
+    /// True for a player/staff hybrid record (its sub-object carries the hybrid vtable).
+    pub fn is_hybrid(&self, driver: &LinuxMemoryDriver) -> Result<bool> {
+        let Some(base) = module_base(driver)? else { return Ok(false) };
+        Ok(driver.read_ptr(self.record + SUBOBJECT_OFFSET)? == base + HYBRID_STAFF_VTABLE_RVA)
+    }
+
+    /// Hybrid records are read with the staff layout, but no write to one has been checked in game.
+    fn refuse_hybrid_write(&self, driver: &LinuxMemoryDriver) -> Result<()> {
+        if self.is_hybrid(driver)? {
+            return Err(invalid("This person is both a player and staff; staff writes to such records are not verified yet"));
+        }
+        Ok(())
+    }
+
     pub fn read_attributes(&self, driver: &LinuxMemoryDriver) -> Result<Vec<StaffAttribute>> {
         self.validate(driver)?;
         Ok(STAFF_ATTRIBUTES
@@ -281,6 +307,7 @@ impl NativeStaffRecord {
     /// requested value are left untouched (their exact native byte is kept).
     pub fn write_attributes(&self, driver: &LinuxMemoryDriver, changes: &[(String, u8)]) -> Result<Vec<StaffAttributeChange>> {
         self.validate(driver)?;
+        self.refuse_hybrid_write(driver)?;
         if changes.is_empty() {
             return Err(invalid("No staff attribute changes given"));
         }
@@ -334,6 +361,7 @@ impl NativeStaffRecord {
     /// ones are skipped.
     pub fn write_contract(&self, driver: &LinuxMemoryDriver, weekly_wage: Option<u32>, expiry_year: Option<u16>) -> Result<Vec<StaffContractChange>> {
         self.validate(driver)?;
+        self.refuse_hybrid_write(driver)?;
         if weekly_wage.is_none() && expiry_year.is_none() {
             return Err(invalid("No staff contract change given"));
         }
@@ -656,9 +684,12 @@ mod tests {
     // Read-only statics stand in for the DLL vtables in a test process.
     static VT1: u64 = 0x1111;
     static VT2: u64 = 0x2222;
+    static VT3: u64 = 0x3333;
+    static VT4: u64 = 0x4444;
 
-    fn vtables() -> (usize, usize) {
-        (std::ptr::addr_of!(VT1) as usize, std::ptr::addr_of!(VT2) as usize)
+    fn vtables() -> VtablePairs {
+        let a = |v: &'static u64| v as *const u64 as usize;
+        [(a(&VT1), a(&VT2)), (a(&VT3), a(&VT4))]
     }
 
     struct Fake {
@@ -687,8 +718,8 @@ mod tests {
         let strings = vec![text(first), text(last)];
         let refs = Box::new([strings[0].as_ptr() as usize, strings[1].as_ptr() as usize]);
         let mut record = vec![0u8; 0x240];
-        put(&mut record, SUBOBJECT_OFFSET, vtables().0);
-        put(&mut record, SECOND_SUBOBJECT_OFFSET, vtables().1);
+        put(&mut record, SUBOBJECT_OFFSET, vtables()[0].0);
+        put(&mut record, SECOND_SUBOBJECT_OFFSET, vtables()[0].1);
         put(&mut record, IDENTITY_OFFSET, index);
         put(&mut record, IDENTITY_OFFSET + 4, uid);
         put(&mut record, IDENTITY_OFFSET + 8, uid);
@@ -705,7 +736,18 @@ mod tests {
     }
 
     fn read(f: &Fake) -> Option<NativeStaffRecord> {
-        NativeStaffRecord::at_subobject(&driver(), f.sub(), vtables())
+        NativeStaffRecord::at_subobject(&driver(), f.sub(), &vtables())
+    }
+
+    #[test]
+    fn hybrid_player_staff_pair_is_accepted_but_mixed_pairs_are_not() {
+        let mut hybrid = fake(920, 109160, "Paul", "Ifill");
+        put(&mut hybrid.record, SUBOBJECT_OFFSET, vtables()[1].0);
+        put(&mut hybrid.record, SECOND_SUBOBJECT_OFFSET, vtables()[1].1);
+        assert_eq!(read(&hybrid).map(|s| s.index), Some(920));
+        let mut mixed = fake(921, 109161, "Mixed", "Pair");
+        put(&mut mixed.record, SECOND_SUBOBJECT_OFFSET, vtables()[1].1);
+        assert!(read(&mixed).is_none());
     }
 
     #[test]

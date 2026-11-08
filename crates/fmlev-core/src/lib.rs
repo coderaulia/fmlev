@@ -6,6 +6,8 @@ pub mod live_write;
 pub mod native_catalog;
 pub mod native_club;
 pub mod native_club_finance;
+pub mod native_club_loans;
+pub mod native_club_sponsors;
 pub mod native_competition;
 pub mod native_nation;
 pub mod native_nation_rules;

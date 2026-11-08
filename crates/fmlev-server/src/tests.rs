@@ -1154,7 +1154,7 @@ async fn homegrown_routes_gate_validate_and_need_a_game() {
     }
     let unknown = app.clone().oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_id":9,"surprise":1,"experimental":true}"#)).await.unwrap();
     assert!(unknown.status().is_client_error());
-    // A valid opt-in still returns 501 until the in-game write is verified.
-    let unavailable = app.oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_current":true,"nation_id":3,"experimental":true}"#)).await.unwrap();
-    assert_eq!(unavailable.status(), StatusCode::NOT_IMPLEMENTED);
+    // A valid opt-in still needs an attached game.
+    let detached = app.oneshot(json_post("/api/player/homegrown/set", r#"{"player_id":5,"club_current":true,"nation_id":3,"experimental":true}"#)).await.unwrap();
+    assert_eq!(detached.status(), StatusCode::BAD_REQUEST);
 }

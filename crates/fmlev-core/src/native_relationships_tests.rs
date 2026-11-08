@@ -318,4 +318,9 @@ fn nationality_and_current_club_links_are_rtti_checked() {
     fx.p[(0x148 + 0x1a8) / 8] = fx.club() as u64;
     assert_eq!(first_nationality(&fx.driver, &catalog(), fx.record()), None);
     assert_eq!(current_club(&fx.driver, &catalog(), fx.record()), None);
+    let nation_link = fx.club() + crate::native_catalog::CLUB_NATION_LINK;
+    fx.driver.write::<usize>(nation_link, &fx.nation()).unwrap();
+    assert_eq!(club_nation(&fx.driver, &catalog(), fx.club()), Some(fx.nation()));
+    fx.driver.write::<usize>(nation_link, &fx.club()).unwrap();
+    assert_eq!(club_nation(&fx.driver, &catalog(), fx.club()), None);
 }

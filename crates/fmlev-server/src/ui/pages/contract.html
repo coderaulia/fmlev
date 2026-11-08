@@ -125,7 +125,7 @@
           <span class="pill pill-warn">Experimental</span>
         </div>
         <div class="panel-body">
-          <p class="hint">Shows the clubs and nations the game records as "trained at" for this player. Editing is unavailable pending an in-game check after a day tick and save/reload.</p>
+          <p class="hint">Shows the clubs and nations the game records as "trained at" for this player. Club and nation edits survived a day tick and save/reload in a throwaway save.</p>
           <p><b>Trained at club:</b> <span id="homegrown-clubs">Unavailable</span></p>
           <p><b>Trained at nation:</b> <span id="homegrown-nations">Unavailable</span></p>
           <p id="homegrown-note" class="unverified-note"></p>
@@ -137,7 +137,7 @@
             <button id="btn-homegrown-club" disabled class="btn" onclick="trainedAtClub()">Trained at Club (HGC)</button>
             <button id="btn-homegrown-nation" disabled class="btn" onclick="trainedAtNation()">Trained at Nation (HGN)</button>
           </div>
-          <p class="unverified-note">Adds the player's current club / first nationality as a record. Existing records are never changed. When the player's list is full, a new list is allocated inside the game process and swapped in; the game may later free or reuse it, which can crash the game. Buttons stay disabled until the club or nation can be resolved.</p>
+          <p class="unverified-note">Adds the player's current club or the nation of that club as a training record. Existing records are never changed. When the player's list is full, a new list is allocated inside the game process and swapped in; the game may later free or reuse it, which can crash the game. Buttons stay disabled until the club or nation can be resolved.</p>
         </div>
       </div>
     </section>

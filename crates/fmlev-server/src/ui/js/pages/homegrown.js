@@ -15,7 +15,7 @@
         set("homegrown-clubs", homegrownTargetText(data.clubs, "None recorded"));
         set("homegrown-nations", homegrownTargetText(data.nations, "None recorded"));
         const extra = data.unresolved_targets ? ` ${data.unresolved_targets} record(s) point at an unrecognised object and are not shown.` : "";
-        set("homegrown-note", `Current club: ${data.current_club?.name || "unavailable"}. First nationality: ${data.first_nationality?.name || "unavailable"}. Free relationship slots: ${data.spare_slots}.${extra}`);
+        set("homegrown-note", `Current club: ${data.current_club?.name || "unavailable"}. Club nation: ${data.club_nation?.name || "unavailable"}. Free relationship slots: ${data.spare_slots}.${extra}`);
       }
       updateHomegrownButtons();
     }
@@ -26,10 +26,10 @@
       const ready = editingAvailable && !!state.connected && !!state.activePlayer?.id && homegrownEditEnabled() && !homegrownState.busy;
       const why = !editingAvailable ? "Homegrown edits are unverified in FM26" : !state.connected ? "Attach to a game first" : !state.activePlayer?.id ? "Open a player first" : !homegrownEditEnabled() ? "Tick the experimental checkbox first" : "Busy";
       const data = homegrownState.data;
-      for (const [id, key, label] of [["btn-homegrown-club", "current_club", "club"], ["btn-homegrown-nation", "first_nationality", "nation"]]) {
+      for (const [id, key, label] of [["btn-homegrown-club", "current_club", "club"], ["btn-homegrown-nation", "club_nation", "club nation"]]) {
         const el = document.getElementById(id);
         if (!el) continue;
-        const resolvable = !!data?.[key];
+        const resolvable = key === "club_nation" ? data?.[key]?.id > 0 : !!data?.[key];
         el.disabled = !ready || !resolvable;
         el.title = !ready ? `Unavailable: ${why}` : !resolvable ? `Unavailable: the player's ${label} could not be resolved` : "Asks for confirmation";
       }
@@ -38,12 +38,17 @@
       const id = state.activePlayer?.id;
       if (!state.connected || !id) { homegrownState.data = null; homegrownState.loadedFor = null; renderHomegrown(); return null; }
       homegrownState.loadedFor = id; // one attempt per player: a failed read is not retried on every poll
+      homegrownState.data = null;
+      renderHomegrown();
       try {
         const res = await fetch("/api/player/homegrown", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ player_id: id }) });
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Homegrown read failed");
+        if (!state.connected || state.activePlayer?.id !== id) return null;
         homegrownState.data = data;
-      } catch (error) { homegrownState.data = null; }
+      } catch (error) {
+        if (!state.connected || state.activePlayer?.id !== id) return null;
+      }
       renderHomegrown();
       return homegrownState.data;
     }
@@ -53,19 +58,22 @@
       if (homegrownState.data?.editing_available !== true) { showToast("Homegrown editing is unavailable", "warning"); return false; }
       if (!homegrownEditEnabled()) { showToast("Tick the experimental checkbox first", "warning"); return false; }
       const club = which === "club";
-      const target = club ? homegrownState.data?.current_club : homegrownState.data?.first_nationality;
-      if (!target) { showToast(`The player's ${club ? "current club" : "first nationality"} could not be resolved`, "warning"); return false; }
+      const target = club ? homegrownState.data?.current_club : homegrownState.data?.club_nation;
+      if (!target || (!club && !(target.id > 0))) { showToast(`The player's ${club ? "current club" : "club nation"} could not be resolved`, "warning"); return false; }
       const text = `Mark ${player.name || "this player"} as trained at ${club ? "club" : "nation"} ${target.name}? ` +
         "If the player's relationship list is full this ALLOCATES MEMORY inside the game and swaps the list pointers; the game may crash later. Throwaway save only, keep a backup.";
       if (typeof confirm === "function" && !confirm(text)) return false;
       homegrownState.busy = true; updateHomegrownButtons();
       try {
         const body = { player_id: player.id, experimental: true };
-        if (club) body.club_current = true; else body.nation_current = true;
+        if (club) body.club_current = true; else body.nation_id = target.id;
         const res = await fetch("/api/player/homegrown/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const data = await readJson(res);
         if (!res.ok) throw new Error(data.message || "Homegrown edit failed");
-        homegrownState.data = data; homegrownState.loadedFor = player.id;
+        if (state.activePlayer?.id === player.id && state.connected) {
+          homegrownState.data = data;
+          homegrownState.loadedFor = player.id;
+        }
         showToast(data.message || "Homegrown status written.", "success");
         return true;
       } catch (error) {

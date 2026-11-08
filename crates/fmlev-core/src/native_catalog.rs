@@ -497,7 +497,7 @@ const ENTITY_LISTS: [(&str, usize); 5] =
     [("players", 0x4e4_9678), ("staff", 0x4e4_96c0), ("clubs", 0x4e4_9830), ("other clubs", 0x4e4_9848), ("teams", 0x4e4_9860)];
 /// Team fields that point at a COMP (+0x50 for 96% of sampled teams); they locate the competition pool.
 const TEAM_COMPETITION_LINKS: [usize; 2] = [0x50, 0x60];
-const CLUB_NATION_LINK: usize = 0xd8;
+pub(crate) const CLUB_NATION_LINK: usize = 0xd8;
 const MAX_LIST_ENTRIES: usize = 2_000_000;
 
 /// Entries of a `{begin, end, capacity}` pointer vector, or `None` when its shape is not sane.

@@ -276,6 +276,15 @@ pub fn current_club(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, record: u
     target_is(driver, catalog, HomegrownKind::Club, club).then_some(club)
 }
 
+/// Training nation for a resolved parent club. Ignore absent or incorrectly typed links.
+pub fn club_nation(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, club: usize) -> Option<usize> {
+    if !target_is(driver, catalog, HomegrownKind::Club, club) {
+        return None;
+    }
+    let nation = driver.read_ptr(club + crate::native_catalog::CLUB_NATION_LINK).ok()?;
+    target_is(driver, catalog, HomegrownKind::Nation, nation).then_some(nation)
+}
+
 /// First nationality NATION object (`record + 0x1a8`), RTTI-validated.
 pub fn first_nationality(driver: &LinuxMemoryDriver, catalog: &RttiCatalog, record: usize) -> Option<usize> {
     let nation = driver.read_ptr(record + NATIONALITY_OFFSET).ok()?;

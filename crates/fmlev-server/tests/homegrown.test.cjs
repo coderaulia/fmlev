@@ -9,7 +9,7 @@ const IDS = ['homegrown-clubs', 'homegrown-nations', 'homegrown-note', 'homegrow
 const READ = {
   editing_available: true,
   clubs: [{ id: 369, name: 'Manchester City' }], nations: [{ id: 139, name: 'England' }], unresolved_targets: 0, spare_slots: 0,
-  current_club: { id: 369, name: 'Manchester City' }, first_nationality: { id: 139, name: 'England' },
+  current_club: { id: 369, name: 'Manchester City' }, first_nationality: { id: 139, name: 'England' }, club_nation: { id: 170, name: 'Spain' },
 };
 
 function app(fetch, { confirmAnswer = true } = {}) {
@@ -49,7 +49,7 @@ test('a failed read shows Unavailable and keeps the buttons disabled, with one a
   assert.equal(ui.run('homegrownState.loadedFor'), 10173);
 });
 
-test('HGC and HGN send the explicit current flags with experimental: true after confirmation', async () => {
+test('HGC sends the current club flag and HGN sends the club nation ID', async () => {
   const ui = app(async url => (url === '/api/player/homegrown/set' ? ok({ ...READ, message: 'written' }) : ok(READ)));
   await ui.run('refreshHomegrown()');
   ui.els['homegrown-experimental'].checked = true;
@@ -57,7 +57,7 @@ test('HGC and HGN send the explicit current flags with experimental: true after 
   const call = ui.requests.find(r => r.url === '/api/player/homegrown/set');
   assert.deepEqual(call.body, { player_id: 10173, experimental: true, club_current: true });
   assert.equal(await ui.run('trainedAtNation()'), true);
-  assert.deepEqual(ui.requests.filter(r => r.url === '/api/player/homegrown/set').at(-1).body, { player_id: 10173, experimental: true, nation_current: true });
+  assert.deepEqual(ui.requests.filter(r => r.url === '/api/player/homegrown/set').at(-1).body, { player_id: 10173, experimental: true, nation_id: 170 });
 });
 
 test('declining, no checkbox, unresolved target or detached game send nothing', async () => {

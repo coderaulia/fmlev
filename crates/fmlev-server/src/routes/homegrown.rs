@@ -1,5 +1,5 @@
 //! "Trained at club / nation" (homegrown) status of a player, from the relationship records.
-//! Read: `POST /api/player/homegrown`. Write: `POST /api/player/homegrown/set` (unavailable pending live verification).
+//! Read: `POST /api/player/homegrown`. Experimental write: `POST /api/player/homegrown/set`.
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Deserialize;
@@ -13,10 +13,6 @@ use fmlev_mem::{parse_process_maps, LinuxMemoryDriver};
 
 use super::{api_error, core_status};
 use crate::state::ServerState;
-
-// Keep the write unavailable until FM26 confirms the result after a day tick and save/reload.
-const HOMEGROWN_EDIT_VERIFIED: bool = false;
-const HOMEGROWN_EDIT_UNAVAILABLE: &str = "Homegrown editing is unavailable pending an in-game check after a day tick and save/reload.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -66,15 +62,17 @@ fn summary_json(
     summary: &rel::HomegrownSummary,
 ) -> serde_json::Value {
     let describe = |kind: rel::HomegrownKind, address: Option<usize>| address.map(|a| target_json(&rel::describe_target(driver, kind, a)));
+    let club = rel::current_club(driver, catalog, record);
     serde_json::json!({
         "status": "success",
-        "editing_available": HOMEGROWN_EDIT_VERIFIED,
+        "editing_available": true,
         "clubs": summary.clubs.iter().map(target_json).collect::<Vec<_>>(),
         "nations": summary.nations.iter().map(target_json).collect::<Vec<_>>(),
         "unresolved_targets": summary.unresolved_targets,
         "relation_count": summary.relation_count,
         "spare_slots": summary.spare_slots,
-        "current_club": describe(rel::HomegrownKind::Club, rel::current_club(driver, catalog, record)),
+        "current_club": describe(rel::HomegrownKind::Club, club),
+        "club_nation": describe(rel::HomegrownKind::Nation, club.and_then(|club| rel::club_nation(driver, catalog, club))),
         "first_nationality": describe(rel::HomegrownKind::Nation, rel::first_nationality(driver, catalog, record)),
         "layout_note": "Relationship records at person+0x78 (category 1/72 = trained at club, 8/70 = trained at nation); layout read live on two players, heuristic.",
     })
@@ -104,7 +102,7 @@ pub async fn set_homegrown(State(state): State<ServerState>, Json(req): Json<Hom
     if !req.experimental {
         return api_error(
             StatusCode::NOT_IMPLEMENTED,
-            HOMEGROWN_EDIT_UNAVAILABLE,
+            "Homegrown edits require experimental: true. Use a throwaway save.",
         );
     }
     let club_wanted = req.club_id.is_some() || req.club_current;
@@ -118,10 +116,8 @@ pub async fn set_homegrown(State(state): State<ServerState>, Json(req): Json<Hom
     if req.club_id.is_some_and(|id| id <= 0) || req.nation_id.is_some_and(|id| id <= 0) {
         return api_error(StatusCode::BAD_REQUEST, "club_id and nation_id must be positive native ids");
     }
-    if !HOMEGROWN_EDIT_VERIFIED {
-        return api_error(StatusCode::NOT_IMPLEMENTED, HOMEGROWN_EDIT_UNAVAILABLE);
-    }
-    let Some(driver) = attached_driver(&state).await else {
+    let writes = state.inner.write().await;
+    let Some(driver) = writes.context_mgr.session.as_ref().map(|session| session.driver) else {
         return api_error(StatusCode::BAD_REQUEST, "Attach to FM26 first");
     };
     let result = tokio::task::spawn_blocking(move || {
@@ -146,6 +142,7 @@ pub async fn set_homegrown(State(state): State<ServerState>, Json(req): Json<Hom
         Ok::<_, fmlev_core::CoreError>((report, summary_json(&driver, &catalog, record, &summary)))
     })
     .await;
+    drop(writes);
     match result {
         Ok(Ok((report, mut body))) => {
             body["report"] = serde_json::to_value(&report).unwrap_or_default();

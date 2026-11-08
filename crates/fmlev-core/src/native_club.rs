@@ -133,10 +133,15 @@ impl NativeClubRecord {
                             continue;
                         }
                         let club = start + i - 8;
+                        if !driver.read_ptr(club).is_ok_and(&readonly) {
+                            continue;
+                        }
                         let Ok(finance) = driver.read_ptr(club + FINANCE_OFFSET) else { continue };
 
                         let details = driver.read_ptr(club + DETAILS_OFFSET).ok().filter(|&p| {
-                            p > 0x10000 && driver.read::<u16>(p + 0xd0).map_or(false, |y| (1800..=2200).contains(&y))
+                            p > 0x10000 && p.checked_add(0xd0)
+                                .and_then(|address| driver.read::<u16>(address).ok())
+                                .is_some_and(|year| (1800..=2200).contains(&year))
                         });
 
                         let first_team = (|| -> Option<usize> {
@@ -146,7 +151,7 @@ impl NativeClubRecord {
                                 return None;
                             }
                             let team = driver.read_ptr(begin).ok()?;
-                            if team > 0x10000 && driver.read_ptr(team + 0x30).ok() == Some(club) {
+                            if team > 0x10000 && driver.read_ptr(team.checked_add(0x30)?).ok() == Some(club) {
                                 Some(team)
                             } else {
                                 None
@@ -167,7 +172,7 @@ impl NativeClubRecord {
                             stadium,
                             club_id,
                         };
-                        if driver.read_ptr(club).is_ok_and(&readonly) && candidate.validate(driver).is_ok() {
+                        if candidate.validate(driver).is_ok() {
                             found.push(candidate);
                         }
                     }
@@ -186,7 +191,7 @@ impl NativeClubRecord {
             || driver.read::<i32>(self.club + 8)? != self.club_id
             || driver.read::<i32>(self.club + 0xc)? != driver.read::<i32>(self.club + 0x10)?
             || driver.read_ptr(self.club + FINANCE_OFFSET)? != self.finance
-            || driver.read_ptr(self.finance + 8)? != self.club
+            || self.finance.checked_add(8).and_then(|address| driver.read_ptr(address).ok()) != Some(self.club)
         {
             return Err(invalid("Native club finance object changed; reopen Club > Finances and retry"));
         }

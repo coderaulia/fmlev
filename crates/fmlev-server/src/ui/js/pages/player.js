@@ -20,6 +20,9 @@
         if (!("date_of_birth" in player) && !state.playerDirtyFields.has("date_of_birth")) delete state.activePlayer.date_of_birth;
       }
 
+      // Homegrown (trained at club / nation) is read once per player; failures leave it unavailable.
+      if (typeof refreshHomegrown === "function" && (!isSamePlayer || homegrownState.loadedFor !== player.id)) refreshHomegrown();
+
       // Live Badge & Sync Indicator
       const isLive = isLivePlayer(player);
       const liveBadge = document.getElementById("player-live-badge");

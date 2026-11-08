@@ -170,11 +170,11 @@ impl RttiCatalog {
         Ok(Self { tables, image: timestamp.map(|t| (base, t)) })
     }
 
-    fn at(&self, driver: &LinuxMemoryDriver, address: usize) -> Option<NativeType> {
+    pub(crate) fn at(&self, driver: &LinuxMemoryDriver, address: usize) -> Option<NativeType> {
         self.tables.get(&driver.read_ptr(address).ok()?).copied()
     }
 
-    fn is(&self, driver: &LinuxMemoryDriver, address: usize, kind: CatalogKind, subobject_offset: u32) -> bool {
+    pub(crate) fn is(&self, driver: &LinuxMemoryDriver, address: usize, kind: CatalogKind, subobject_offset: u32) -> bool {
         self.at(driver, address) == Some(NativeType { kind, subobject_offset })
     }
 }

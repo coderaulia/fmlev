@@ -47,6 +47,7 @@
     "js/pages/player-save.js",
     "js/pages/godmode.js",
     "js/pages/contract.js",
+    "js/pages/homegrown.js",
     "js/pages/positions.js",
     "js/pages/club-edit.js",
     "js/pages/club-money.js",

@@ -2,6 +2,7 @@ pub mod driver;
 pub mod error;
 pub mod maps;
 pub mod process;
+pub mod remote_alloc;
 pub mod scanner;
 pub mod yama;
 
@@ -16,4 +17,6 @@ pub use scanner::{
     filter_addresses, scan_aob, scan_aob_in_range, scan_utf8_string, scan_utf16_string,
     scan_value, AobPattern, MemoryScanner,
 };
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub use remote_alloc::remote_mmap;
 pub use yama::{check_ptrace_scope, get_yama_diagnostic};

@@ -902,9 +902,16 @@ pub fn find_queue_entry_for_person(
     driver: &LinuxMemoryDriver,
     person_addr: usize,
 ) -> Result<Option<(usize, Vec<u8>)>> {
-    let regions = scan_regions(driver)?;
+    find_queue_entry_in_regions(driver, &scan_regions(driver)?, person_addr)
+}
+
+fn find_queue_entry_in_regions(
+    driver: &LinuxMemoryDriver,
+    regions: &[(usize, usize)],
+    person_addr: usize,
+) -> Result<Option<(usize, Vec<u8>)>> {
     let mut found: Vec<(usize, Vec<u8>)> = Vec::new();
-    for (address, _) in scan_for_u64(driver, &regions, person_addr as u64) {
+    for (address, _) in scan_for_u64(driver, regions, person_addr as u64) {
         let Some(entry_addr) = address.checked_sub(8) else { continue };
         if entry_addr % 8 != 0 {
             continue;
@@ -1239,8 +1246,7 @@ mod tests {
     fn queue_lookup_finds_a_unique_entry_by_shape_not_address_and_refuses_ambiguity() {
         let packed = |year: u32, day: u32| (year << 16) | day;
         let person: u64 = 0x1_5eed_0000_0000 | (std::process::id() as u64) << 8;
-        // Pre-sized: a reallocation while appending would leave a freed copy of the entries in the heap,
-        // which the whole-process scan would see as a second plausible queue.
+        // Scan only the fixture buffers. A self-process scan can find copies in the scanner's own scratch space.
         let mut queue = Vec::with_capacity(3 * QUEUE_ENTRY_SIZE);
         queue.extend(queue_entry(packed(2026, 50), 1, 0x1_3000_0000));
         queue.extend(queue_entry(packed(2026, 60), 2, person));
@@ -1248,7 +1254,9 @@ mod tests {
         let driver = LinuxMemoryDriver::new(std::process::id() as i32);
         let base = queue.as_ptr() as usize;
         assert_eq!(base % 8, 0);
-        let (address, bytes) = find_queue_entry_for_person(&driver, person as usize).unwrap().expect("entry found");
+        let first_region = (base, base + queue.len());
+        let (address, bytes) = find_queue_entry_in_regions(&driver, &[first_region], person as usize)
+            .unwrap().expect("entry found");
         assert_eq!(address, base + QUEUE_ENTRY_SIZE);
         assert_eq!(bytes, queue[QUEUE_ENTRY_SIZE..2 * QUEUE_ENTRY_SIZE].to_vec());
         // The same person in a second, equally plausible queue is ambiguous.
@@ -1256,11 +1264,13 @@ mod tests {
         second.extend(queue_entry(packed(2026, 55), 4, 0x1_3000_2000));
         second.extend(queue_entry(packed(2026, 65), 5, person));
         second.extend(queue_entry(packed(2026, 75), 6, 0x1_3000_3000));
-        let error = find_queue_entry_for_person(&driver, person as usize).unwrap_err().to_string();
+        let second_base = second.as_ptr() as usize;
+        let regions = [first_region, (second_base, second_base + second.len())];
+        let error = find_queue_entry_in_regions(&driver, &regions, person as usize).unwrap_err().to_string();
         assert!(error.contains("refusing to guess"), "{error}");
         drop(second);
         let missing = (person as usize) ^ 0x1234_5000;
-        assert!(find_queue_entry_for_person(&driver, missing).unwrap().is_none());
+        assert!(find_queue_entry_in_regions(&driver, &[first_region], missing).unwrap().is_none());
     }
 
     #[test]

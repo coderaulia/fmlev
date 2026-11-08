@@ -5,6 +5,7 @@ pub mod competition_extra;
 pub mod context;
 pub mod deals;
 pub mod eligibility;
+pub mod homegrown;
 pub mod memory;
 pub mod roles;
 pub mod search;
@@ -16,6 +17,7 @@ pub use club_debts::*;
 pub use board::*;
 pub use context::*;
 pub use eligibility::*;
+pub use homegrown::{read_homegrown, set_homegrown};
 pub use memory::*;
 pub use roles::*;
 pub use search::{scout_entities, search_entities, search_rebuild, search_status};
@@ -57,6 +59,8 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/context/select", post(select_context))
         .route("/api/player/update", post(update_player))
         .route("/api/player/eligibility", post(player_eligibility))
+        .route("/api/player/homegrown", post(read_homegrown))
+        .route("/api/player/homegrown/set", post(set_homegrown))
         .route("/api/staff/search", post(search_staff))
         .route("/api/staff/open", post(open_staff))
         .route("/api/player/open", post(open_game_player))

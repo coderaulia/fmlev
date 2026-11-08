@@ -770,6 +770,7 @@ pub async fn godmode_action(
     };
     match w.context_mgr.apply_quick_action(action) {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({"status": "success", "player": w.context_mgr.get_context().player}))),
+        Err(error @ fmlev_core::CoreError::Unsupported(_)) => api_error(StatusCode::NOT_IMPLEMENTED, error),
         Err(error) => api_error(StatusCode::BAD_REQUEST, error),
     }
 }

@@ -856,3 +856,10 @@ Undo for step 2 if wanted: `sudo sysctl -w kernel.yama.ptrace_scope=1`, and dele
 - **Club**. R. Madrid balance £138,709,993 to £143,709,993 and available transfer budget £26,501,775 to £28,501,775 read back immediately. After simulation and reload, Finances matched the post-tick API values (£143,875,339 and £28,526,576, displayed as £28.52M). Loan repayment £3,309,271 to £4,009,271, Main Kit sponsor £64,815,508 to £71,815,508 per season and Champions League objective importance 10 to 2 all persisted and appeared on their FM26 screens. The aggregate sponsorship-income display remained £201,798,048. No month-end repayment or sponsor receipt was checked.
 - **Competition**. Premier League first-place prize £53.1M to £56M persisted and matched the Rules screen after reload. Season-end payment remains unverified.
 - Workspace check, 299 Rust tests (1 ignored) and 243 Node tests passed. The work above changed only the QA save and this log.
+
+### Release editor wiring and availability (2026-11-08)
+
+- Player morale and transfer headline fees have dedicated read and Apply controls. Player contract terms and opt-in staff edits use Save. Club money, bank loans, sponsors, board objectives and the native competition prize table use their existing Apply controls. UI copy and API evidence strings identify the sampled fields that survived reload. Keep the opt-in for experimental editors.
+- Live Heal and Heal Squad fail closed with HTTP 501 and cannot be queued. Offline demonstrations still work. Signing, loan creation and recall, and pending-transfer scheduling stay unavailable. Prize edits were verified on the Rules screen. Season-end payout remains unverified.
+- Native competition details and prize forms bind the loaded values to the competition index and UID. Apply refuses to use a previous selection's values.
+- Workspace check, 299 Rust tests (1 ignored), and 245 UI tests passed.

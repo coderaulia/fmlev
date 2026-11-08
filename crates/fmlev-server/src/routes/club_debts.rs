@@ -56,7 +56,7 @@ pub struct ClubSponsorUpdateRequest {
 }
 
 const NOT_ATTACHED: &str = "Attach to FM26 with a save loaded first";
-const UNVERIFIED: &str = "Experimental: transactional scalar write with readback; unverified in game (no screen check, day tick or save/reload yet). Use a throwaway save.";
+const OPT_IN: &str = "Opt-in transactional scalar write with readback. Use a throwaway save.";
 
 async fn session_driver(state: &ServerState) -> Result<LinuxMemoryDriver, Response> {
     let r = state.inner.read().await;
@@ -78,7 +78,7 @@ async fn locate_club(driver: LinuxMemoryDriver, club_id: i32) -> Result<NativeCl
 
 fn gate(experimental: bool, what: &str) -> Option<Response> {
     (!experimental).then(|| {
-        api_error(StatusCode::NOT_IMPLEMENTED, format!("{what} editing is unverified in game. Set experimental: true and use a throwaway save.")).into_response()
+        api_error(StatusCode::NOT_IMPLEMENTED, format!("{what} editing requires experimental: true and use a throwaway save.")).into_response()
     })
 }
 
@@ -94,7 +94,7 @@ pub async fn read_club_loans(State(state): State<ServerState>, Json(req): Json<C
     match tokio::task::spawn_blocking(move || record.read_loans(&driver)).await {
         Ok(Ok(loans)) => Json(serde_json::json!({
             "status": "success", "club_id": req.club_id, "loans": loans,
-            "verification": "Read from native memory; unverified against the game's Finances screen. Loan type codes are not mapped.",
+            "verification": "A monthly repayment edit matched Debts and Loans after a day tick and reload. Loan type codes are unmapped.",
         }))
         .into_response(),
         Ok(Err(error)) => api_error(core_status(&error), error).into_response(),
@@ -134,7 +134,7 @@ pub async fn update_club_loan(State(state): State<ServerState>, Json(req): Json<
         Ok(Ok(loan)) => Json(serde_json::json!({
             "status": "ok", "club_id": req.club_id, "loan": loan,
             "message": "Loan written and read back. Reopen Club > Finances in FM26 to see it.",
-            "verification": UNVERIFIED,
+            "verification": OPT_IN,
         }))
         .into_response(),
         Ok(Err(error)) => api_error(core_status(&error), error).into_response(),
@@ -154,7 +154,7 @@ pub async fn read_club_sponsors(State(state): State<ServerState>, Json(req): Jso
     match tokio::task::spawn_blocking(move || record.read_sponsors(&driver)).await {
         Ok(Ok(list)) => Json(serde_json::json!({
             "status": "success", "club_id": req.club_id, "list_present": list.list_present, "sponsors": list.sponsors,
-            "verification": "Read from native memory; unverified against the game's Sponsors screen. Sponsor names and type labels are not mapped (labels are candidates only).",
+            "verification": "An annual value edit matched the Main Kit row after a day tick and reload. Sponsor type labels are candidates.",
         }))
         .into_response(),
         Ok(Err(error)) => api_error(core_status(&error), error).into_response(),
@@ -181,7 +181,7 @@ pub async fn update_club_sponsor(State(state): State<ServerState>, Json(req): Js
         Ok(Ok(sponsor)) => Json(serde_json::json!({
             "status": "ok", "club_id": req.club_id, "sponsor": sponsor,
             "message": "Sponsor value written and read back. Reopen Club > Finances in FM26 to see it.",
-            "verification": UNVERIFIED,
+            "verification": OPT_IN,
         }))
         .into_response(),
         Ok(Err(error)) => api_error(core_status(&error), error).into_response(),

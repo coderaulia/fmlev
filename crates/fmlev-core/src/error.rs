@@ -11,6 +11,9 @@ pub enum CoreError {
     #[error("Invalid value: {0}")]
     InvalidValue(String),
 
+    #[error("{0}")]
+    Unsupported(&'static str),
+
     #[error("Player with ID {0} not found")]
     PlayerNotFound(i32),
 

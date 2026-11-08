@@ -23,7 +23,7 @@ test('every cheat has a badge and exactly one action button', () => {
   assert.ok(rows.length >= 16);
   for (const row of rows) {
     const body = row.split('cheat-row')[0];
-    assert.match(body, /pill-accent">Working<|pill-warn">In development</);
+    assert.match(body, /pill-accent">Working<|pill-warn">(?:In development|Offline only)</);
     assert.equal((body.match(/<button/g) || []).length, 1);
   }
   for (const id of ['god-player-target', 'god-squad-target', 'god-club-target', 'god-nation-target']) {

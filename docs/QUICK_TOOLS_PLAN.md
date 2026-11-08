@@ -18,17 +18,17 @@ Status: **done** = shipped and checked in game; **partial** = shipped but incomp
 | Tool | Status | Our path / plan | Lead from FM26 Studio |
 |---|---|---|---|
 | Inspire (Max Morale) | done | `morale` preset, record+0x124 (= ACTUAL_PLAYER+0x26c) = 20, screen-verified | P+0x26c = 20 (same field) |
-| Heal Player | partial | `heal` sets condition and sharpness to 10000. Never touch the injury vector (P+0x248). | condition P+0x258, jadedness P+0x25a = 0, sharpness P+0x25c, morale, P+0x21a = 0 (unknown; map first) |
-| Max Match Fitness | todo | Add jadedness P+0x25a = 0 to the heal path; show Condition, Sharpness, Jadedness and Readiness in the header like theirs | P+0x258/+0x25a/+0x25c |
+| Heal Player | unavailable live | The legacy preset reported success without changing the tested player. Verify condition and sharpness offsets before enabling it. Never edit the injury vector (P+0x248). | condition P+0x258, jadedness P+0x25a = 0, sharpness P+0x25c, morale, P+0x21a = 0 (unknown; map first) |
+| Max Match Fitness | discovery | Verify condition, sharpness and jadedness before exposing writes | P+0x258/+0x25a/+0x25c |
 | Destroy | todo | Morale 1 and condition drained (P+0x258 low), verified fields only | UI "demoralize and drain condition" |
 | Freeze Player | todo | Server-side job that re-writes chosen verified fields every ~1.5 s while enabled. Stops on detach or identity mismatch. | `PlayerFreezerService`, 1.5 s timer |
 | Remove Unhappiness | todo | Map first: their writes go to (P+0x330 -> obj)+0x5a / +0x5c = 100, +0x57 byte, and a list entry +0xc = 0. Happiness is still unmapped (see AGENTS "Promises: parked"). | `RemovePlayerUnhappiness` |
 | Remove Ban & Suspensions | todo | Scalar-only zeroing of ban record fields (+0x16 u16, +0x18/+0x1a/+0x1c/+0x1d). Their removal of the record from the list is **blocked**. | `ClearPlayerBansAndSuspensions` |
-| Trained at Club (HGC) / Trained at Nation (HGN) | in progress (agent) | **User override of Rule 7 (2026-11-08: "USE THEIR METHOD IS OKAY")**: append a 16-byte relationship record `{club/nation ptr, i16 0, cat, sub, type 1, ...}` to the person relationship vector at `(ACTUAL_PLAYER+0x288)+0x78` (begin/end/cap). Use spare capacity when there is any; otherwise allocate fresh memory in the game process (ptrace-injected `mmap`, the Linux equivalent of their `VirtualAllocEx`), copy the old records, and swap begin/end/cap. Live-verified layout: Foden has Man City cat 1/sub 72 and England cat 8/sub 70; Asencio has R. Madrid and Spain. Risk: the game may later free or grow the foreign array. | `EnsureHomeGrownStatus` + `AppendRelationRecord` |
+| Trained at Club (HGC) / Trained at Nation (HGN) | opt-in | Mastantuono’s club and nation records showed Fully Eligible after reload. A full list requires the approved remote allocation. Registration enforcement and later resizing remain unverified. | `EnsureHomeGrownStatus` |
 | Register for UEFA | todo | Map per-player continental registration. We only have the manager bypass bit 0x100 today. | `RegisterPlayerForUefa` |
 | Register (Domestic) | todo | Per-player domestic registration (lead: player +0x130 chain). Register Anytime opens the window only. | `RegisterPlayerForDomestic(Division)` |
 | Move to another club | partial | `/api/transfer/move`, checked in game; no fee/history records (see Career history notes). Long term: use deal objects (`native_deals`). | they edit deal objects |
-| Recall from Loan | partial | `/api/player/loan/terminate` exists, never run in game | `RecallPlayerFromLoan` |
+| Recall from Loan | unavailable live | `/api/player/loan/terminate` returns 501. The Contract button stays disabled. | `RecallPlayerFromLoan` |
 | Reload Values | done | Load from game | - |
 | Hidden attributes (Consistency, Dirtiness, Important Matches, Injury Proneness, Versatility) | check | Confirm they are in our 60-attribute editor and screen-verified | attribute tab |
 
@@ -36,7 +36,7 @@ Status: **done** = shipped and checked in game; **partial** = shipped but incomp
 
 | Key | Status | Our path / plan | Lead |
 |---|---|---|---|
-| Heal Squad | partial | `heal_squad`; add jadedness | as Heal |
+| Heal Squad | unavailable live | Shares the unverified player fitness layout | as Heal |
 | Inspire Squad | partial | `morale_squad` (write path verified on one player, squad run not checked live) | P+0x26c |
 | Remove Unhappiness (squad) | todo | After the player version is mapped | `RemoveSquadUnhappiness` |
 | Destroy Rivals | todo | Squad version of Destroy, applied to any club | `BtnDestroySquad` |
@@ -54,9 +54,12 @@ Status: **done** = shipped and checked in game; **partial** = shipped but incomp
 | Release / Expire | partial | Terminate contract (checked in game, per player); squad version is high risk | - |
 | Apply to all squads | todo | Option to include the club's other teams (B, U19, ...) via the club's team vector | checkbox |
 
-## In progress on agent branches (2026-11-08)
-Transfer deals, club embargo and financial statements, bank loans and sponsors, board objectives and club status,
-competition extras (pitch sizes, trophy type, original reputation, native prize table, league table, awards).
+## Other tools integrated on 2026-11-08
+
+Transfer headline fees, loan repayments, sponsor annual values, board objective importance, club status and the
+native prize table have live evidence recorded in [AGENTS.md](../AGENTS.md#api-welfare-staff-club-and-prize-retest-2026-11-08-fm26-pid-98701).
+Financial statements and league standings are read-only. Embargo enforcement, competition payouts and the
+effects of unverified metadata edits remain open.
 
 ## Suggested order
 1. Cheap scalars on known objects: Unsackable, jadedness / Max Fitness, Destroy and Destroy Rivals, Licensed Kits,

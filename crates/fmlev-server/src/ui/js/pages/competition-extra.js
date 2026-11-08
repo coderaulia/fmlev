@@ -1,5 +1,5 @@
-    // Competition extras and awards. Native reads; every edit is experimental (unverified in game), asks for
-    // confirmation, sends only the fields that changed and is applied by its own button (not the Save bar).
+    // Competition extras and awards. Native reads; edits require opt-in and confirmation.
+    // Each editor has its own Apply button.
     let compxDetailsBaseline = null;
     let compxPrizeBaseline = null;
     let compxAward = null;
@@ -16,6 +16,10 @@
       if (!live?.unique_id) throw new Error("Open this competition's Rules page in FM26 once so its unique id is known");
       return { comp_index: comp.id, comp_uid: live.unique_id };
     }
+    function compxMatches(identity) {
+      return !!identity && identity.comp_index === state.activeCompetition?.id
+        && identity?.comp_uid === state.liveCompetitions?.[identity?.comp_index]?.unique_id;
+    }
     async function compxPost(url, body) {
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await readJson(res);
@@ -27,18 +31,20 @@
     function compxFail(error) { compxSetText("compx-status", error.message); showToast(error.message, "error"); return false; }
     function compxRenderEnabled() {
       const on = compxEnabled();
+      const details = on && compxMatches(compxDetailsBaseline?.identity);
+      const prizes = on && compxMatches(compxPrizeBaseline?.identity);
       const set = (id, enabled) => { const el = document.getElementById(id); if (el) el.disabled = !enabled; };
-      set("compx-apply-details", on && !!compxDetailsBaseline);
-      set("compx-apply-prizes", on && !!compxPrizeBaseline);
+      set("compx-apply-details", details);
+      set("compx-apply-prizes", prizes);
       set("compx-apply-award", on && !!compxAward);
-      for (const [field, id] of COMPX_DETAIL_FIELDS) set(id, on && compxDetailsBaseline?.[field] != null);
-      for (const id of ["compx-prize-list"]) set(id, on && !!compxPrizeBaseline);
+      for (const [field, id] of COMPX_DETAIL_FIELDS) set(id, details && compxDetailsBaseline?.[field] != null);
+      for (const id of ["compx-prize-list"]) set(id, prizes);
       for (const [id, key] of [["compx-award-name", "name"], ["compx-award-short", "short_name"], ["compx-award-rep-a", "reputation_candidate_a"], ["compx-award-rep-b", "reputation_candidate_b"]]) {
         set(id, on && compxAward?.[key]?.value != null);
       }
     }
-    function compxFillDetails(details) {
-      compxDetailsBaseline = {};
+    function compxFillDetails(details, identity) {
+      compxDetailsBaseline = { identity };
       const notes = [];
       for (const [field, id] of COMPX_DETAIL_FIELDS) {
         const f = details[field], input = document.getElementById(id);
@@ -51,8 +57,10 @@
     }
     async function compxLoadDetails() {
       try {
-        const data = await compxPost("/api/competition/details", compxIdentity());
-        compxFillDetails(data.details);
+        const identity = compxIdentity();
+        const data = await compxPost("/api/competition/details", identity);
+        if (!compxMatches(identity)) return false;
+        compxFillDetails(data.details, identity);
         return true;
       } catch (error) { return compxFail(error); }
     }
@@ -70,47 +78,58 @@
     async function compxApplyDetails() {
       try {
         if (!compxEnabled()) throw new Error("Tick the experimental checkbox first");
-        const identity = compxIdentity(), edits = compxDetailEdits();
+        const identity = compxDetailsBaseline?.identity;
+        if (!compxMatches(identity)) throw new Error("Read details for the selected competition first");
+        const edits = compxDetailEdits();
         if (!Object.keys(edits).length) throw new Error("Nothing changed");
         if (!compxConfirm(`Write ${Object.keys(edits).join(", ")} to game memory? This is unverified in game; use a throwaway save.`)) return false;
         const data = await compxPost("/api/competition/details/update", { ...identity, ...edits, experimental: true });
-        compxFillDetails(data.details);
+        if (!compxMatches(identity)) return true;
+        compxFillDetails(data.details, identity);
         compxSetText("compx-status", `${data.message} (experimental, unverified in game)`);
         showToast("Competition details written", "success");
         return true;
       } catch (error) { return compxFail(error); }
     }
     async function compxLoadPrizes() {
+      const previous = compxPrizeBaseline;
+      let identity;
       try {
-        const data = await compxPost("/api/competition/prizes/native", compxIdentity());
+        identity = compxIdentity();
+        const data = await compxPost("/api/competition/prizes/native", identity);
+        if (!compxMatches(identity)) return false;
         const table = data.tables?.[0];
         if (!table) throw new Error("No native prize table for this competition");
-        compxPrizeBaseline = { stage_index: table.stage_index, amounts: [...table.amounts], several: data.tables.length > 1 };
+        compxPrizeBaseline = { identity, stage_index: table.stage_index, amounts: [...table.amounts], several: data.tables.length > 1 };
         const input = document.getElementById("compx-prize-list");
         if (input) input.value = table.amounts.join("\n");
         compxSetText("compx-prize-note", `${table.positions} positions at stage ${table.stage_index}${compxPrizeBaseline.several ? " (several league stages; only the first is shown)" : ""}. Read from memory, season-end payout source unconfirmed.`);
         compxRenderEnabled();
         return true;
       } catch (error) {
-        compxPrizeBaseline = null;
-        compxRenderEnabled();
-        compxSetText("compx-prize-note", `Unavailable: ${error.message}`);
+        if (compxPrizeBaseline === previous && (!identity || compxMatches(identity))) {
+          compxPrizeBaseline = null;
+          compxRenderEnabled();
+          compxSetText("compx-prize-note", `Unavailable: ${error.message}`);
+        }
         return compxFail(error);
       }
     }
     async function compxApplyPrizes() {
       try {
         if (!compxEnabled()) throw new Error("Tick the experimental checkbox first");
-        if (!compxPrizeBaseline) throw new Error("Read the native prize table first");
+        const baseline = compxPrizeBaseline;
+        if (!compxMatches(baseline?.identity)) throw new Error("Read the native prize table for the selected competition first");
         const raw = document.getElementById("compx-prize-list")?.value || "";
         const amounts = raw.trim().split(/\s+/).filter(Boolean).map(Number);
-        if (amounts.length !== compxPrizeBaseline.amounts.length || amounts.some(v => !Number.isInteger(v) || v < 0 || v > 2000000000)) {
-          throw new Error(`Enter exactly ${compxPrizeBaseline.amounts.length} whole GBP amounts from 0 to 2,000,000,000`);
+        if (amounts.length !== baseline.amounts.length || amounts.some(v => !Number.isInteger(v) || v < 0 || v > 2000000000)) {
+          throw new Error(`Enter exactly ${baseline.amounts.length} whole GBP amounts from 0 to 2,000,000,000`);
         }
-        if (amounts.every((v, i) => v === compxPrizeBaseline.amounts[i])) throw new Error("Nothing changed");
-        if (!compxConfirm("Write the prize table to game memory? Unverified in game; the season-end payout source is unconfirmed.")) return false;
-        const data = await compxPost("/api/competition/prizes/native/update", { ...compxIdentity(), stage_index: compxPrizeBaseline.stage_index, prizes: amounts, experimental: true });
-        compxPrizeBaseline = { ...compxPrizeBaseline, amounts: [...data.table.amounts] };
+        if (amounts.every((v, i) => v === baseline.amounts[i])) throw new Error("Nothing changed");
+        if (!compxConfirm("Write the prize table to game memory? The edited value can appear in Rules. The actual season-end payout is unconfirmed.")) return false;
+        const data = await compxPost("/api/competition/prizes/native/update", { ...baseline.identity, stage_index: baseline.stage_index, prizes: amounts, experimental: true });
+        if (!compxMatches(baseline.identity) || compxPrizeBaseline !== baseline) return true;
+        compxPrizeBaseline = { ...baseline, amounts: [...data.table.amounts] };
         const input = document.getElementById("compx-prize-list");
         if (input) input.value = data.table.amounts.join("\n");
         compxSetText("compx-prize-note", data.message);

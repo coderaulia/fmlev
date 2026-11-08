@@ -74,7 +74,7 @@
       <div class="card" id="competition-extras-card" data-live-editor="true" style="margin-top: 16px; padding: 16px;">
         <h3 style="margin-bottom: 6px;">Competition extras · native reads, experimental edits</h3>
         <p class="unverified-note" style="margin-bottom: 10px;">
-          Reads come straight from game memory (no screen needed). Every edit here is <strong>unverified in game</strong>: use a throwaway save.
+          Use the opt-in for edits. Premier League prize edits were visible in Rules after a day tick and reload. Other competition details have less live evidence.
           Each edit button applies immediately with readback and rollback; it is not part of the bottom Save bar.
         </p>
         <label class="form-label" style="display: flex; gap: 8px; align-items: center;">
@@ -100,7 +100,7 @@
 
         <h4 style="margin: 14px 0 6px;">Native prize table (no value search)</h4>
         <textarea id="compx-prize-list" disabled class="form-control" rows="4" placeholder="One raw-GBP amount per line, position 1 first"></textarea>
-        <p id="compx-prize-note" class="unverified-note">Not loaded. Only leagues with an active league stage have a native table (for example the Premier League, Bundesliga, Serie A).</p>
+        <p id="compx-prize-note" class="unverified-note">Not loaded. Only leagues with an active league stage have a native table (for example the Premier League, Bundesliga, Serie A). The season-end payout is unverified.</p>
         <div style="display: flex; gap: 8px; margin-top: 6px;">
           <button class="btn" onclick="compxLoadPrizes()">Read native prize table</button>
           <button id="compx-apply-prizes" class="btn btn-danger" disabled onclick="compxApplyPrizes()">Apply prize table (experimental)</button>
@@ -118,7 +118,7 @@
         <h3 style="margin-bottom: 6px;">Awards · native reads, experimental edits</h3>
         <p class="unverified-note" style="margin-bottom: 10px;">
           Read from game memory. The reputation and type offsets from the community lead did not match this build, so only two
-          reputation <em>candidates</em> (meaning unproven) and in-place name edits (never longer than the current name) can be changed. Unverified in game.
+          reputation <em>candidates</em> (meaning unproven) and in-place name edits (never longer than the current name) can be changed. A trial rename changed two awards that shared a name and reverted on reload.
         </p>
         <div style="display: flex; gap: 8px; align-items: center;">
           <input id="compx-award-query" class="form-control" style="max-width: 320px;" placeholder="Award name, index or uid" aria-label="Award search">

@@ -70,6 +70,10 @@
     }
 
     function queuePreset(kind, preset) {
+      if (state.connected && ["heal", "heal_player", "heal_squad"].includes(preset)) {
+        showToast("Live fitness and sharpness editing is unavailable.", "warning");
+        return false;
+      }
       const control = entityControls[kind];
       const entity = state[control.active];
       if (!entity) return false;

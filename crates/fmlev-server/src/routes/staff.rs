@@ -142,7 +142,7 @@ pub async fn read_staff_native(State(state): State<ServerState>, Json(req): Json
             "status": "ok",
             "staff": staff,
             "attributes": attributes,
-            "verification": "Reads: 22 attributes matched against 7 on-screen staff profiles. Edits: experimental, readback-checked, not yet proven after a day tick and save/reload.",
+            "verification": "Reads: 22 attributes matched against 7 on-screen staff profiles. Edits require opt-in. A Fitness edit survived a day tick and save/reload on one staff profile.",
         }))
         .into_response(),
         Err(error) => api_error(StatusCode::CONFLICT, error).into_response(),
@@ -155,7 +155,7 @@ pub async fn update_staff(State(state): State<ServerState>, Json(req): Json<Staf
     if !req.experimental {
         return api_error(
             StatusCode::NOT_IMPLEMENTED,
-            "Staff editing is unverified in game. Set experimental: true and use a throwaway save.",
+            "Staff edits require experimental: true and a throwaway save.",
         )
         .into_response();
     }
@@ -178,7 +178,7 @@ pub async fn update_staff(State(state): State<ServerState>, Json(req): Json<Staf
                 "message": format!("{} staff attribute(s) written and read back. Reopen the staff profile in FM26 to see them.", changed.len()),
                 "changed": changed,
                 "attributes": attributes,
-                "verification": "Experimental: transactional write with readback; not yet proven after a day tick and save/reload.",
+                "verification": "Opt-in transactional write with readback. See the QA log for the staff fields checked live.",
             }))
             .into_response()
         }
@@ -230,7 +230,7 @@ pub async fn update_staff_contract(State(state): State<ServerState>, Json(req): 
     if !req.experimental {
         return api_error(
             StatusCode::NOT_IMPLEMENTED,
-            "Staff contract editing is unverified in game. Set experimental: true and use a throwaway save.",
+            "Staff contract edits require experimental: true and a throwaway save.",
         )
         .into_response();
     }
@@ -252,7 +252,7 @@ pub async fn update_staff_contract(State(state): State<ServerState>, Json(req): 
                     else { format!("{} contract value(s) written and read back. Reopen the staff profile in FM26 to see them.", changed.len()) },
                 "changed": changed,
                 "contract": contract,
-                "verification": "Experimental: transactional write with readback; not yet proven after a day tick and save/reload.",
+                "verification": "Opt-in transactional write with readback. See the QA log for the staff fields checked live.",
             }))
             .into_response()
         }

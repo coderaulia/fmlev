@@ -33,11 +33,11 @@
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
-                <div class="cheat-name">100% Fitness and Cure All</div>
-                <div class="cheat-desc">Restores condition and sharpness to 100%. The injury vector is never changed.</div>
-                <div class="cheat-why"><span class="pill pill-accent">Working</span> Native scalar write of condition and sharpness only.</div>
+                <div class="cheat-name">Player Fitness</div>
+                <div class="cheat-desc">Live condition and sharpness editing is unavailable.</div>
+                <div class="cheat-why"><span class="pill pill-warn">Offline only</span></div>
               </div>
-              <button class="btn btn-sm btn-primary" onclick="applyPlayerPreset('heal')">Instant Cure</button>
+              <button class="btn btn-sm btn-primary" disabled data-live-unavailable="true" onclick="applyPlayerPreset('heal')">Demo Heal</button>
             </div>
             <div class="cheat-row">
               <div class="cheat-info">
@@ -63,10 +63,10 @@
             <div class="cheat-row">
               <div class="cheat-info">
                 <div class="cheat-name">100% Squad Fitness</div>
-                <div class="cheat-desc">Restores condition and sharpness for every squad player.</div>
-                <div class="cheat-why"><span class="pill pill-accent">Working</span> Native heal written to every bound squad player record.</div>
+                <div class="cheat-desc">Live squad fitness editing is unavailable.</div>
+                <div class="cheat-why"><span class="pill pill-warn">Offline only</span></div>
               </div>
-              <button class="btn btn-sm btn-primary" onclick="applyClubPreset('heal_squad')">Heal Squad</button>
+              <button class="btn btn-sm btn-primary" disabled data-live-unavailable="true" onclick="applyClubPreset('heal_squad')">Demo Heal Squad</button>
             </div>
             <div class="cheat-row">
               <div class="cheat-info">

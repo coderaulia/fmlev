@@ -133,7 +133,7 @@ this running save and may become stale.
 Supporter patience is not board patience. Men's values are not women's values.
 Editor-format rule nodes and display prize caches are not proven simulation
 sources. Those distinctions are preserved in the exports rather than filled with
-fixture defaults. Free agent signing, pending transfer acceleration, and contract termination are now supported in the Rust runtime.
+fixture defaults. Contract termination and Move are exposed in Rust. Free-agent signing, loan creation and recall, and pending transfer acceleration are unavailable through the API.
 
 ## Staff information and contract (2026-10-28, read-only)
 

@@ -498,57 +498,16 @@ impl GameContextManager {
         }
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
-            && matches!(normalized.as_str(), "heal_player" | "heal")
         {
-            let record = self.verified_native_player(self.context.player.id)?;
-            let session = self.session.as_ref().unwrap();
-            record.heal(&session.driver)?;
-            self.context.player.condition = 10000;
-            self.context.player.sharpness = 10000;
-            self.context.player.is_injured = false;
-            self.player_registry
-                .insert(self.context.player.id, self.context.player.clone());
-            info!("Applied live quick action: heal_player (Player ID: {})", self.context.player.id);
-            return Ok(());
-        }
-        if self.session.as_ref().is_some_and(|session|
-            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
-            && matches!(normalized.as_str(), "remove_promises" | "clear_promises")
-        {
-            return Err(CoreError::InvalidValue(
-                "Clearing promises has no verified native field yet. Use Heal for condition and sharpness.".to_string(),
-            ));
-        }
-        if self.session.as_ref().is_some_and(|session|
-            session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())
-            && matches!(normalized.as_str(), "heal_squad")
-        {
-            let target_club_id = self.context.club.club_id;
-            let active_id = self.context.player.id;
-            let active_rec = self.verified_native_player(active_id).ok();
-            let session = self.session.as_ref().unwrap();
-            for (&pid, record) in &self.native_player_records {
-                if let Some(player) = self.player_registry.get(&pid) {
-                    if target_club_id == 0 || player.club_id == target_club_id {
-                        let _ = record.heal(&session.driver);
-                    }
-                }
+            match normalized.as_str() {
+                "heal_player" | "heal" | "heal_squad" => return Err(CoreError::Unsupported(
+                    "Live fitness and sharpness editing is unavailable until the native fields are verified",
+                )),
+                "remove_promises" | "clear_promises" => return Err(CoreError::InvalidValue(
+                    "Clearing promises has no verified native field yet.".to_string(),
+                )),
+                _ => {}
             }
-            if let Some(rec) = active_rec {
-                let _ = rec.heal(&session.driver);
-            }
-            self.context.player.condition = 10000;
-            self.context.player.sharpness = 10000;
-            self.context.player.is_injured = false;
-            for player in self.player_registry.values_mut() {
-                if target_club_id == 0 || player.club_id == target_club_id {
-                    player.condition = 10000;
-                    player.sharpness = 10000;
-                    player.is_injured = false;
-                }
-            }
-            info!("Applied live quick action: heal_squad (Club ID: {})", target_club_id);
-            return Ok(());
         }
         if self.session.as_ref().is_some_and(|session|
             session.driver.pid() != std::process::id() as i32 || session.bases.game_assembly_base.is_some())

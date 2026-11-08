@@ -3,7 +3,8 @@
       showToast("Preparing pending presets across all entities...", "info");
       const actions = [
         ...(state.activePlayer ? [() => applyPlayerPreset("goat"), applyBothFeetGodMode] : []),
-        ...(state.activeClub ? [() => applyClubPreset("heal_squad"), () => applyClubPreset("max_facilities")] : [])
+        ...(state.activeClub && !state.connected ? [() => applyClubPreset("heal_squad")] : []),
+        ...(state.activeClub ? [() => applyClubPreset("max_facilities")] : [])
       ];
       if (!actions.length) { showToast("Select a player or club first", "warning"); return false; }
       for (const action of actions) {

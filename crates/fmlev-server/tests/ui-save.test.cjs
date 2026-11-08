@@ -65,6 +65,16 @@ test('compound presets stop after the first failure', async () => {
   assert.equal(app.run('messages.some(message => message.type === "success")'), false);
 });
 
+test('the live editor cannot queue either fitness preset', async () => {
+  const app = ui(() => assert.fail('A rejected action must not send a request'));
+  app.run('state.connected = true; state.activeClub = { club_id: 1001 };');
+  assert.equal(await app.run('applyPlayerPreset("heal")'), false);
+  assert.equal(await app.run('applyClubPreset("heal_squad")'), false);
+  assert.equal(app.run('pendingActions.size'), 0);
+  app.run('state.connected = false');
+  assert.equal(await app.run('applyPlayerPreset("heal")'), true);
+});
+
 test('manual entity edits stay dirty after focus leaves an input', () => {
   const app = ui(() => {});
   app.run('eventHandlers.input({ target: { closest: selector => selector === "#tab-nation" } })');

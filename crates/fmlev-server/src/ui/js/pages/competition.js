@@ -21,6 +21,7 @@
     }
     function displayCompetition(comp) {
       state.activeCompetition = JSON.parse(JSON.stringify(comp));
+      compxRenderEnabled();
       if (!state.connected) competitionBaseline = { ...comp };
       displayEntityAvailability("competition", comp);
       const set = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };

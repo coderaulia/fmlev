@@ -20,7 +20,7 @@
           const fields = state.playerWritableFields;
           const count = fields?.filter(field => field.startsWith("attributes.")).length || 0;
           support.innerText = !data.connected ? "Game disconnected. Displayed fixtures do not change FM26." : fields === null ? "" :
-            `Live Save: ${count} native player attributes${fields.includes("positions") ? ", positions and feet" : ""}${fields.includes("current_ability") ? ", CA/PA" : ""}${fields.includes("contract.wage_per_week") ? ", weekly wage (GBP) and expiry year" : ""}. Names, transfers, fitness/morale and other entity data still require separate write paths.`;
+            `Live Save: ${count} native player attributes${fields.includes("positions") ? ", positions and feet" : ""}${fields.includes("current_ability") ? ", CA/PA" : ""}${fields.includes("contract.wage_per_week") ? ", weekly wage (GBP) and expiry year" : ""}. Morale uses its own control. Fitness editing is unavailable in live mode.`;
         }
         state.pid = data.pid;
         state.isPinned = data.is_pinned;

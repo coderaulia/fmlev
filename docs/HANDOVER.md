@@ -1,5 +1,18 @@
 # FMLE Handover
 
+## Current editor status (2026-11-08)
+
+- Player Quick Tools has a guarded morale editor. Player Contract supports wage, expiry, squad status and an existing release clause. Mastantuono’s trial survived a day tick and reload.
+- Live Heal and Heal Squad are unavailable. The tested player preset had returned success without changing either target. The offline demonstrations remain available. Promises and injuries have no supported live writer.
+- Move and Terminate remain available with confirmation. Move requires a destination with a spare squad slot. Free-agent signing, player-loan creation and recall, and pending-transfer acceleration return 501. Player and Club transfer deals show recorded join dates and support opt-in headline fee edits. Payment on an accepted transfer remains unverified.
+- Staff attributes, wage and expiry use opt-in and the Save bar. Pintus’s Fitness, wage and expiry survived reload. Club balance and transfer budget use their own editor. Loan repayment, sponsor annual value and objective importance use opt-in Apply and matched FM26 after reload.
+- The native competition prize table uses opt-in Apply. The Premier League’s £56M first prize survived reload and appeared in Rules. The season-end payout remains unverified.
+- [Live QA log](../AGENTS.md#api-welfare-staff-club-and-prize-retest-2026-11-08-fm26-pid-98701)
+
+## Earlier implementation notes
+
+The dated notes below record earlier behavior. Use the current status above for availability.
+
 ## Update — 2026-11-02 (transfer tools always available)
 
 - **User-confirmed working**: terminate, sign and move (with the required club, yearly wage and expiry year) were tried in the game and worked. The experimental checkbox is gone: Terminate, Move and Sign are available whenever a game is attached and a player is open (Move and Sign also need the required fields), each behind a confirm dialog. The routes no longer return 501 without `experimental: true`; the field is accepted and ignored for older clients. Loan recall stays disabled (no in-game test). Keep a backup save: these actions redirect objects the game also references elsewhere.

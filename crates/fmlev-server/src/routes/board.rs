@@ -1,4 +1,4 @@
-//! Club board objectives and club status: read routes and EXPERIMENTAL scalar writes (unverified in game).
+//! Club board objectives and club status: read routes and EXPERIMENTAL scalar writes (opt-in).
 
 use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
 use serde::Deserialize;
@@ -12,9 +12,9 @@ use crate::state::ServerState;
 
 const NOT_ATTACHED: &str = "Attach to FM26 with a save loaded first";
 const BOARD_UNVERIFIED: &str =
-    "Board objective editing is unverified in game. Set experimental: true and use a throwaway save.";
+    "Board objective edits require experimental: true and a throwaway save.";
 const STATUS_UNVERIFIED: &str =
-    "Club status editing is unverified in game. Set experimental: true and use a throwaway save.";
+    "Club status edits require experimental: true and a throwaway save.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -111,7 +111,7 @@ pub async fn update_club_board(State(state): State<ServerState>, Json(req): Json
             "status": "ok",
             "message": "Objective value(s) written and read back. Reopen the board screen in FM26 to see them.",
             "objective": objective,
-            "verification": "Experimental: transactional write with readback; not yet proven in game (screen, day tick, save/reload).",
+            "verification": "Opt-in write with readback. Objective importance was verified after a day tick and reload.",
         }))
         .into_response(),
         Err(error) => api_error(core_status(&error), error).into_response(),
@@ -153,7 +153,7 @@ pub async fn update_club_status(State(state): State<ServerState>, Json(req): Jso
             "status": "ok",
             "message": "Club status written and read back. Reopen the club screen in FM26 to see it.",
             "club_status": status,
-            "verification": "Experimental: transactional write with readback; not yet proven in game.",
+            "verification": "Opt-in write with readback. The Semi-Professional change was verified after a day tick and reload.",
         }))
         .into_response(),
         Err(error) => api_error(core_status(&error), error).into_response(),

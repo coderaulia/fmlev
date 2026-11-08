@@ -28,7 +28,7 @@ test('the card is a labelled experimental, unchecked-by-default live editor', ()
   const html = read('pages/club.html');
   assert.match(html, /id="club-debts-card" data-live-editor="true"/);
   assert.match(html, /<input id="club-debts-experimental" type="checkbox" onchange="toggleClubDebtEditing\(this.checked\)">/);
-  assert.match(html, /unverified in game/i);
+  assert.match(html, /A loan repayment and a Main Kit sponsorship edit appeared in FM26/i);
   assert.match(read('manifest.json'), /club-debts\.js/);
 });
 

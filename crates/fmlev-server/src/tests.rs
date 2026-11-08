@@ -556,7 +556,20 @@ async fn live_preset_errors_are_propagated_without_registry_changes() {
     );
     app.context_mgr.session = Some(session);
     let original = app.context_mgr.context.nation.youth_rating;
+    let original_player = app.context_mgr.context.player.clone();
     let state = ServerState::from_inner(Arc::new(RwLock::new(app)));
+    let router = create_router(state.clone());
+    for (route, body) in [
+        ("/api/player/preset", r#"{"preset":"heal"}"#),
+        ("/api/club/preset", r#"{"preset":"heal_squad"}"#),
+        ("/api/actions/godmode", r#"{"action":"cure_injuries"}"#),
+    ] {
+        let response = router.clone().oneshot(json_post(route, body)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED, "{route}");
+    }
+    let player = state.inner.read().await.context_mgr.context.player.clone();
+    assert_eq!((player.condition, player.sharpness, player.is_injured),
+        (original_player.condition, original_player.sharpness, original_player.is_injured));
     let response = apply_nation_preset(
         State(state.clone()),
         Json(NationPresetRequest {

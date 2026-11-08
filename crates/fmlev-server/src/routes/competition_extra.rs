@@ -21,7 +21,7 @@ use super::{api_error, core_status};
 use crate::state::ServerState;
 
 const NOT_ATTACHED: &str = "Attach to FM26 with a save loaded first";
-const GATE: &str = "This edit is unverified in game. Set experimental: true and use a throwaway save.";
+const GATE: &str = "This edit requires experimental: true and a throwaway save.";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -184,7 +184,7 @@ pub async fn read_native_prizes(State(state): State<ServerState>, Json(key): Jso
         Ok(tables) => Json(serde_json::json!({
             "status": "ok",
             "tables": tables,
-            "verification": "Same i32 array the Rules-page value search finds, checked live for the Premier League, Bundesliga and Serie A. Leagues without a native stage chain (for example La Liga, the Indonesian Super League) are refused. Season-end payout source unconfirmed."
+            "verification": "A Premier League edit appeared in Rules after a day tick and reload. Bundesliga and Serie A tables were located live. Leagues without a native stage chain (for example La Liga, the Indonesian Super League) are refused. Season-end payout source unconfirmed."
         }))
         .into_response(),
         Err(r) => r,
@@ -230,7 +230,7 @@ pub async fn read_competition_table(State(state): State<ServerState>, Json(key):
         Ok(tables) => Json(serde_json::json!({
             "status": "ok",
             "tables": tables,
-            "verification": "Read-only. Row order is the game's standings order; the row layout is heuristic (points = 3 x won + drawn held for every Premier League row). Not compared with the on-screen table."
+            "verification": "Read-only. Row order is the game's standings order; the row layout is heuristic (points = 3 x won + drawn held for every Premier League row). The first three La Liga teams and points matched the on-screen table."
         }))
         .into_response(),
         Err(r) => r,

@@ -183,6 +183,7 @@ mod tests {
 pub(crate) fn core_status(error: &fmlev_core::CoreError) -> StatusCode {
     use fmlev_core::CoreError;
     match error {
+        CoreError::Unsupported(_) => StatusCode::NOT_IMPLEMENTED,
         CoreError::InvalidValue(_) => StatusCode::BAD_REQUEST,
         CoreError::PlayerNotFound(_) => StatusCode::NOT_FOUND,
         CoreError::ModuleNotLoaded(_) | CoreError::NoScanCandidates => StatusCode::CONFLICT,

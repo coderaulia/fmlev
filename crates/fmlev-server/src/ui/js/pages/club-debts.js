@@ -1,4 +1,4 @@
-    // ---- Club bank loans and sponsor deals (native reads; scalar writes are EXPERIMENTAL and unverified in game). ----
+    // ---- Club bank loans and sponsor deals (native reads; scalar writes require opt-in). ----
     // Writes need the unchecked "Enable experimental ..." box, send experimental: true and only the fields that changed.
     // The lists are never resized: there is no remove; "Zero amounts" keeps the loan and sets its amounts to 0.
     const clubDebts = { clubId: null, loans: null, sponsors: null, listPresent: true, editing: false };
@@ -134,7 +134,7 @@
     async function sendLoanUpdate(loan, changes, summary) {
       const clubId = debtClubId();
       if (!clubDebts.editing) throw new Error("Tick the experimental box first");
-      if (!debtConfirm(`${summary}\n\nExperimental: unverified in game. Use a throwaway save.`)) return false;
+      if (!debtConfirm(`${summary}\n\nUse a throwaway save. A repayment or sponsor value edit was checked live. Other effects are unverified.`)) return false;
       const data = await clubDebtRequest("/api/club/loans/update", {
         club_id: clubId, loan_index: loan.index, loan_address: loan.address, ...changes, experimental: true,
       });
@@ -173,7 +173,7 @@
         if (total === null) throw new Error("Total value must be a whole number of 0 or more");
         if (total !== sponsor.total_value) body.total_value = total;
         if (!Object.keys(body).length) throw new Error("Nothing changed on this deal");
-        if (!debtConfirm(`Write ${Object.keys(body).join(", ")} on sponsor deal ${index + 1}?\n\nExperimental: unverified in game. Use a throwaway save.`)) return false;
+        if (!debtConfirm(`Write ${Object.keys(body).join(", ")} on sponsor deal ${index + 1}?\n\nUse a throwaway save. A repayment or sponsor value edit was checked live. Other effects are unverified.`)) return false;
         const clubId = debtClubId();
         const data = await clubDebtRequest("/api/club/sponsors/update", {
           club_id: clubId, sponsor_index: index, sponsor_address: sponsor.address, ...body, experimental: true,

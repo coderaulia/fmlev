@@ -1017,24 +1017,11 @@ impl NativePlayerRecord {
         self.apply_edits(driver, &patches, contract)
     }
 
-    /// Restore condition and sharpness to 100% without corrupting external simulation objects.
-    pub fn heal(&self, driver: &LinuxMemoryDriver) -> Result<()> {
-        self.validate(driver)?;
-        let mut patches = Vec::new();
-
-        let c0 = driver.read::<i32>(self.address + 0xc0)?;
-        if c0 < 10000 {
-            patches.push(NativeEdit::capture(driver, self.address + 0xc0, 10000i32.to_le_bytes().to_vec())?);
-        }
-        let f0 = driver.read::<i32>(self.address + 0x100)?;
-        if f0 < 10000 {
-            patches.push(NativeEdit::capture(driver, self.address + 0x100, 10000i32.to_le_bytes().to_vec())?);
-        }
-
-        if !patches.is_empty() {
-            self.apply_edits(driver, &patches, None)?;
-        }
-        Ok(())
+    /// The legacy live heal targets did not match verified fitness and sharpness fields.
+    pub fn heal(&self, _driver: &LinuxMemoryDriver) -> Result<()> {
+        Err(CoreError::Unsupported(
+            "Live fitness and sharpness editing is unavailable until the native fields are verified",
+        ))
     }
 
     #[cfg(test)]

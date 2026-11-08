@@ -63,7 +63,7 @@
       <!-- Transfer embargo (read + experimental edit) and financial statements (read only) -->
       <div class="card" id="club-embargo-card" data-live-editor="true" style="margin-top: 16px;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Transfer embargo (experimental)</div>
-        <p class="unverified-note">Unverified in game. Dates are year plus day of year. Flag bit names come from a community tool and are not confirmed; 0x04 is the common one (global transfer ban).</p>
+        <p class="unverified-note">An end-date edit survived reload. Embargo enforcement and lifting a ban remain unverified. Dates use year and day of year. Flag bit names come from a community tool and are not confirmed; 0x04 is the common one (global transfer ban).</p>
         <p id="ce-summary" style="font-size: 12px; margin: 8px 0;">Not loaded</p>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;">
           <label class="form-group"><span class="form-label">Start year</span><input id="ce-start-year" type="number" min="1900" max="2200" disabled class="form-control"></label>
@@ -99,12 +99,11 @@
         <div id="cs-body"><p class="unverified-note">Not loaded</p></div>
       </div>
 
-      <!-- Bank loans and sponsor deals: native reads; writes are experimental and unverified in game. -->
+      <!-- Bank loans and sponsor deals: native reads and opt-in scalar writes. -->
       <div class="card" id="club-debts-card" data-live-editor="true" style="margin-top: 16px;">
         <div style="font-size: 14px; font-weight: 800; margin-bottom: 8px;">Bank loans and sponsors</div>
         <p class="unverified-note">
-          Read from game memory; not yet compared with the game's Finances screens. Loan type codes and sponsor names are not mapped.
-          Editing is experimental: values are checked by readback but unverified in game. Lists are never shortened.
+          A loan repayment and a Main Kit sponsorship edit appeared in FM26 after a day tick and reload. Use the opt-in for edits. Loan type labels are unmapped and other fields have less live evidence.
         </p>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
           <button class="btn" onclick="loadClubLoans()">Read loans</button>
@@ -343,16 +342,16 @@
         </div>
       </div>
 
-      <!-- Board objectives and club status: EXPERIMENTAL, unverified in game -->
+      <!-- Board objectives and club status: opt-in writes -->
       <div id="board-card" class="card" data-live-editor="true" style="margin-top: 20px;">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
-          <div style="font-weight: 800; font-size: 13px;">Board objectives and club status <span class="pill-badge badge-club">Experimental, unverified in game</span></div>
+          <div style="font-weight: 800; font-size: 13px;">Board objectives and club status <span class="pill-badge badge-club">Opt-in edits</span></div>
           <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer;">
             <input id="board-experimental" type="checkbox" onchange="updateBoardButtons()"> Enable experimental board editing
           </label>
         </div>
         <div style="font-size: 11px; color: var(--text-dim); margin: 6px 0 10px;">
-          Reads the club's vision objectives from game memory. Type labels come from a community catalog and the status code (1 or 2) has no known meaning; neither was compared with the game's board screen. Edits change one value at a time (importance, target value, deadline, status code); the list itself is never changed. Use a throwaway save.
+          Objective importance and club status appeared in FM26 after a day tick and reload. Target, deadline and objective status edits remain unverified. Type labels come from a community catalog. Use a throwaway save.
         </div>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
           <button class="btn btn-sm" onclick="loadClubBoard()">Read board objectives</button>

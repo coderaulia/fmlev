@@ -1,4 +1,4 @@
-    // ---- Board objectives and club status (EXPERIMENTAL, unverified in game) ----
+    // ---- Board objectives and club status (opt-in writes) ----
     // Read: /api/club/board and /api/club/status. Write: one explicit button per row, only with the
     // "Enable experimental board editing" box ticked. Nothing here is staged through the save bar.
     const boardRows = [];

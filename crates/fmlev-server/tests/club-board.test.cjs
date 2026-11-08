@@ -28,7 +28,7 @@ function app(map = {}) {
 test('the card is a direct, live-editor child of the club page and is labelled experimental', () => {
   const html = read('pages/club.html');
   assert.match(html, /id="board-card"[^>]*data-live-editor="true"/);
-  assert.match(html, /Experimental, unverified in game/);
+  assert.match(html, /Objective importance and club status appeared in FM26/);
   assert.match(html, /<input id="board-experimental" type="checkbox"/);
   assert.match(html, /id="board-status-apply" class="btn btn-sm" disabled/);
 });

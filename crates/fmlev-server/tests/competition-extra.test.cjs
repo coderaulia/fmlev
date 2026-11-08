@@ -27,7 +27,7 @@ test("page markup carries the experimental warnings and every control starts dis
   const html = read("pages/competition.html");
   assert.match(html, /id="compx-enable" type="checkbox"/);
   assert.doesNotMatch(html, /id="compx-enable"[^>]*checked/);
-  assert.match(html, /unverified in game/);
+  assert.match(html, /Premier League prize edits were visible in Rules/);
   for (const id of ["compx-apply-details", "compx-apply-prizes", "compx-apply-award", "compx-orig-rep", "compx-award-name"]) {
     assert.match(html, new RegExp(`id="${id}"[^>]*disabled`), id);
   }
@@ -79,6 +79,18 @@ test("native prize table loads, validates the count and writes the stage it was 
   ui.els["compx-prize-list"].value = "310\n200\n100";
   assert.equal(await ui.run("compxApplyPrizes()"), true);
   assert.deepEqual(ui.requests.at(-1).body, { comp_index: 7, comp_uid: 11, stage_index: 0, prizes: [310, 200, 100], experimental: true });
+});
+
+test("a prize table read for a previous competition cannot write to the new selection", async () => {
+  const table = { stage_index: 0, positions: 2, amounts: [200, 100] };
+  const ui = app({ "/api/competition/prizes/native": () => ok({ tables: [table] }) });
+  await ui.run("compxLoadPrizes()");
+  ui.els["compx-enable"].checked = true;
+  ui.els["compx-prize-list"].value = "210\n100";
+  ui.run("state.liveCompetitions[8] = { unique_id: 12 }; state.activeCompetition = { id: 8 }; compxRenderEnabled()");
+  assert.equal(ui.els["compx-apply-prizes"].disabled, true);
+  assert.equal(await ui.run("compxApplyPrizes()"), false);
+  assert.deepEqual(ui.requests.map(r => r.url), ["/api/competition/prizes/native"]);
 });
 
 test("a league without a native prize table reports the reason and stays locked", async () => {

@@ -165,7 +165,9 @@ profile open in FM26, falling back to the selected or last-used member; the last
 of birth; Contract shows wage and expiry for staff with a contract, "no contract" otherwise, and keeps job and role
 unavailable. Role lists show native position
 familiarity, not a fabricated role-suitability score. Missing contract write capabilities fail closed.
-Terminate contract, Move player (club, yearly wage and expiry year required, optional fee) and Sign free agent are always available once a game is attached and a player is open (and, for Move and Sign, the required fields are filled); each asks for confirmation. Loan recall and unsupported cheats remain disabled; no direct action button performs a game write. The working cheats (Clear Negative Balance, Big Money, Prize Table x10, Wonderkid Forge) only stage values in the Club, Competition and Player inputs, and need the club money or prize table loaded first.
+Terminate and Move ask for confirmation. Move requires a destination, a spare squad slot, yearly wage and expiry. Signing and loan recall are disabled. Player and Club deal editors use explicit Apply for the headline fee. Join dates are read-only. The morale editor reads the selected player before enabling Apply. Heal and Heal Squad are disabled when connected and omitted from the live compound preset.
+
+Player contract terms and opt-in staff edits use the shared Save bar. Club money, club loan and sponsor amounts, board objectives and the native prize table have separate Apply controls. The cards identify which values were verified after reload and which effects remain unverified.
 
 Validation includes every static inline callback, unique IDs, staged request bodies, race/identity checks,
 contrast ratios and normal/compact browser review. See `tests/ui-wiring.test.cjs` and the per-page tests.

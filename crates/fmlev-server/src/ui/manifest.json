@@ -52,6 +52,7 @@
     "js/pages/club-money.js",
     "js/pages/club-finance.js",
     "js/pages/club-debts.js",
+    "js/pages/club-board.js",
     "js/pages/nation.js",
     "js/pages/competition.js",
     "js/pages/competition-prizes.js",

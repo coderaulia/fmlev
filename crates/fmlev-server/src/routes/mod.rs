@@ -1,5 +1,6 @@
 pub mod club_finance;
 pub mod club_debts;
+pub mod board;
 pub mod context;
 pub mod eligibility;
 pub mod memory;
@@ -10,6 +11,7 @@ pub mod staff;
 
 pub use club_finance::*;
 pub use club_debts::*;
+pub use board::*;
 pub use context::*;
 pub use eligibility::*;
 pub use memory::*;
@@ -85,6 +87,10 @@ pub fn create_router(state: ServerState) -> Router {
         .route("/api/club/loans/update", post(update_club_loan))
         .route("/api/club/sponsors", post(read_club_sponsors))
         .route("/api/club/sponsors/update", post(update_club_sponsor))
+        .route("/api/club/board", post(read_club_board))
+        .route("/api/club/board/update", post(update_club_board))
+        .route("/api/club/status", post(read_club_status))
+        .route("/api/club/status/update", post(update_club_status))
         .route("/api/nation/native", post(read_nation_native))
         .route("/api/competition/native", post(read_competition_native))
         .route("/api/club/preset", post(apply_club_preset))

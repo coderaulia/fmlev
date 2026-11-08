@@ -341,6 +341,39 @@
         </div>
       </div>
 
+      <!-- Board objectives and club status: EXPERIMENTAL, unverified in game -->
+      <div id="board-card" class="card" data-live-editor="true" style="margin-top: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="font-weight: 800; font-size: 13px;">Board objectives and club status <span class="pill-badge badge-club">Experimental, unverified in game</span></div>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer;">
+            <input id="board-experimental" type="checkbox" onchange="updateBoardButtons()"> Enable experimental board editing
+          </label>
+        </div>
+        <div style="font-size: 11px; color: var(--text-dim); margin: 6px 0 10px;">
+          Reads the club's vision objectives from game memory. Type labels come from a community catalog and the status code (1 or 2) has no known meaning; neither was compared with the game's board screen. Edits change one value at a time (importance, target value, deadline, status code); the list itself is never changed. Use a throwaway save.
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+          <button class="btn btn-sm" onclick="loadClubBoard()">Read board objectives</button>
+          <span id="board-note" style="font-size: 11px; color: var(--text-dim);"></span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="fm-table" style="width: 100%; font-size: 11px;">
+            <thead><tr><th>#</th><th>Kind</th><th>Objective (catalog label)</th><th>Target</th><th>Importance</th><th>Value</th><th>Deadline</th><th>Status</th><th></th></tr></thead>
+            <tbody id="board-table-body"></tbody>
+          </table>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px;">
+          <button class="btn btn-sm" onclick="loadClubStatusInfo()">Read club status</button>
+          <span id="board-status-current" style="font-size: 11px; color: var(--text-dim);">Not read</span>
+          <select id="board-status-select" class="form-control" style="width: auto; padding: 2px 6px; font-size: 11px;">
+            <option value="1">Professional</option>
+            <option value="2">Semi-professional</option>
+            <option value="3">Amateur</option>
+          </select>
+          <button id="board-status-apply" class="btn btn-sm" disabled onclick="applyClubStatus()">Apply status</button>
+        </div>
+      </div>
+
       <!-- Dedicated Squad God Mode & Cheats Callout Banner -->
       <div style="margin-top: 20px; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: var(--radius-sm); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
         <div>

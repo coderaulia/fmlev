@@ -3,6 +3,7 @@ pub mod context;
 pub mod eligibility;
 pub mod error;
 pub mod live_write;
+pub mod native_board;
 pub mod native_catalog;
 pub mod native_club;
 pub mod native_club_finance;

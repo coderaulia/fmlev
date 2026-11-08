@@ -1239,7 +1239,9 @@ mod tests {
     fn queue_lookup_finds_a_unique_entry_by_shape_not_address_and_refuses_ambiguity() {
         let packed = |year: u32, day: u32| (year << 16) | day;
         let person: u64 = 0x1_5eed_0000_0000 | (std::process::id() as u64) << 8;
-        let mut queue = Vec::new();
+        // Pre-sized: a reallocation while appending would leave a freed copy of the entries in the heap,
+        // which the whole-process scan would see as a second plausible queue.
+        let mut queue = Vec::with_capacity(3 * QUEUE_ENTRY_SIZE);
         queue.extend(queue_entry(packed(2026, 50), 1, 0x1_3000_0000));
         queue.extend(queue_entry(packed(2026, 60), 2, person));
         queue.extend(queue_entry(packed(2026, 70), 3, 0x1_3000_1000));
@@ -1250,7 +1252,7 @@ mod tests {
         assert_eq!(address, base + QUEUE_ENTRY_SIZE);
         assert_eq!(bytes, queue[QUEUE_ENTRY_SIZE..2 * QUEUE_ENTRY_SIZE].to_vec());
         // The same person in a second, equally plausible queue is ambiguous.
-        let mut second = Vec::new();
+        let mut second = Vec::with_capacity(3 * QUEUE_ENTRY_SIZE);
         second.extend(queue_entry(packed(2026, 55), 4, 0x1_3000_2000));
         second.extend(queue_entry(packed(2026, 65), 5, person));
         second.extend(queue_entry(packed(2026, 75), 6, 0x1_3000_3000));
